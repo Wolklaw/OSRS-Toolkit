@@ -61,7 +61,7 @@ class TrackedTrade:
     actual_sell: int | None
     status: str
     sale_fills: tuple[SaleFill, ...] = ()
-    strategy: str = "Balanced (1â€“4h)"
+    strategy: str = "Balanced (1–4h)"
     current_buy_suggestion: int | None = None
     current_sell_suggestion: int | None = None
     suggestion_reviewed_at: str | None = None
@@ -295,7 +295,7 @@ class JournalRepository:
                 for row in connection.execute("PRAGMA table_info(tracked_trades)").fetchall()
             }
             column_migrations = {
-                "strategy": "TEXT NOT NULL DEFAULT 'Balanced (1â€“4h)'",
+                "strategy": "TEXT NOT NULL DEFAULT 'Balanced (1–4h)'",
                 "current_buy_suggestion": "INTEGER",
                 "current_sell_suggestion": "INTEGER",
                 "suggestion_reviewed_at": "TEXT",
@@ -305,6 +305,14 @@ class JournalRepository:
                     connection.execute(
                         f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
                     )
+            connection.execute(
+                """
+                UPDATE tracked_trades
+                SET strategy = ?
+                WHERE strategy LIKE 'Balanced (%4h)' AND strategy <> ?
+                """,
+                ("Balanced (1–4h)", "Balanced (1–4h)"),
+            )
             connection.execute(
                 """
                 UPDATE tracked_trades
@@ -384,7 +392,7 @@ class JournalRepository:
         quantity: int,
         target_buy: int,
         target_sell: int,
-        strategy: str = "Balanced (1â€“4h)",
+        strategy: str = "Balanced (1–4h)",
     ) -> int:
         with self._connect() as connection:
             created_at = datetime.now(UTC).isoformat(timespec="seconds")

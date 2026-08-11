@@ -2,6 +2,20 @@
 
 All notable changes to OSRS Toolkit are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Rebuilt the project landing page around the complete current feature set and fresh application
+  screenshots.
+- Clarified the difference between the latest market-data fetch time and the age of the completed
+  trades used by Watchlist, Alch Finder, Skilling Profit, and item details.
+
+### Fixed
+
+- Corrected malformed bullet separators in the About and variable-sale-fill views.
+- Normalized malformed legacy Balanced strategy labels when opening existing journals.
+
 ## [1.4.6] - 2026-08-11
 
 ### Changed

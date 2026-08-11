@@ -207,8 +207,8 @@ class SettingsDialog(QDialog):
             "<p><b>Created using intellectual property belonging to Jagex Limited under the "
             "terms of Jagex's Fan Content Policy.</b></p>"
             "<p><a href='https://legal.jagex.com/docs/policies/fan-content-policy'>Fan Content Policy</a>"
-            " &nbsp;â€¢&nbsp; <a href='https://legal.jagex.com/docs/rules/rules-of-old-school-runescape'>"
-            "Rules of Old School RuneScape</a> &nbsp;â€¢&nbsp; "
+            " &nbsp;&bull;&nbsp; <a href='https://legal.jagex.com/docs/rules/rules-of-old-school-runescape'>"
+            "Rules of Old School RuneScape</a> &nbsp;&bull;&nbsp; "
             "<a href='https://legal.jagex.com/docs/terms/terms-and-conditions/current'>Terms</a></p>"
             "<p>Market results are estimates, not guarantees, and may not fill at displayed prices.</p>"
         )
@@ -618,9 +618,9 @@ class UpdateTrackedTradeDialog(QDialog):
             if sold
             else None
         )
-        average_text = f" â€¢ weighted average {_gp(average)}" if average is not None else ""
+        average_text = f" • weighted average {_gp(average)}" if average is not None else ""
         self.fill_summary.setText(
-            f"Sold {sold:,} of {self.trade.quantity:,} â€¢ {remaining:,} remaining{average_text}"
+            f"Sold {sold:,} of {self.trade.quantity:,} • {remaining:,} remaining{average_text}"
         )
         self.fill_quantity.setMaximum(max(1, remaining))
         self.fill_quantity.setValue(max(1, remaining))
@@ -783,7 +783,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(30, 20, 30, 24)
         top = QHBoxLayout()
-        self.market_status = QLabel("Loading market prices…", objectName="status")
+        self.market_status = QLabel("Fetching market data…", objectName="status")
         self.account_label = QLabel("No character connected", objectName="muted")
         self.account_button = QPushButton("Connect character", objectName="secondary")
         self.account_button.clicked.connect(self.connect_character)
@@ -886,7 +886,7 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.watchlist_empty)
         self.watchlist_table = self._table(
-            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Price age"],
+            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Oldest trade"],
             minimum_widths={0: 220},
         )
         self.watchlist_table.cellDoubleClicked.connect(self._open_table_item)
@@ -1010,7 +1010,7 @@ class MainWindow(QMainWindow):
                 "Est. GP/hr",
                 "ROI",
                 "1h volume",
-                "Age",
+                "Buy trade age",
                 "Limit",
             ],
             minimum_widths={0: 230, 1: 105, 2: 95, 3: 95, 5: 105, 7: 110, 8: 115, 10: 100},
@@ -1057,7 +1057,7 @@ class MainWindow(QMainWindow):
                 "Profit/action",
                 "Actions/hr",
                 "Est. GP/hr",
-                "Price age",
+                "Oldest trade used",
                 "Level met",
                 "Assumption",
             ],
@@ -1190,7 +1190,7 @@ class MainWindow(QMainWindow):
         for button in self._market_buttons:
             button.setEnabled(False)
             button.setText("Refreshing…")
-        self.market_status.setText("Refreshing…")
+        self.market_status.setText("Fetching market data…")
         self._thread = QThread(self)
         self._worker = MarketWorker()
         self._worker.moveToThread(self._thread)
@@ -1224,7 +1224,7 @@ class MainWindow(QMainWindow):
         for button in self._market_buttons:
             button.setEnabled(True)
             button.setText("Refresh market")
-        source = "Cached prices" if used_cache else "Prices updated"
+        source = "Cached market data loaded" if used_cache else "Market data fetched"
         self.market_status.setText(f"{source} • {datetime.now().astimezone():%H:%M:%S}")
         self._render_flips()
         self._render_alch()

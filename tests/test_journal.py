@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ def test_recommendation_can_be_tracked_through_completion(tmp_path: Path) -> Non
     pending = repository.list_tracked()[0]
     assert pending.position_id == position_id
     assert pending.status == "Pending buy"
+    assert pending.strategy == "Balanced (1–4h)"
     assert pending.estimated_profit == 17_600
     assert pending.realized_profit is None
 
@@ -94,7 +96,7 @@ def test_overnight_trade_preserves_targets_and_records_daily_suggestion(
         10,
         1_800,
         2_100,
-        "Overnight (8â€“12h)",
+        "Overnight (8–12h)",
     )
 
     repository.review_suggestion(
@@ -110,6 +112,22 @@ def test_overnight_trade_preserves_targets_and_records_daily_suggestion(
     assert trade.buy_suggestion == 1_750
     assert trade.sell_suggestion == 2_020
     assert trade.suggestion_was_refreshed is True
+
+
+def test_legacy_malformed_balanced_strategy_is_normalized(tmp_path: Path) -> None:
+    database_path = tmp_path / "journal.db"
+    repository = JournalRepository(database_path)
+    position_id = repository.track(1, "Legacy strategy", 10, 100, 120)
+    malformed_strategy = "Balanced (1\u00e2\u20ac\u201c4h)"
+
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "UPDATE tracked_trades SET strategy = ? WHERE position_id = ?",
+            (malformed_strategy, position_id),
+        )
+
+    repaired = JournalRepository(database_path).list_tracked()[0]
+    assert repaired.strategy == "Balanced (1–4h)"
 
 
 def test_default_journal_recovers_from_version_independent_backup(

@@ -56,7 +56,7 @@ class ItemDetailsDialog(QDialog):
             ("Observed ROI", f"{roi:.2f}%"),
             ("One-hour volume", f"{point.volume_1h:,}"),
             ("Five-minute volume", f"{point.volume_5m:,}"),
-            ("Price age", _duration(age)),
+            ("Oldest trade used", _duration(age)),
             ("Four-hour buy limit", f"{item.buy_limit:,}" if item.buy_limit else "Unknown"),
             ("High Alchemy value", _gp(item.high_alch) if item.high_alch else "Not available"),
             ("Five-minute midpoint", _number(point.average_5m)),
