@@ -40,6 +40,13 @@ from osrs_toolkit.journal import JournalRepository, TrackedTrade
 from osrs_toolkit.market import WikiMarketClient
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, rank_flips
+from osrs_toolkit.updater import (
+    ReleaseInfo,
+    download_installer,
+    fetch_latest_release,
+    is_newer_version,
+    launch_installer,
+)
 
 
 class MarketWorker(QObject):
@@ -54,6 +61,34 @@ class MarketWorker(QObject):
             client = WikiMarketClient()
             mappings, points = client.fetch_snapshot()
             self.finished.emit(mappings, points, client.used_cache)
+        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+            self.failed.emit(str(exc))
+
+
+class UpdateCheckWorker(QObject):
+    finished = Signal(object)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(fetch_latest_release())
+        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+            self.failed.emit(str(exc))
+
+
+class UpdateDownloadWorker(QObject):
+    finished = Signal(object)
+    failed = Signal(str)
+    progress = Signal(int)
+
+    def __init__(self, release: ReleaseInfo) -> None:
+        super().__init__()
+        self.release = release
+
+    def run(self) -> None:
+        try:
+            path = download_installer(self.release, self.progress.emit)
+            self.finished.emit(path)
         except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
             self.failed.emit(str(exc))
 
@@ -88,6 +123,9 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(520, 390)
+        self._update_thread: QThread | None = None
+        self._update_worker: QObject | None = None
+        self._available_release: ReleaseInfo | None = None
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
 
@@ -124,6 +162,12 @@ class SettingsDialog(QDialog):
         about_text.setWordWrap(True)
         about_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         about_layout.addWidget(about_text)
+        self.update_status = QLabel("Check GitHub for a newer official release.", objectName="muted")
+        self.update_status.setWordWrap(True)
+        about_layout.addWidget(self.update_status)
+        self.update_button = QPushButton("Check for updates")
+        self.update_button.clicked.connect(self._update_action)
+        about_layout.addWidget(self.update_button)
         about_layout.addStretch()
         tabs.addTab(about, "About")
 
@@ -152,6 +196,96 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _update_action(self) -> None:
+        if self._update_thread is not None and self._update_thread.isRunning():
+            return
+        if self._available_release is None:
+            self._check_for_updates()
+        else:
+            self._download_update(self._available_release)
+
+    def _check_for_updates(self) -> None:
+        self.update_button.setEnabled(False)
+        self.update_status.setText("Checking for updates…")
+        thread = QThread(self)
+        worker = UpdateCheckWorker()
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._update_check_finished)
+        worker.failed.connect(self._update_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._clear_update_worker)
+        self._update_thread = thread
+        self._update_worker = worker
+        thread.start()
+
+    def _update_check_finished(self, release: ReleaseInfo) -> None:
+        if is_newer_version(release.version, __version__):
+            self._available_release = release
+            self.update_status.setText(
+                f"Version {release.version} is available. The installer will be downloaded "
+                "from the official GitHub release and verified before it opens."
+            )
+            self.update_button.setText(f"Download and install {release.version}")
+        else:
+            self.update_status.setText(f"You are up to date — version {__version__}.")
+            self.update_button.setText("Check again")
+        self.update_button.setEnabled(True)
+
+    def _download_update(self, release: ReleaseInfo) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Install update",
+            f"Download and install OSRS Toolkit {release.version}?\n\n"
+            "Save any work first. The app will close when the installer opens.\n\n"
+            "If you use the portable edition, this creates a standard installed copy; your "
+            "portable folder remains unchanged.",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.update_button.setEnabled(False)
+        self.update_status.setText("Downloading update…")
+        thread = QThread(self)
+        worker = UpdateDownloadWorker(release)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.progress.connect(
+            lambda value: self.update_status.setText(f"Downloading update… {value}%")
+        )
+        worker.finished.connect(self._update_downloaded)
+        worker.failed.connect(self._update_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._clear_update_worker)
+        self._update_thread = thread
+        self._update_worker = worker
+        thread.start()
+
+    def _update_downloaded(self, path: Path) -> None:
+        try:
+            launch_installer(path)
+        except Exception as exc:  # noqa: BLE001 - present launch failures to the user.
+            self._update_failed(str(exc))
+            return
+        QApplication.quit()
+
+    def _update_failed(self, message: str) -> None:
+        self.update_status.setText("Update check failed. You can try again in a moment.")
+        self.update_button.setText("Try again")
+        self.update_button.setEnabled(True)
+        QMessageBox.warning(self, "Update unavailable", message)
+
+    def _clear_update_worker(self) -> None:
+        if self._update_thread is not None:
+            self._update_thread.deleteLater()
+        self._update_worker = None
+        self._update_thread = None
 
 
 class TradeEntryDialog(QDialog):

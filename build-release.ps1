@@ -2,16 +2,20 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $ReleaseDir = Join-Path $ProjectRoot "release"
-$PortableZip = Join-Path $ReleaseDir "OSRS-Toolkit-Portable-1.1.0.zip"
+$PortableZip = Join-Path $ReleaseDir "OSRS-Toolkit-Portable-1.2.0.zip"
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "Development environment not found. Create .venv and install the dev dependencies first."
 }
 
 & $Python -m pytest -q
+if ($LASTEXITCODE -ne 0) { throw "Tests failed." }
 & $Python -m ruff check src tests tools
+if ($LASTEXITCODE -ne 0) { throw "Code-quality checks failed." }
 & $Python tools\make_icon.py
+if ($LASTEXITCODE -ne 0) { throw "Icon generation failed." }
 & $Python -m PyInstaller --noconfirm --clean packaging\osrs_toolkit.spec
+if ($LASTEXITCODE -ne 0) { throw "Application packaging failed." }
 
 New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null
 if (Test-Path -LiteralPath $PortableZip) {
@@ -26,6 +30,7 @@ $InnoCompiler = @(
 
 if ($InnoCompiler) {
     & $InnoCompiler (Join-Path $ProjectRoot "packaging\installer.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
     Write-Host "Portable ZIP and setup wizard created in $ReleaseDir"
 } else {
     Write-Host "Portable ZIP created in $ReleaseDir"

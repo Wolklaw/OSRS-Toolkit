@@ -2,6 +2,14 @@
 
 All notable changes to OSRS Toolkit are documented here.
 
+## [1.2.0] - 2026-08-11
+
+### Added
+
+- In-app update checks from Settings > About.
+- Verified installer downloads from official GitHub Releases.
+- Clear update guidance for installed and portable editions.
+
 ## [1.1.0] - 2026-08-11
 
 ### Added
