@@ -86,6 +86,8 @@ targets preserved. A position can move through **Bought**, **Listed for sale**, 
 
 - Record the actual buy price and any number of sale fills at different quantities and prices.
 - See the weighted-average sale price, remaining quantity, and tax-correct realized result.
+- Scan color-coded lifecycle states and filter the table to active trades or any individual status.
+- Distinguish clearly labeled projections from signed, color-coded realized profit and loss.
 - Keep original suggestions beside actual execution data, even after the market changes.
 - Double-click any tracked row to update it; completed trades can also be entered manually.
 - Review realized profit, win rate, and capital traded at a glance.

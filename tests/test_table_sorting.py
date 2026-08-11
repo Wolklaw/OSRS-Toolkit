@@ -14,3 +14,28 @@ def test_formatted_numbers_sort_numerically() -> None:
 def test_percentages_and_volumes_sort_numerically() -> None:
     assert _table_sort_value("83.69%") > _table_sort_value("9.1%")
     assert _table_sort_value("33,469") > _table_sort_value("204")
+
+
+def test_price_ages_sort_across_units() -> None:
+    values = ["2 hr", "59 min", "51 sec", "3 min"]
+    assert sorted(values, key=_table_sort_value) == ["51 sec", "3 min", "59 min", "2 hr"]
+
+
+def test_empty_cells_remain_sortable() -> None:
+    assert _table_sort_value("") == (1, "")
+
+
+def test_journal_profit_variants_sort_by_amount() -> None:
+    values = [
+        "Est. +80,000 gp",
+        "+1,234 gp • 7 left",
+        "-21,600 gp",
+        "Est. +8,028 gp",
+    ]
+
+    assert sorted(values, key=_table_sort_value, reverse=True) == [
+        "Est. +80,000 gp",
+        "Est. +8,028 gp",
+        "+1,234 gp • 7 left",
+        "-21,600 gp",
+    ]

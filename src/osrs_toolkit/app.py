@@ -45,6 +45,12 @@ from osrs_toolkit.calculators import (
 )
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
+from osrs_toolkit.journal_presentation import (
+    JOURNAL_STATUS_FILTERS,
+    JournalPLPresentation,
+    journal_pl_presentation,
+    journal_status_matches,
+)
 from osrs_toolkit.market import WikiMarketClient
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 from osrs_toolkit.ranking import (
@@ -727,6 +733,16 @@ class MainWindow(QMainWindow):
         self._last_sync_message = ""
         self._profit_color = "#70d6a1"
         self._loss_color = "#ef6b73"
+        self._muted_color = "#91a0b4"
+        self._journal_status_colors = {
+            "Pending buy": "#65a9ff",
+            "Bought": "#d5ad52",
+            "Listed for sale": "#b49af5",
+            "Partially sold": "#e7a35a",
+            "Completed": self._profit_color,
+            "Completed (manual)": self._profit_color,
+            "Cancelled": self._muted_color,
+        }
         self._market_buttons: list[QPushButton] = []
         self._build_ui()
         self._apply_theme(self._theme)
@@ -923,10 +939,31 @@ class MainWindow(QMainWindow):
         actions.addWidget(update_button)
         actions.addWidget(delete_button)
         actions.addStretch()
+        actions.addWidget(QLabel("Status", objectName="muted"))
+        self.journal_status_filter = QComboBox()
+        self.journal_status_filter.addItems(JOURNAL_STATUS_FILTERS)
+        saved_filter = str(
+            QSettings().value("journal/status_filter", JOURNAL_STATUS_FILTERS[0])
+        )
+        self.journal_status_filter.setCurrentText(
+            saved_filter if saved_filter in JOURNAL_STATUS_FILTERS else JOURNAL_STATUS_FILTERS[0]
+        )
+        self.journal_status_filter.setMinimumWidth(160)
+        self.journal_status_filter.setToolTip(
+            "Show every journal entry or focus on one stage of the trade lifecycle."
+        )
+        self.journal_status_filter.currentTextChanged.connect(
+            self._journal_status_filter_changed
+        )
+        actions.addWidget(self.journal_status_filter)
         plans_layout.addLayout(actions)
+        self.journal_filter_empty = QLabel(
+            "No journal entries match this status filter.", objectName="status"
+        )
+        plans_layout.addWidget(self.journal_filter_empty)
         self.journal_table = self._table(
             ["Date", "Status", "Item", "Qty", "Buy suggestion", "Actual buy", "Sell suggestion", "Actual sell", "P/L"],
-            minimum_widths={0: 105, 1: 120, 2: 230, 8: 130},
+            minimum_widths={0: 105, 1: 155, 2: 230, 8: 130},
         )
         self.journal_table.cellDoubleClicked.connect(
             lambda _row, _column: self._update_selected_trade()
@@ -1452,55 +1489,121 @@ class MainWindow(QMainWindow):
         self.watchlist_empty.setVisible(not rows)
         self._fill_table(self.watchlist_table, rows, green_columns={3, 4}, row_ids=row_ids)
 
+    def _journal_status_filter_changed(self, selected_filter: str) -> None:
+        QSettings().setValue("journal/status_filter", selected_filter)
+        self._render_journal()
+
     def _render_journal(self) -> None:
         tracked = self._journal.list_tracked()
         trades = self._journal.list_all()
-        values = [
-            [
-                trade.created_at[:10],
+        selected_filter = self.journal_status_filter.currentText()
+        rendered_rows: list[tuple[list[str], int, str, JournalPLPresentation]] = []
+        for trade in tracked:
+            if not journal_status_matches(trade.status, selected_filter):
+                continue
+            profit = journal_pl_presentation(
                 trade.status,
-                trade.item_name,
-                f"{trade.quantity:,}",
-                f"{_gp(trade.buy_suggestion)} ↻"
-                if trade.suggestion_was_refreshed
-                else _gp(trade.buy_suggestion),
-                _gp(trade.actual_buy) if trade.actual_buy is not None else "—",
-                f"{_gp(trade.sell_suggestion)} ↻"
-                if trade.suggestion_was_refreshed
-                else _gp(trade.sell_suggestion),
-                f"{_gp(trade.average_sell_price)} avg"
-                if trade.average_sell_price is not None
-                else "—",
+                trade.estimated_profit,
+                trade.realized_profit,
+                trade.remaining_quantity,
+            )
+            rendered_rows.append(
                 (
-                    f"{_gp(trade.realized_profit)} • {trade.remaining_quantity:,} left"
-                    if trade.realized_profit is not None and trade.remaining_quantity
-                    else _gp(trade.realized_profit)
+                    [
+                        trade.created_at[:10],
+                        f"● {trade.status}",
+                        trade.item_name,
+                        f"{trade.quantity:,}",
+                        f"{_gp(trade.buy_suggestion)} ↻"
+                        if trade.suggestion_was_refreshed
+                        else _gp(trade.buy_suggestion),
+                        _gp(trade.actual_buy) if trade.actual_buy is not None else "—",
+                        f"{_gp(trade.sell_suggestion)} ↻"
+                        if trade.suggestion_was_refreshed
+                        else _gp(trade.sell_suggestion),
+                        f"{_gp(trade.average_sell_price)} avg"
+                        if trade.average_sell_price is not None
+                        else "—",
+                        profit.text,
+                    ],
+                    trade.position_id,
+                    trade.status,
+                    profit,
                 )
-                if trade.realized_profit is not None
-                else f"Est. {_gp(trade.estimated_profit)}",
-            ]
-            for trade in tracked
-        ]
-        values.extend([
-            [
-                trade.recorded_at[:10],
-                "Completed (manual)",
-                trade.item_name,
-                f"{trade.quantity:,}",
-                _gp(trade.buy_price),
-                _gp(trade.buy_price),
-                _gp(trade.sell_price),
-                _gp(trade.sell_price),
-                _gp(trade.profit),
-            ]
-            for trade in trades
-        ])
+            )
+        for trade in trades:
+            raw_status = "Completed (manual)"
+            if not journal_status_matches(raw_status, selected_filter):
+                continue
+            profit = journal_pl_presentation(
+                raw_status,
+                trade.profit,
+                trade.profit,
+            )
+            rendered_rows.append(
+                (
+                    [
+                        trade.recorded_at[:10],
+                        f"● {raw_status}",
+                        trade.item_name,
+                        f"{trade.quantity:,}",
+                        _gp(trade.buy_price),
+                        _gp(trade.buy_price),
+                        _gp(trade.sell_price),
+                        _gp(trade.sell_price),
+                        profit.text,
+                    ],
+                    trade.trade_id,
+                    raw_status,
+                    profit,
+                )
+            )
+
+        values = [row for row, _record_id, _status, _profit in rendered_rows]
+        row_ids = [record_id for _row, record_id, _status, _profit in rendered_rows]
+        self.journal_filter_empty.setVisible(not values)
+        profit_by_record = {
+            (raw_status, record_id): profit
+            for _row, record_id, raw_status, profit in rendered_rows
+        }
         self._fill_table(
             self.journal_table,
             values,
-            green_columns={8},
-            row_ids=[trade.position_id for trade in tracked] + [trade.trade_id for trade in trades],
+            green_columns=set(),
+            row_ids=row_ids,
         )
+        for row in range(self.journal_table.rowCount()):
+            record_id = self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            status_cell = self.journal_table.item(row, 1)
+            raw_status = status_cell.text().removeprefix("● ")
+            status_cell.setData(Qt.ItemDataRole.UserRole, raw_status)
+            status_cell.setToolTip(raw_status)
+            status_cell.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            status_font = status_cell.font()
+            status_font.setBold(True)
+            status_cell.setFont(status_font)
+            status_cell.setForeground(
+                QColor(self._journal_status_colors.get(raw_status, self._muted_color))
+            )
+            self.journal_table.item(row, 2).setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+
+            profit = profit_by_record.get((raw_status, record_id))
+            if profit is None:
+                continue
+            profit_cell = self.journal_table.item(row, 8)
+            profit_cell.setData(Qt.ItemDataRole.UserRole, profit.tone)
+            if profit.tone == "positive":
+                profit_cell.setForeground(QColor(self._profit_color))
+            elif profit.tone == "negative":
+                profit_cell.setForeground(QColor(self._loss_color))
+            elif profit.tone == "muted":
+                profit_cell.setForeground(QColor(self._muted_color))
+            profit_cell.setToolTip(profit.tooltip)
+
         realized_positions = [trade for trade in tracked if trade.realized_profit is not None]
         profits = [trade.profit for trade in trades] + [
             trade.realized_profit or 0 for trade in realized_positions
@@ -1511,7 +1614,7 @@ class MainWindow(QMainWindow):
         )
         wins = sum(profit > 0 for profit in profits)
         win_rate = wins / len(profits) * 100 if profits else 0
-        self.journal_profit.setText(f"Realized profit\n{_gp(total_profit)}")
+        self.journal_profit.setText(f"Realized profit\n{_signed_gp(total_profit)}")
         self.journal_profit.setProperty(
             "moneyState",
             "positive" if total_profit > 0 else "negative" if total_profit < 0 else "neutral",
@@ -1684,7 +1787,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "No trade selected", "Select a journal row first.")
             return
         record_id = self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        status = self.journal_table.item(row, 1).text()
+        status = self.journal_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
         if not isinstance(record_id, int):
             return
         answer = QMessageBox.question(
@@ -1707,7 +1810,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "No trade selected", "Select a tracked trade first.")
             return
         position_id = self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        status = self.journal_table.item(row, 1).text()
+        status = self.journal_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
         if not isinstance(position_id, int) or status not in UpdateTrackedTradeDialog.STATUSES:
             QMessageBox.information(
                 self, "Completed manual entry", "Manual completed entries cannot change status."
@@ -1885,6 +1988,30 @@ class MainWindow(QMainWindow):
         )
         self._profit_color = profit
         self._loss_color = "#d94752" if theme == "Light" else "#ef6b73"
+        self._muted_color = muted
+        if theme == "Light":
+            pending, bought, listed, partial = (
+                "#1f64a8",
+                "#8a6500",
+                "#6b4fb3",
+                "#a65300",
+            )
+        else:
+            pending, bought, listed, partial = (
+                "#65a9ff",
+                "#d5ad52",
+                "#b49af5",
+                "#e7a35a",
+            )
+        self._journal_status_colors = {
+            "Pending buy": pending,
+            "Bought": bought,
+            "Listed for sale": listed,
+            "Partially sold": partial,
+            "Completed": self._profit_color,
+            "Completed (manual)": self._profit_color,
+            "Cancelled": self._muted_color,
+        }
         icon_variant = "-dark" if theme == "Light" else ""
         spin_up_icon = _resource_path(f"assets/spin-up{icon_variant}.svg").as_posix()
         spin_down_icon = _resource_path(f"assets/spin-down{icon_variant}.svg").as_posix()
@@ -2022,11 +2149,18 @@ def _table_sort_value(value: str) -> tuple[int, float | str]:
     cleaned = value.strip()
     if cleaned == "—":
         return (0, -1.0)
-    numeric = cleaned.removesuffix(" gp").removesuffix("%").replace(",", "")
+    tokens = cleaned.removeprefix("Est. ").split()
+    if not tokens:
+        return (1, "")
+    numeric = tokens[0].removesuffix("%").replace(",", "")
     try:
-        return (0, float(numeric))
+        number = float(numeric)
     except ValueError:
         return (1, cleaned.casefold())
+    if len(tokens) > 1 and tokens[1] in {"sec", "min", "hr"}:
+        unit_seconds = {"sec": 1, "min": 60, "hr": 3_600}
+        number *= unit_seconds[tokens[1]]
+    return (0, number)
 
 
 def _resource_path(relative_path: str) -> Path:

@@ -4,8 +4,21 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-08-11
+
+### Added
+
+- Added restrained, theme-aware Trade Journal status colors for pending, bought, listed,
+  partially sold, completed, and cancelled positions.
+- Added a Trade Journal filter for quickly separating active trades, completed history, and
+  cancelled positions.
+
 ### Changed
 
+- Muted positive projected journal P/L so it is visually distinct from realized gains, while
+  projected losses remain red and zero remains neutral.
+- Cancelled positions without realized sale fills now show a neutral dash instead of a positive
+  hypothetical estimate.
 - Rebuilt the project landing page around the complete current feature set and fresh application
   screenshots.
 - Clarified the difference between the latest market-data fetch time and the age of the completed
