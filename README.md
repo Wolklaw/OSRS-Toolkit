@@ -1,63 +1,47 @@
 # OSRS Toolkit
 
-A clean Windows desktop companion for Old School RuneScape market and profit planning.
+A Windows desktop companion for Old School RuneScape market analysis and profit planning.
 
-## Current MVP
+## Download
 
-- GE Flipper with real-time RuneLite/OSRS Wiki transaction data
-- Item detail views and a persistent watchlist
-- Trade journal with pending recommendation tracking, preserved targets, actual fills, realized
-  profit, win rate, and capital tracking
-- Correct 2% per-item GE tax (maximum 5,000,000 GP)
-- Liquidity, freshness, ROI, profit, buy-limit, and risk-aware ranking
-- Offline cache when the market feed is temporarily unavailable
-- Placeholders for Alch Finder, Skilling Profit Finder, and Kingdom Optimizer
+**[Download the latest release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)**
 
-The app presents estimates, not guaranteed trades. The Grand Exchange is dynamic, and observed
-prices can be stale or manipulated. Every recommendation therefore shows freshness and a confidence
-score instead of claiming certainty.
+No Python, PowerShell, or development tools are required.
 
-## Run in VS Code
+- **Windows installer:** guided setup, Start Menu entry, optional desktop shortcut, and uninstaller.
+- **Portable app:** extract the ZIP anywhere and open `OSRS Toolkit.exe`. Nothing is installed.
 
-1. Install Python 3.12 or newer and select it in VS Code.
-2. Open this folder in VS Code.
-3. In a PowerShell terminal, make sure you are in the project root and run:
+Windows may show an **Unknown publisher** warning because the application is not currently
+code-signed.
 
-```powershell
-Set-Location "E:\Personal Projects\OSRS Toolkit"
-python -m venv .venv
-& ".\.venv\Scripts\python.exe" -m pip install -e ".[dev]"
-& ".\.venv\Scripts\python.exe" -m osrs_toolkit
-```
+## Features
 
-This deliberately uses the virtual environment's Python directly, so PowerShell script execution
-does not need to be enabled. Run tests with:
+- **GE Flipper:** ranks potential flips using current margins, recent averages, liquidity,
+  freshness, ROI, buy limits, available cash, and risk controls.
+- **Watchlist:** saves items for quick monitoring.
+- **Trade Journal:** preserves suggested targets, tracks pending and completed trades, and reports
+  realized profit and win rate.
+- **Alch Finder:** finds High Alchemy opportunities after nature rune cost and Grand Exchange tax.
+- **Skilling Profit:** compares activities by estimated GP per hour.
+- **Kingdom Optimizer:** compares Managing Miscellania worker allocations using current prices.
+- **Character lookup:** loads public Old School RuneScape hiscore data without accessing your game
+  account.
 
-```powershell
-& ".\.venv\Scripts\python.exe" -m pytest
-```
+## Market data and privacy
 
-## Data
+Market prices come from the OSRS Wiki/RuneLite real-time price API. Cached market responses,
+settings, watchlists, and journal entries remain on your computer.
 
-Prices come from `prices.runescape.wiki`, the OSRS Wiki/RuneLite real-time Grand Exchange feed.
-Requests use bulk endpoints and a descriptive User-Agent. Cached responses live in the user's local
-application-data folder; no account credentials are requested or stored.
+OSRS Toolkit never asks for or stores your Jagex password, bank PIN, authenticator code, or game
+session credentials.
 
-## Windows releases
-
-End users do not need Python, VS Code, PowerShell, or any dependencies.
-
-- `OSRS-Toolkit-Portable-1.1.0.zip`: unzip it anywhere and double-click `OSRS Toolkit.exe`.
-- `OSRS-Toolkit-Setup-1.1.0.exe`: a normal Windows setup wizard with a Start Menu shortcut,
-  optional Desktop shortcut, and an uninstaller.
-
-For maintainers, `build-release.ps1` runs tests, builds the self-contained application, creates the
-portable ZIP, and compiles the setup wizard when Inno Setup 6 is available.
+Grand Exchange recommendations are estimates, not guaranteed trades. Prices can move, offers may
+not fill, and unusual trades can temporarily distort market data. Review the displayed price age,
+volume, and confidence before committing GP.
 
 ## License
 
-OSRS Toolkit is licensed under the [GNU General Public License v3.0](LICENSE). You may use,
-study, modify, and redistribute it under the terms of that license.
+OSRS Toolkit is available under the [GNU General Public License v3.0](LICENSE).
 
 This project is not affiliated with or endorsed by Jagex. Old School RuneScape and RuneScape are
 trademarks of Jagex Limited.
