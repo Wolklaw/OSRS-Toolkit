@@ -13,3 +13,7 @@ release/
 *.sqlite
 *.sqlite3
 toolkit.db
+runelite-plugin/
+.plugin-hub-reference/
+.trade-tracker-reference/
+.osrs-trade-tracker-reference/

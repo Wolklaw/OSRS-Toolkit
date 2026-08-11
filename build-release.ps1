@@ -2,11 +2,16 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $ReleaseDir = Join-Path $ProjectRoot "release"
-$PortableZip = Join-Path $ReleaseDir "OSRS-Toolkit-Portable-1.2.0.zip"
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "Development environment not found. Create .venv and install the dev dependencies first."
 }
+
+$ProjectVersion = (& $Python -c "from osrs_toolkit import __version__; print(__version__)").Trim()
+if (-not $ProjectVersion) {
+    throw "Could not determine the application version."
+}
+$PortableZip = Join-Path $ReleaseDir "OSRS-Toolkit-Portable-$ProjectVersion.zip"
 
 & $Python -m pytest -q
 if ($LASTEXITCODE -ne 0) { throw "Tests failed." }
@@ -29,7 +34,7 @@ $InnoCompiler = @(
 ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
 if ($InnoCompiler) {
-    & $InnoCompiler (Join-Path $ProjectRoot "packaging\installer.iss")
+    & $InnoCompiler "/DMyAppVersion=$ProjectVersion" (Join-Path $ProjectRoot "packaging\installer.iss")
     if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed." }
     Write-Host "Portable ZIP and setup wizard created in $ReleaseDir"
 } else {

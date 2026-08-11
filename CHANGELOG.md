@@ -2,6 +2,23 @@
 
 All notable changes to OSRS Toolkit are documented here.
 
+## [1.3.0] - 2026-08-11
+
+### Added
+
+- Local RuneLite connection status and automatic public character lookup.
+- Durable Grand Exchange fill imports from the companion RuneLite plugin.
+- Optional player-to-player trade tracking, disabled by default in RuneLite.
+- A RuneLite activity view with exact items and coins given and received.
+- Configurable Grand Exchange slot count and one-click tracking for every recommended offer.
+
+### Changed
+
+- Recommendations now allocate one cash stack across several independent GE offers.
+- Quantities respect cash, Grand Exchange limits, recent volume, and strategy-specific risk caps.
+- Recommendation summaries show allocated cash, held-back cash, and combined estimated profit.
+- Release builds now take their filenames from the application version automatically.
+
 ## [1.2.0] - 2026-08-11
 
 ### Added

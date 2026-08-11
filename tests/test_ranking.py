@@ -1,5 +1,5 @@
-from osrs_toolkit.models import ItemMapping, MarketPoint
-from osrs_toolkit.ranking import ge_tax, offer_targets, rank_flips
+from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
+from osrs_toolkit.ranking import ge_tax, offer_targets, plan_flip_portfolio, rank_flips
 
 
 def test_ge_tax_uses_current_rate_floor_and_cap() -> None:
@@ -61,3 +61,56 @@ def test_offer_targets_ignore_anomalous_below_market_trade() -> None:
     )
 
     assert offer_targets(point) == (1_100, 1_180)
+
+
+def _candidate(item_id: int, price: int, maximum: int, score: float) -> FlipCandidate:
+    return FlipCandidate(
+        item_id=item_id,
+        name=f"Item {item_id}",
+        buy_price=price,
+        sell_price=price + 10,
+        tax=0,
+        profit_each=10,
+        roi=10 / price * 100,
+        hourly_volume=10_000,
+        projected_volume=40_000,
+        buy_limit=maximum,
+        suggested_quantity=maximum,
+        capital_required=price * maximum,
+        potential_profit=10 * maximum,
+        confidence=80,
+        age_seconds=10,
+        score=score,
+    )
+
+
+def test_portfolio_uses_available_slots_and_never_overspends() -> None:
+    candidates = [_candidate(index, 100, 10_000, 100 - index) for index in range(1, 11)]
+
+    portfolio = plan_flip_portfolio(candidates, cash_stack=2_000_000, slot_count=8)
+
+    assert len(portfolio) == 8
+    assert sum(position.capital_required for position in portfolio) <= 2_000_000
+    assert {position.item_id for position in portfolio} == set(range(1, 9))
+
+
+def test_portfolio_respects_each_items_independent_liquidity_cap() -> None:
+    candidates = [
+        _candidate(1, 150, 659, 100),
+        _candidate(2, 500, 20_000, 90),
+    ]
+
+    portfolio = plan_flip_portfolio(candidates, cash_stack=2_000_000, slot_count=2)
+
+    assert portfolio[0].suggested_quantity == 659
+    assert portfolio[0].capital_required == 98_850
+    assert sum(position.capital_required for position in portfolio) <= 2_000_000
+
+
+def test_portfolio_leaves_cash_unallocated_when_all_safe_caps_are_reached() -> None:
+    candidates = [_candidate(1, 100, 2, 100), _candidate(2, 200, 3, 90)]
+
+    portfolio = plan_flip_portfolio(candidates, cash_stack=10_000, slot_count=8)
+
+    assert [position.suggested_quantity for position in portfolio] == [2, 3]
+    assert sum(position.capital_required for position in portfolio) == 800

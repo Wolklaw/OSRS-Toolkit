@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import replace
 
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 
@@ -128,6 +129,85 @@ def rank_flips(
             )
         )
     return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)
+
+
+def plan_flip_portfolio(
+    candidates: list[FlipCandidate],
+    cash_stack: int,
+    slot_count: int = 8,
+) -> list[FlipCandidate]:
+    """Allocate one cash stack across distinct GE offers without exceeding safe item caps.
+
+    ``rank_flips`` calculates the maximum sensible size for each item independently. This
+    function turns those independent limits into one diversified, cash-constrained plan.
+    It tries to use every requested slot, shares spare capital between the selected offers,
+    and deliberately leaves cash unused when liquidity, buy limits, or risk caps say to stop.
+    """
+    if cash_stack <= 0 or slot_count <= 0:
+        return []
+
+    selected: list[FlipCandidate] = []
+    minimum_cost = 0
+    for candidate in candidates:
+        if len(selected) >= slot_count:
+            break
+        if candidate.suggested_quantity <= 0:
+            continue
+        if minimum_cost + candidate.buy_price > cash_stack:
+            continue
+        selected.append(candidate)
+        minimum_cost += candidate.buy_price
+
+    if not selected:
+        return []
+
+    # Begin with one item in each selected GE slot, then water-fill the remaining cash.
+    quantities = [1 for _candidate in selected]
+    remaining = cash_stack - minimum_cost
+    active = {
+        index
+        for index, candidate in enumerate(selected)
+        if candidate.suggested_quantity > 1
+    }
+    while active and remaining > 0:
+        share = max(1, remaining // len(active))
+        progressed = False
+        for index in sorted(active):
+            candidate = selected[index]
+            room = candidate.suggested_quantity - quantities[index]
+            units = min(room, share // candidate.buy_price, remaining // candidate.buy_price)
+            if units <= 0:
+                continue
+            quantities[index] += units
+            remaining -= units * candidate.buy_price
+            progressed = True
+        active = {
+            index
+            for index in active
+            if quantities[index] < selected[index].suggested_quantity
+            and selected[index].buy_price <= remaining
+        }
+        if not progressed:
+            affordable = [
+                index for index in active if selected[index].buy_price <= remaining
+            ]
+            if not affordable:
+                break
+            # Ranking order is retained, so the best remaining opportunity receives the
+            # indivisible unit when an equal capital share is smaller than its item price.
+            index = min(affordable)
+            quantities[index] += 1
+            remaining -= selected[index].buy_price
+
+    return [
+        replace(
+            candidate,
+            suggested_quantity=quantity,
+            capital_required=candidate.buy_price * quantity,
+            potential_profit=candidate.profit_each * quantity,
+        )
+        for candidate, quantity in zip(selected, quantities, strict=True)
+    ]
 
 
 def _stability(point: MarketPoint) -> float:

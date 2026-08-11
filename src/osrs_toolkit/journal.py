@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -63,6 +64,56 @@ class TrackedTrade:
         return (self.actual_buy or self.target_buy) * self.quantity
 
 
+@dataclass(frozen=True, slots=True)
+class SyncedItem:
+    flow: str
+    item_id: int
+    item_name: str
+    quantity: int
+    unit_value: int
+
+    @property
+    def total_value(self) -> int:
+        return self.quantity * self.unit_value
+
+
+@dataclass(frozen=True, slots=True)
+class SyncedTrade:
+    event_id: str
+    occurred_at: str
+    event_type: str
+    account_hash: str
+    account_name: str
+    counterparty: str | None
+    direction: str
+    metadata: dict[str, object]
+    items: tuple[SyncedItem, ...]
+
+    @property
+    def source(self) -> str:
+        return "Grand Exchange" if self.event_type == "ge_fill" else "Player trade"
+
+    @property
+    def given(self) -> tuple[SyncedItem, ...]:
+        return tuple(item for item in self.items if item.flow == "given")
+
+    @property
+    def received(self) -> tuple[SyncedItem, ...]:
+        return tuple(item for item in self.items if item.flow == "received")
+
+    @property
+    def given_value(self) -> int:
+        return sum(item.total_value for item in self.given)
+
+    @property
+    def received_value(self) -> int:
+        return sum(item.total_value for item in self.received)
+
+    @property
+    def estimated_difference(self) -> int:
+        return self.received_value - self.given_value
+
+
 class JournalRepository:
     def __init__(self, database_path: Path | None = None) -> None:
         if database_path is None:
@@ -75,6 +126,7 @@ class JournalRepository:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     def _initialize(self) -> None:
@@ -90,6 +142,37 @@ class JournalRepository:
                     sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
                 )
                 """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS synced_trades (
+                    event_id TEXT PRIMARY KEY,
+                    occurred_at TEXT NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    account_hash TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    counterparty TEXT,
+                    direction TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS synced_trade_items (
+                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL REFERENCES synced_trades(event_id) ON DELETE CASCADE,
+                    flow TEXT NOT NULL CHECK (flow IN ('given', 'received')),
+                    item_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
             )
             connection.execute(
                 """
@@ -215,3 +298,91 @@ class JournalRepository:
             connection.execute(
                 "DELETE FROM tracked_trades WHERE position_id = ?", (position_id,)
             )
+
+    def add_synced_trade(self, trade: SyncedTrade) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO synced_trades (
+                    event_id, occurred_at, imported_at, event_type, account_hash,
+                    account_name, counterparty, direction, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    trade.event_id,
+                    trade.occurred_at,
+                    datetime.now(UTC).isoformat(timespec="seconds"),
+                    trade.event_type,
+                    trade.account_hash,
+                    trade.account_name,
+                    trade.counterparty,
+                    trade.direction,
+                    json.dumps(trade.metadata, separators=(",", ":"), sort_keys=True),
+                ),
+            )
+            if cursor.rowcount == 0:
+                return False
+            connection.executemany(
+                """
+                INSERT INTO synced_trade_items (
+                    event_id, flow, item_id, item_name, quantity, unit_value
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        trade.event_id,
+                        item.flow,
+                        item.item_id,
+                        item.item_name,
+                        item.quantity,
+                        item.unit_value,
+                    )
+                    for item in trade.items
+                ],
+            )
+        return True
+
+    def list_synced_trades(self, event_type: str | None = None) -> list[SyncedTrade]:
+        query = "SELECT * FROM synced_trades"
+        parameters: tuple[str, ...] = ()
+        if event_type is not None:
+            query += " WHERE event_type = ?"
+            parameters = (event_type,)
+        query += " ORDER BY occurred_at DESC, event_id DESC"
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+            item_rows = connection.execute(
+                """
+                SELECT * FROM synced_trade_items
+                ORDER BY item_row_id ASC
+                """
+            ).fetchall()
+        items_by_event: dict[str, list[SyncedItem]] = {}
+        for row in item_rows:
+            items_by_event.setdefault(str(row["event_id"]), []).append(
+                SyncedItem(
+                    flow=str(row["flow"]),
+                    item_id=int(row["item_id"]),
+                    item_name=str(row["item_name"]),
+                    quantity=int(row["quantity"]),
+                    unit_value=int(row["unit_value"]),
+                )
+            )
+        return [
+            SyncedTrade(
+                event_id=str(row["event_id"]),
+                occurred_at=str(row["occurred_at"]),
+                event_type=str(row["event_type"]),
+                account_hash=str(row["account_hash"]),
+                account_name=str(row["account_name"]),
+                counterparty=str(row["counterparty"]) if row["counterparty"] else None,
+                direction=str(row["direction"]),
+                metadata=json.loads(str(row["metadata_json"])),
+                items=tuple(items_by_event.get(str(row["event_id"]), [])),
+            )
+            for row in rows
+        ]
+
+    def delete_synced_trade(self, event_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM synced_trades WHERE event_id = ?", (event_id,))
