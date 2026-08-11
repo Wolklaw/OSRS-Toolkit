@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -34,7 +35,13 @@ from PySide6.QtWidgets import (
 
 from osrs_toolkit import __version__
 from osrs_toolkit.account import AccountLookupError, PlayerProfile, fetch_player
-from osrs_toolkit.calculators import alch_candidates, kingdom_results, skill_results
+from osrs_toolkit.calculators import (
+    ALCH_POLICIES,
+    SKILL_METHODS,
+    alch_candidates,
+    kingdom_results,
+    skill_results,
+)
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
 from osrs_toolkit.market import WikiMarketClient
@@ -780,9 +787,49 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = self._page_heading(
             "Alch Finder",
-            "Find High Alchemy candidates after the item price and one nature rune.",
+            "Find liquid High Alchemy candidates using conservative recent prices, buy limits, and your available cash.",
         )
-        self.alch_table = self._table(["Item", "Buy price", "High alch", "Nature rune", "Profit/alch", "1h volume"])
+        controls = QHBoxLayout()
+        self.alch_budget = QSpinBox()
+        self.alch_budget.setRange(10_000, 2_000_000_000)
+        self.alch_budget.setValue(int(QSettings().value("alch/budget", 2_000_000)))
+        self.alch_budget.setSingleStep(100_000)
+        self.alch_budget.setPrefix("Budget  ")
+        self.alch_budget.setGroupSeparatorShown(True)
+        self.alch_budget.valueChanged.connect(self._alch_settings_changed)
+        self.alch_safety = QComboBox()
+        self.alch_safety.addItems(list(ALCH_POLICIES))
+        saved_policy = str(QSettings().value("alch/safety", "Safer"))
+        self.alch_safety.setCurrentText(
+            saved_policy if saved_policy in ALCH_POLICIES else "Safer"
+        )
+        self.alch_safety.currentTextChanged.connect(self._alch_settings_changed)
+        controls.addWidget(self.alch_budget)
+        controls.addWidget(QLabel("Safety"))
+        controls.addWidget(self.alch_safety)
+        controls.addStretch()
+        layout.addLayout(controls)
+        self.alch_note = QLabel(objectName="recommendation")
+        self.alch_note.setWordWrap(True)
+        layout.addWidget(self.alch_note)
+        self.alch_table = self._table(
+            [
+                "Item",
+                "Latest trade",
+                "Safe buy",
+                "High alch",
+                "Rune",
+                "Profit/alch",
+                "Safe qty",
+                "Capital",
+                "Est. GP/hr",
+                "ROI",
+                "1h volume",
+                "Age",
+                "Limit",
+                "Magic 55",
+            ]
+        )
         self.alch_table.cellDoubleClicked.connect(self._open_table_item)
         layout.addWidget(self.alch_table, 1)
         page.setLayout(layout)
@@ -792,11 +839,44 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = self._page_heading(
             "Skilling Profit",
-            "Compare processing methods using current prices. Connect a character to check skill requirements.",
+            "Compare processing and gathering activities across ten skills using current prices.",
         )
-        self.skill_note = QLabel("Showing all levels until a character is connected.", objectName="status")
+        controls = QHBoxLayout()
+        self.skill_search = QLineEdit(placeholderText="Search methods…")
+        self.skill_search.textChanged.connect(self._render_skilling)
+        self.skill_filter = QComboBox()
+        self.skill_filter.addItem("All skills")
+        self.skill_filter.addItems(sorted({method.skill for method in SKILL_METHODS}))
+        self.skill_filter.currentTextChanged.connect(self._render_skilling)
+        self.skill_profitable = QCheckBox("Profitable only")
+        self.skill_profitable.setChecked(True)
+        self.skill_profitable.toggled.connect(self._render_skilling)
+        self.skill_available = QCheckBox("Meets character level")
+        self.skill_available.setEnabled(False)
+        self.skill_available.toggled.connect(self._render_skilling)
+        controls.addWidget(self.skill_search, 1)
+        controls.addWidget(self.skill_filter)
+        controls.addWidget(self.skill_profitable)
+        controls.addWidget(self.skill_available)
+        layout.addLayout(controls)
+        self.skill_note = QLabel(objectName="recommendation")
+        self.skill_note.setWordWrap(True)
         layout.addWidget(self.skill_note)
-        self.skill_table = self._table(["Method", "Skill", "Required", "Profit/action", "Estimated GP/hr", "Available"])
+        self.skill_table = self._table(
+            [
+                "Method",
+                "Skill",
+                "Level",
+                "Input cost",
+                "Output after tax",
+                "Profit/action",
+                "Actions/hr",
+                "Est. GP/hr",
+                "Price age",
+                "Level met",
+                "Assumption",
+            ]
+        )
         layout.addWidget(self.skill_table, 1)
         page.setLayout(layout)
         return page
@@ -873,6 +953,8 @@ class MainWindow(QMainWindow):
         self.account_label.setText(f"{profile.name} • Total {profile.total_level:,}")
         self.account_button.setText("Change character")
         self.account_button.setEnabled(True)
+        self.skill_available.setEnabled(True)
+        self._render_alch()
         self._render_skilling()
 
     def _account_failed(self, message: str) -> None:
@@ -959,6 +1041,11 @@ class MainWindow(QMainWindow):
         self._plan_portfolio()
         self._render_flips()
 
+    def _alch_settings_changed(self, _value: object) -> None:
+        QSettings().setValue("alch/budget", self.alch_budget.value())
+        QSettings().setValue("alch/safety", self.alch_safety.currentText())
+        self._render_alch()
+
     def _strategy_changed(self, strategy: str) -> None:
         if not self._points:
             return
@@ -1033,13 +1120,53 @@ class MainWindow(QMainWindow):
             )
 
     def _render_alch(self) -> None:
-        rows = alch_candidates(self._mappings, self._points)[:300]
-        values = [[row.name, _gp(row.buy_price), _gp(row.alch_value), _gp(row.rune_cost), _gp(row.profit), f"{row.volume:,}"] for row in rows]
+        magic_level = self._profile.skills.get("Magic") if self._profile else None
+        rows = alch_candidates(
+            self._mappings,
+            self._points,
+            cash_stack=self.alch_budget.value(),
+            policy=self.alch_safety.currentText(),
+            magic_level=magic_level,
+        )[:300]
+        values = [
+            [
+                row.name,
+                _gp(row.latest_buy_price),
+                _gp(row.buy_price),
+                _gp(row.alch_value),
+                _gp(row.rune_cost),
+                _gp(row.profit),
+                f"{row.safe_quantity:,}",
+                _gp(row.capital_required),
+                _gp(row.hourly_profit),
+                f"{row.roi:.2f}%",
+                f"{row.volume:,}",
+                _short_duration(row.age_seconds),
+                f"{row.buy_limit:,}",
+                _availability(row.eligible),
+            ]
+            for row in rows
+        ]
         self._fill_table(
             self.alch_table,
             values,
-            green_columns={4},
+            green_columns={5, 8, 9},
             row_ids=[row.item_id for row in rows],
+        )
+        self.alch_table.sortItems(8, Qt.SortOrder.DescendingOrder)
+        selected = ALCH_POLICIES[self.alch_safety.currentText()]
+        age_text = (
+            _short_duration(selected.max_age_seconds)
+            if selected.max_age_seconds is not None
+            else "unlimited age"
+        )
+        self.alch_note.setText(
+            f"{len(rows)} candidates pass {self.alch_safety.currentText().lower()} checks. "
+            "Safe buy uses the highest of the latest trade, five-minute average, and "
+            "one-hour average—not an advertised GE offer. "
+            f"This mode requires {selected.min_volume:,}+ trades/hour, {age_text} maximum "
+            f"price age, and caps quantity at {selected.volume_share:.0%} of hourly volume, "
+            "the GE buy limit, 1,200 casts, and your budget. Test a small buy first."
         )
 
     def _render_watchlist(self) -> None:
@@ -1331,11 +1458,46 @@ class MainWindow(QMainWindow):
 
     def _render_skilling(self) -> None:
         skills = self._profile.skills if self._profile else {}
-        rows = skill_results(self._mappings, self._points, skills)
-        if self._profile:
-            self.skill_note.setText(f"Requirements checked against {self._profile.name}'s public hiscores.")
-        values = [[row.name, row.skill, str(row.level), _gp(row.profit_action), _gp(row.profit_hour), "Yes" if row.eligible else "No"] for row in rows]
-        self._fill_table(self.skill_table, values, green_columns={4})
+        priced_rows = skill_results(self._mappings, self._points, skills)
+        query = self.skill_search.text().strip().casefold()
+        selected_skill = self.skill_filter.currentText()
+        rows = [
+            row
+            for row in priced_rows
+            if query in row.name.casefold()
+            and (selected_skill == "All skills" or row.skill == selected_skill)
+            and (not self.skill_profitable.isChecked() or row.profit_hour > 0)
+            and (not self.skill_available.isChecked() or row.eligible is True)
+        ]
+        values = [
+            [
+                row.name,
+                row.skill,
+                str(row.level),
+                _gp(row.input_cost),
+                _gp(row.output_value),
+                _signed_gp(row.profit_action),
+                f"{row.actions_hour:,}",
+                _signed_gp(row.profit_hour),
+                _short_duration(row.price_age_seconds),
+                _availability(row.eligible),
+                row.notes or "—",
+            ]
+            for row in rows
+        ]
+        self._fill_table(self.skill_table, values, green_columns={5, 7})
+        self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
+        profile_text = (
+            f" Requirements checked against {self._profile.name}'s public hiscores."
+            if self._profile
+            else " Connect a character to filter methods by public skill levels."
+        )
+        self.skill_note.setText(
+            f"Showing {len(rows)} of {len(priced_rows)} currently priced methods from a "
+            f"{len(SKILL_METHODS)}-method catalogue.{profile_text} Inputs use conservative "
+            "buyer-paid prices; outputs use conservative seller-received prices after GE tax. "
+            "Rates are practical estimates, not guarantees—check each assumption before buying supplies."
+        )
 
     def _render_kingdom(self) -> None:
         rows = kingdom_results(self._mappings, self._points)
@@ -1359,6 +1521,7 @@ class MainWindow(QMainWindow):
         for row_index, row in enumerate(values):
             for column, value in enumerate(row):
                 cell = SortableTableItem(value)
+                cell.setToolTip(value)
                 if column == 0 and row_ids is not None:
                     cell.setData(Qt.ItemDataRole.UserRole, row_ids[row_index])
                 if column > 0:
@@ -1438,6 +1601,20 @@ def _gp(value: int) -> str:
 def _signed_gp(value: int) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:,} gp"
+
+
+def _availability(value: bool | None) -> str:
+    if value is None:
+        return "—"
+    return "Yes" if value else "No"
+
+
+def _short_duration(seconds: int) -> str:
+    if seconds < 60:
+        return f"{seconds} sec"
+    if seconds < 3_600:
+        return f"{seconds // 60} min"
+    return f"{seconds // 3_600} hr"
 
 
 def _item_detail_lines(items: tuple[SyncedItem, ...]) -> list[str]:

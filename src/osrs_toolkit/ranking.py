@@ -52,9 +52,11 @@ def ge_tax(sell_price: int) -> int:
 
 
 def offer_targets(point: MarketPoint) -> tuple[int, int]:
-    """Return fill-aware passive targets anchored to recent traded averages."""
-    buy_price = max(point.low, point.average_low_5m or point.low)
-    sell_price = min(point.high, point.average_high_5m or point.high)
+    """Return cautious passive targets anchored across latest, 5m, and 1h trades."""
+    buy_observations = (point.low, point.average_low_5m, point.average_low_1h)
+    sell_observations = (point.high, point.average_high_5m, point.average_high_1h)
+    buy_price = max(price for price in buy_observations if price is not None and price > 0)
+    sell_price = min(price for price in sell_observations if price is not None and price > 0)
     return buy_price, sell_price
 
 
@@ -76,7 +78,12 @@ def rank_flips(
     for point in points:
         item = mappings.get(point.item_id)
         buy_price, sell_price = offer_targets(point)
-        if item is None or buy_price > cash_stack or sell_price <= buy_price:
+        if (
+            item is None
+            or buy_price > cash_stack
+            or sell_price <= buy_price
+            or not _has_two_sided_liquidity(point)
+        ):
             continue
         age = current_time - min(point.high_time, point.low_time)
         tax = ge_tax(sell_price)
@@ -211,7 +218,27 @@ def plan_flip_portfolio(
 
 
 def _stability(point: MarketPoint) -> float:
-    if point.average_5m is None or point.average_1h is None or point.average_1h <= 0:
+    window_pairs = (
+        (point.average_high_5m, point.average_high_1h),
+        (point.average_low_5m, point.average_low_1h),
+    )
+    drifts = [
+        abs(recent - hourly) / hourly
+        for recent, hourly in window_pairs
+        if recent is not None and hourly is not None and hourly > 0
+    ]
+    if not drifts:
         return 0.35
-    drift = abs(point.average_5m - point.average_1h) / point.average_1h
+    drift = max(drifts)
     return max(0.0, 1.0 - min(drift / 0.08, 1.0))
+
+
+def _has_two_sided_liquidity(point: MarketPoint) -> bool:
+    """Reject spreads supported by only a token trade on one side of the market."""
+    total = point.high_volume_1h + point.low_volume_1h
+    if total <= 0:
+        # Keeps manually constructed/legacy snapshots usable. Live snapshots always
+        # include the separate high- and low-price volumes.
+        return True
+    thinner_side = min(point.high_volume_1h, point.low_volume_1h)
+    return thinner_side >= 3 and thinner_side / total >= 0.02

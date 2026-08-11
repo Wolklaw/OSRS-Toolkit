@@ -10,6 +10,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication, QTabWidget
 
+from osrs_toolkit.account import PlayerProfile
 from osrs_toolkit.app import MainWindow, SettingsDialog
 from osrs_toolkit.journal import SyncedItem, SyncedTrade
 from osrs_toolkit.market import WikiMarketClient
@@ -118,12 +119,34 @@ def main() -> int:
         window.runelite_status.setText(
             "RuneLite connected as Example Player • syncing automatically • player trades on"
         )
+        window._profile = PlayerProfile(
+            "Example Player",
+            {
+                "Overall": 1_608,
+                "Magic": 82,
+                "Cooking": 86,
+                "Crafting": 72,
+                "Fishing": 82,
+                "Fletching": 75,
+                "Herblore": 68,
+                "Hunter": 65,
+                "Smithing": 70,
+                "Mining": 85,
+                "Woodcutting": 90,
+            },
+        )
+        window.skill_available.setEnabled(True)
+        window._render_alch()
+        window._render_skilling()
         window._render_synced_trades()
         window.journal_tabs.setCurrentIndex(1)
         save_widget(window, output_dir / "runelite-activity.png", app)
 
         window.nav.setCurrentRow(3)
         save_widget(window, output_dir / "alch-finder.png", app)
+
+        window.nav.setCurrentRow(4)
+        save_widget(window, output_dir / "skilling-profit.png", app)
 
         settings = SettingsDialog("Dark", window)
         settings.resize(680, 680)

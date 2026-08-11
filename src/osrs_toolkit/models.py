@@ -27,6 +27,10 @@ class MarketPoint:
     average_low_5m: int | None = None
     average_high_1h: int | None = None
     average_low_1h: int | None = None
+    high_volume_5m: int = 0
+    low_volume_5m: int = 0
+    high_volume_1h: int = 0
+    low_volume_1h: int = 0
 
 
 @dataclass(frozen=True, slots=True)

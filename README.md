@@ -39,6 +39,10 @@ the current liquidity, buy-limit, and risk caps; the app does not force weak tra
 every coin. The **BUY** and **THEN SELL** targets are patient limit offers based on recent trades—not
 guaranteed instant prices.
 
+Targets cross-check the latest trade with five-minute and one-hour averages. A spread must also
+have meaningful completed-trade volume on both sides, preventing a single unusual trade from
+appearing as an enormous margin.
+
 Each result includes:
 
 - **Buy / Sell:** suggested offer prices.
@@ -94,15 +98,29 @@ mobile and other game clients.
 
 ![Alch Finder using current item and nature rune prices](docs/images/alch-finder.png)
 
-The Alch Finder compares an item's current buy price with its High Alchemy value after the cost of
-one nature rune. Check **1h volume** as well as profit: an attractive margin is not useful if you
-cannot buy enough items at that price.
+The Alch Finder compares an item's High Alchemy value with a conservative acquisition cost. The
+**Safe buy** is the highest of the latest buyer-paid trade, five-minute average, and one-hour
+average—not an advertised offer currently waiting in the Grand Exchange. Safety modes also reject
+stale or thinly traded items and cap suggested quantities by budget, volume, buy limit, and the
+1,200-cast hourly maximum.
+
+## Comparing skilling profit
+
+![Skilling Profit comparing current processing margins](docs/images/skilling-profit.png)
+
+Skilling Profit compares more than 80 processing and gathering activities across Cooking,
+Crafting, Fishing, Fletching, Herblore, Hunter, Magic, Mining, Smithing, and Woodcutting. Inputs use
+conservative buyer-paid prices; outputs use conservative seller-received prices after Grand
+Exchange tax. Search and skill filters make the catalogue easier to scan, and a connected character
+can hide methods above the player's public skill levels.
+
+Action and gathering rates are practical baselines. Cooking rows assume no burned food; gathering
+varies with location, gear, competition, and attention. Specialised tools, risk, or staff assumptions
+are shown in the table. Always test supplies and output sales in small amounts.
 
 ## Other tools
 
 - **Watchlist:** double-click supported market rows to save items for later monitoring.
-- **Skilling Profit:** compares supported processing methods by estimated profit per action and GP
-  per hour. Connect a character to filter methods by public skill levels.
 - **Kingdom Optimizer:** compares Managing Miscellania resources using current market prices.
 - **Character lookup:** enter only a public RuneScape display name. This reads public OSRS hiscores
   and does not log into your account.

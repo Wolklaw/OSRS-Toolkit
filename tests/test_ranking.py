@@ -63,6 +63,48 @@ def test_offer_targets_ignore_anomalous_below_market_trade() -> None:
     assert offer_targets(point) == (1_100, 1_180)
 
 
+def test_offer_targets_use_hourly_prices_to_reject_a_five_minute_spike() -> None:
+    point = MarketPoint(
+        1,
+        370_459,
+        29_231,
+        2_000_000,
+        2_000_000,
+        20,
+        335,
+        average_high_5m=370_459,
+        average_low_5m=29_231,
+        average_high_1h=29_450,
+        average_low_1h=29_200,
+    )
+
+    assert offer_targets(point) == (29_231, 29_450)
+
+
+def test_ranker_rejects_a_spread_supported_by_one_trade_on_one_side() -> None:
+    now = 2_000_000
+    mappings = {1434: ItemMapping(1434, "Dragon mace", True, 70, 30_000)}
+    point = MarketPoint(
+        1434,
+        370_459,
+        29_231,
+        now,
+        now,
+        20,
+        335,
+        average_high_5m=370_459,
+        average_low_5m=29_231,
+        average_high_1h=370_459,
+        average_low_1h=29_231,
+        high_volume_5m=1,
+        low_volume_5m=19,
+        high_volume_1h=1,
+        low_volume_1h=334,
+    )
+
+    assert rank_flips(mappings, [point], cash_stack=2_000_000, now=now) == []
+
+
 def _candidate(item_id: int, price: int, maximum: int, score: float) -> FlipCandidate:
     return FlipCandidate(
         item_id=item_id,

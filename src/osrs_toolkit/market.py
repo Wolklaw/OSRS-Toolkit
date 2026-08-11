@@ -7,6 +7,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from osrs_toolkit import __version__
 from osrs_toolkit.models import ItemMapping, MarketPoint
 
 
@@ -16,7 +17,7 @@ class MarketDataError(RuntimeError):
 
 class WikiMarketClient:
     BASE_URL = "https://prices.runescape.wiki/api/v1/osrs"
-    USER_AGENT = "OSRSToolkit/1.1 desktop market analysis"
+    USER_AGENT = f"OSRSToolkit/{__version__} desktop market analysis"
 
     def __init__(self, cache_dir: Path | None = None, timeout: float = 12.0) -> None:
         local_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
@@ -75,19 +76,25 @@ class WikiMarketClient:
                 continue
             five_item = five.get(item_key, {})
             hour_item = hour.get(item_key, {})
+            high_volume_5m = int(five_item.get("highPriceVolume") or 0)
+            low_volume_5m = int(five_item.get("lowPriceVolume") or 0)
+            high_volume_1h = int(hour_item.get("highPriceVolume") or 0)
+            low_volume_1h = int(hour_item.get("lowPriceVolume") or 0)
             points.append(
                 MarketPoint(
                     item_id=int(item_key), high=high, low=low,
                     high_time=high_time, low_time=low_time,
-                    volume_5m=int(five_item.get("highPriceVolume") or 0)
-                    + int(five_item.get("lowPriceVolume") or 0),
-                    volume_1h=int(hour_item.get("highPriceVolume") or 0)
-                    + int(hour_item.get("lowPriceVolume") or 0),
+                    volume_5m=high_volume_5m + low_volume_5m,
+                    volume_1h=high_volume_1h + low_volume_1h,
                     average_5m=_midpoint(five_item), average_1h=_midpoint(hour_item),
                     average_high_5m=_price(five_item.get("avgHighPrice")),
                     average_low_5m=_price(five_item.get("avgLowPrice")),
                     average_high_1h=_price(hour_item.get("avgHighPrice")),
                     average_low_1h=_price(hour_item.get("avgLowPrice")),
+                    high_volume_5m=high_volume_5m,
+                    low_volume_5m=low_volume_5m,
+                    high_volume_1h=high_volume_1h,
+                    low_volume_1h=low_volume_1h,
                 )
             )
         return mappings, points

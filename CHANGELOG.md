@@ -2,6 +2,24 @@
 
 All notable changes to OSRS Toolkit are documented here.
 
+## [1.4.0] - 2026-08-11
+
+### Added
+
+- More than 80 processing and gathering activities across ten production and gathering skills.
+- Skilling method search, skill filters, profitable-only filtering, and character-level filtering.
+- Detailed skilling input cost, after-tax output value, action rate, price age, and method assumptions.
+- Alch budget and safety controls with suggested quantities, capital requirements, and GP/hour estimates.
+
+### Changed
+
+- GE Flipper targets now cross-check latest, five-minute, and one-hour prices and reject spreads
+  supported by negligible trade volume on either side.
+- Alch candidates now use the highest of latest, five-minute, and one-hour buyer-paid prices.
+- Safer Alch mode rejects stale and thinly traded items and caps quantities by liquidity and buy limits.
+- Skilling recipes use stable item IDs so Wiki display-name changes cannot silently remove methods.
+- Skilling inputs and outputs now use conservative recent prices, including Grand Exchange tax.
+
 ## [1.3.0] - 2026-08-11
 
 ### Added

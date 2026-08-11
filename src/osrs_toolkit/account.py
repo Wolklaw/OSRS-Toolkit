@@ -5,6 +5,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
+from osrs_toolkit import __version__
+
 HISCORE_SKILLS = [
     "Overall", "Attack", "Defence", "Strength", "Hitpoints", "Ranged", "Prayer",
     "Magic", "Cooking", "Woodcutting", "Fletching", "Fishing", "Firemaking",
@@ -33,7 +35,10 @@ def fetch_player(name: str, timeout: float = 10.0) -> PlayerProfile:
         raise AccountLookupError("Enter a character name.")
     encoded = urllib.parse.quote_plus(clean_name)
     url = f"https://secure.runescape.com/m=hiscore_oldschool/index_lite.ws?player={encoded}"
-    request = urllib.request.Request(url, headers={"User-Agent": "OSRSToolkit/1.1"})
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": f"OSRSToolkit/{__version__}"},
+    )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             lines = response.read().decode("utf-8").splitlines()
