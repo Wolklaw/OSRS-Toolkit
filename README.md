@@ -11,7 +11,6 @@ Miscellania.
 [![Latest release](https://img.shields.io/github/v/release/Wolklaw/OSRS-Toolkit?style=flat-square&label=latest&color=d5ad52)](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 ![Windows](https://img.shields.io/badge/platform-Windows-3572A5?style=flat-square)
 [![GPLv3](https://img.shields.io/github/license/Wolklaw/OSRS-Toolkit?style=flat-square&color=70d6a1)](LICENSE)
-![Local journal](https://img.shields.io/badge/journal-local--first-70d6a1?style=flat-square)
 
 ### [Download the latest Windows release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 
