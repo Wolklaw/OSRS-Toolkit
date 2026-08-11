@@ -74,6 +74,7 @@ class SkillResult:
     eligible: bool | None
     price_age_seconds: int
     notes: str
+    guide_url: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +87,20 @@ class KingdomResult:
 
 def _item(item_id: int, name: str, quantity: float = 1.0) -> SkillItem:
     return SkillItem(item_id, name, quantity)
+
+
+SKILL_GUIDES = {
+    "Cooking": "https://oldschool.runescape.wiki/w/Pay-to-play_Cooking_training",
+    "Crafting": "https://oldschool.runescape.wiki/w/Pay-to-play_Crafting_training",
+    "Fletching": "https://oldschool.runescape.wiki/w/Fletching_training",
+    "Smithing": "https://oldschool.runescape.wiki/w/Pay-to-play_Smithing_training",
+    "Herblore": "https://oldschool.runescape.wiki/w/Herblore_training",
+    "Magic": "https://oldschool.runescape.wiki/w/Pay-to-play_Magic_training",
+    "Mining": "https://oldschool.runescape.wiki/w/Pay-to-play_Mining_training",
+    "Woodcutting": "https://oldschool.runescape.wiki/w/Pay-to-play_Woodcutting_training",
+    "Fishing": "https://oldschool.runescape.wiki/w/Pay-to-play_Fishing_training",
+    "Hunter": "https://oldschool.runescape.wiki/w/Hunter_training",
+}
 
 
 SKILL_METHODS = [
@@ -336,6 +351,7 @@ def skill_results(
                 eligible=level >= method.level if level is not None else None,
                 price_age_seconds=max(ages, default=0),
                 notes=method.notes,
+                guide_url=SKILL_GUIDES[method.skill],
             )
         )
     return sorted(results, key=lambda result: result.profit_hour, reverse=True)

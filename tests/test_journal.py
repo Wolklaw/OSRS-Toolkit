@@ -33,3 +33,101 @@ def test_recommendation_can_be_tracked_through_completion(tmp_path: Path) -> Non
     repository.update_tracked(position_id, "Completed", 1_010, 1_190)
     completed = repository.list_tracked()[0]
     assert completed.realized_profit == 15_700
+    assert completed.sold_quantity == 100
+    assert completed.remaining_quantity == 0
+
+
+def test_tracked_trade_supports_multiple_sale_prices_and_partial_progress(
+    tmp_path: Path,
+) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    position_id = repository.track(1, "Variable sale", 10, 1_800, 2_100)
+
+    repository.update_tracked(
+        position_id,
+        "Partially sold",
+        1_800,
+        None,
+        [(5, 2_002)],
+    )
+    partial = repository.list_tracked()[0]
+    assert partial.sold_quantity == 5
+    assert partial.remaining_quantity == 5
+    assert partial.average_sell_price == 2_002
+    assert partial.realized_profit == 810
+
+    repository.update_tracked(
+        position_id,
+        "Completed",
+        1_800,
+        None,
+        [(5, 2_002), (5, 1_900)],
+    )
+    completed = repository.list_tracked()[0]
+    assert completed.sold_quantity == 10
+    assert completed.remaining_quantity == 0
+    assert completed.average_sell_price == 1_951
+    assert completed.realized_profit == 1_120
+
+
+def test_completed_trade_rejects_unaccounted_sale_quantity(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    position_id = repository.track(1, "Incomplete sale", 10, 1_800, 2_100)
+
+    with pytest.raises(ValueError, match="full quantity"):
+        repository.update_tracked(
+            position_id,
+            "Completed",
+            1_800,
+            None,
+            [(5, 2_002)],
+        )
+
+
+def test_overnight_trade_preserves_targets_and_records_daily_suggestion(
+    tmp_path: Path,
+) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    position_id = repository.track(
+        1,
+        "Overnight item",
+        10,
+        1_800,
+        2_100,
+        "Overnight (8â€“12h)",
+    )
+
+    repository.review_suggestion(
+        position_id,
+        1_750,
+        2_020,
+        "2099-01-02T08:00:00+00:00",
+    )
+    trade = repository.list_tracked()[0]
+
+    assert trade.target_buy == 1_800
+    assert trade.target_sell == 2_100
+    assert trade.buy_suggestion == 1_750
+    assert trade.sell_suggestion == 2_020
+    assert trade.suggestion_was_refreshed is True
+
+
+def test_default_journal_recovers_from_version_independent_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    local_data = tmp_path / "local"
+    roaming_data = tmp_path / "roaming"
+    monkeypatch.setenv("LOCALAPPDATA", str(local_data))
+    monkeypatch.setenv("APPDATA", str(roaming_data))
+
+    repository = JournalRepository()
+    repository.add("Preserved item", 5, 100, 150)
+
+    # A later launch snapshots the populated database outside the install/data location.
+    JournalRepository()
+    database_path = local_data / "OSRSToolkit" / "data" / "toolkit.db"
+    database_path.unlink()
+
+    recovered = JournalRepository()
+    assert recovered.list_all()[0].item_name == "Preserved item"
+    assert list((roaming_data / "OSRSToolkit" / "backups").glob("toolkit-*.db"))

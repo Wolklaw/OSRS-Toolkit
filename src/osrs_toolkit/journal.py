@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
+import sys
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +41,14 @@ class TradeRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class SaleFill:
+    fill_id: int
+    position_id: int
+    quantity: int
+    sell_price: int
+
+
+@dataclass(frozen=True, slots=True)
 class TrackedTrade:
     position_id: int
     created_at: str
@@ -48,16 +60,56 @@ class TrackedTrade:
     actual_buy: int | None
     actual_sell: int | None
     status: str
+    sale_fills: tuple[SaleFill, ...] = ()
+    strategy: str = "Balanced (1â€“4h)"
+    current_buy_suggestion: int | None = None
+    current_sell_suggestion: int | None = None
+    suggestion_reviewed_at: str | None = None
 
     @property
     def estimated_profit(self) -> int:
-        return (self.target_sell - self.target_buy - ge_tax(self.target_sell)) * self.quantity
+        buy_price = self.actual_buy or self.buy_suggestion
+        sell_price = self.sell_suggestion
+        return (sell_price - buy_price - ge_tax(sell_price)) * self.remaining_quantity
+
+    @property
+    def buy_suggestion(self) -> int:
+        return self.current_buy_suggestion or self.target_buy
+
+    @property
+    def sell_suggestion(self) -> int:
+        return self.current_sell_suggestion or self.target_sell
+
+    @property
+    def suggestion_was_refreshed(self) -> bool:
+        return bool(
+            self.suggestion_reviewed_at
+            and self.suggestion_reviewed_at[:10] > self.created_at[:10]
+        )
 
     @property
     def realized_profit(self) -> int | None:
-        if self.status != "Completed" or self.actual_buy is None or self.actual_sell is None:
+        if self.actual_buy is None or not self.sale_fills:
             return None
-        return (self.actual_sell - self.actual_buy - ge_tax(self.actual_sell)) * self.quantity
+        return sum(
+            (fill.sell_price - self.actual_buy - ge_tax(fill.sell_price)) * fill.quantity
+            for fill in self.sale_fills
+        )
+
+    @property
+    def sold_quantity(self) -> int:
+        return sum(fill.quantity for fill in self.sale_fills)
+
+    @property
+    def remaining_quantity(self) -> int:
+        return max(0, self.quantity - self.sold_quantity)
+
+    @property
+    def average_sell_price(self) -> int | None:
+        if not self.sale_fills or self.sold_quantity == 0:
+            return None
+        proceeds = sum(fill.sell_price * fill.quantity for fill in self.sale_fills)
+        return round(proceeds / self.sold_quantity)
 
     @property
     def invested(self) -> int:
@@ -116,18 +168,66 @@ class SyncedTrade:
 
 class JournalRepository:
     def __init__(self, database_path: Path | None = None) -> None:
+        using_default_path = database_path is None
         if database_path is None:
             local_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
             database_path = local_data / "OSRSToolkit" / "data" / "toolkit.db"
         self.database_path = database_path
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        if using_default_path:
+            self._recover_or_migrate_default_database()
         self._initialize()
+        if using_default_path:
+            self._create_startup_backup()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _recover_or_migrate_default_database(self) -> None:
+        if self.database_path.exists():
+            return
+        roaming_data = Path(os.getenv("APPDATA", Path.home()))
+        local_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
+        backup_dir = roaming_data / "OSRSToolkit" / "backups"
+        candidates = [
+            *backup_dir.glob("toolkit-*.db"),
+            local_data / "OSRS Toolkit" / "data" / "toolkit.db",
+            roaming_data / "OSRSToolkit" / "data" / "toolkit.db",
+            roaming_data / "OSRS Toolkit" / "data" / "toolkit.db",
+            Path(sys.executable).resolve().parent / "data" / "toolkit.db",
+            Path.cwd() / "data" / "toolkit.db",
+        ]
+        existing = [path for path in candidates if path.is_file() and path.stat().st_size > 0]
+        if existing:
+            newest = max(existing, key=lambda path: path.stat().st_mtime)
+            shutil.copy2(newest, self.database_path)
+
+    def _create_startup_backup(self) -> None:
+        with self._connect() as source:
+            record_count = sum(
+                int(source.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                for table in ("trades", "tracked_trades", "synced_trades")
+            )
+            if record_count == 0:
+                return
+            roaming_data = Path(os.getenv("APPDATA", Path.home()))
+            backup_dir = roaming_data / "OSRSToolkit" / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            backup_path = backup_dir / f"toolkit-{timestamp}.db"
+            with closing(sqlite3.connect(backup_path)) as destination:
+                source.backup(destination)
+        backups = sorted(backup_dir.glob("toolkit-*.db"), key=lambda path: path.stat().st_mtime)
+        for old_backup in backups[:-10]:
+            old_backup.unlink(missing_ok=True)
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -190,6 +290,54 @@ class JournalRepository:
                 )
                 """
             )
+            tracked_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(tracked_trades)").fetchall()
+            }
+            column_migrations = {
+                "strategy": "TEXT NOT NULL DEFAULT 'Balanced (1â€“4h)'",
+                "current_buy_suggestion": "INTEGER",
+                "current_sell_suggestion": "INTEGER",
+                "suggestion_reviewed_at": "TEXT",
+            }
+            for column, definition in column_migrations.items():
+                if column not in tracked_columns:
+                    connection.execute(
+                        f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
+                    )
+            connection.execute(
+                """
+                UPDATE tracked_trades
+                SET current_buy_suggestion = COALESCE(current_buy_suggestion, target_buy),
+                    current_sell_suggestion = COALESCE(current_sell_suggestion, target_sell),
+                    suggestion_reviewed_at = COALESCE(suggestion_reviewed_at, created_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tracked_sale_fills (
+                    fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    position_id INTEGER NOT NULL
+                        REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
+                )
+                """
+            )
+            # Preserve completed positions created before variable-price fills existed.
+            connection.execute(
+                """
+                INSERT INTO tracked_sale_fills (position_id, quantity, sell_price)
+                SELECT position_id, quantity, actual_sell
+                FROM tracked_trades
+                WHERE status = 'Completed'
+                  AND actual_sell IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tracked_sale_fills
+                      WHERE tracked_sale_fills.position_id = tracked_trades.position_id
+                  )
+                """
+            )
 
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
@@ -236,21 +384,29 @@ class JournalRepository:
         quantity: int,
         target_buy: int,
         target_sell: int,
+        strategy: str = "Balanced (1â€“4h)",
     ) -> int:
         with self._connect() as connection:
+            created_at = datetime.now(UTC).isoformat(timespec="seconds")
             cursor = connection.execute(
                 """
                 INSERT INTO tracked_trades (
-                    created_at, item_id, item_name, quantity, target_buy, target_sell, status
-                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy')
+                    created_at, item_id, item_name, quantity, target_buy, target_sell, status,
+                    strategy, current_buy_suggestion, current_sell_suggestion,
+                    suggestion_reviewed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy', ?, ?, ?, ?)
                 """,
                 (
-                    datetime.now(UTC).isoformat(timespec="seconds"),
+                    created_at,
                     item_id,
                     item_name,
                     quantity,
                     target_buy,
                     target_sell,
+                    strategy,
+                    target_buy,
+                    target_sell,
+                    created_at,
                 ),
             )
             return int(cursor.lastrowid)
@@ -260,6 +416,20 @@ class JournalRepository:
             rows = connection.execute(
                 "SELECT * FROM tracked_trades ORDER BY created_at DESC, position_id DESC"
             ).fetchall()
+            fill_rows = connection.execute(
+                "SELECT * FROM tracked_sale_fills ORDER BY fill_id ASC"
+            ).fetchall()
+        fills_by_position: dict[int, list[SaleFill]] = {}
+        for row in fill_rows:
+            position_id = int(row["position_id"])
+            fills_by_position.setdefault(position_id, []).append(
+                SaleFill(
+                    fill_id=int(row["fill_id"]),
+                    position_id=position_id,
+                    quantity=int(row["quantity"]),
+                    sell_price=int(row["sell_price"]),
+                )
+            )
         return [
             TrackedTrade(
                 position_id=int(row["position_id"]),
@@ -272,6 +442,23 @@ class JournalRepository:
                 actual_buy=int(row["actual_buy"]) if row["actual_buy"] is not None else None,
                 actual_sell=int(row["actual_sell"]) if row["actual_sell"] is not None else None,
                 status=str(row["status"]),
+                sale_fills=tuple(fills_by_position.get(int(row["position_id"]), [])),
+                strategy=str(row["strategy"]),
+                current_buy_suggestion=(
+                    int(row["current_buy_suggestion"])
+                    if row["current_buy_suggestion"] is not None
+                    else None
+                ),
+                current_sell_suggestion=(
+                    int(row["current_sell_suggestion"])
+                    if row["current_sell_suggestion"] is not None
+                    else None
+                ),
+                suggestion_reviewed_at=(
+                    str(row["suggestion_reviewed_at"])
+                    if row["suggestion_reviewed_at"] is not None
+                    else None
+                ),
             )
             for row in rows
         ]
@@ -282,8 +469,33 @@ class JournalRepository:
         status: str,
         actual_buy: int | None,
         actual_sell: int | None,
+        sale_fills: list[tuple[int, int]] | None = None,
     ) -> None:
         with self._connect() as connection:
+            trade_row = connection.execute(
+                "SELECT quantity FROM tracked_trades WHERE position_id = ?", (position_id,)
+            ).fetchone()
+            if trade_row is None:
+                return
+            trade_quantity = int(trade_row["quantity"])
+            if sale_fills is None and actual_sell is not None and status == "Completed":
+                sale_fills = [(trade_quantity, actual_sell)]
+            if sale_fills is not None:
+                if any(quantity <= 0 or price < 0 for quantity, price in sale_fills):
+                    raise ValueError("Sale fill quantity and price must be positive")
+                sold_quantity = sum(quantity for quantity, _price in sale_fills)
+                if sold_quantity > trade_quantity:
+                    raise ValueError("Sale fills exceed the tracked quantity")
+                if status == "Completed" and sold_quantity != trade_quantity:
+                    raise ValueError("A completed trade must account for the full quantity")
+                actual_sell = (
+                    round(
+                        sum(quantity * price for quantity, price in sale_fills)
+                        / sold_quantity
+                    )
+                    if sold_quantity
+                    else None
+                )
             connection.execute(
                 """
                 UPDATE tracked_trades
@@ -292,11 +504,44 @@ class JournalRepository:
                 """,
                 (status, actual_buy, actual_sell, position_id),
             )
+            if sale_fills is not None:
+                connection.execute(
+                    "DELETE FROM tracked_sale_fills WHERE position_id = ?", (position_id,)
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO tracked_sale_fills (position_id, quantity, sell_price)
+                    VALUES (?, ?, ?)
+                    """,
+                    [
+                        (position_id, quantity, price)
+                        for quantity, price in sale_fills
+                    ],
+                )
 
     def delete_tracked(self, position_id: int) -> None:
         with self._connect() as connection:
             connection.execute(
                 "DELETE FROM tracked_trades WHERE position_id = ?", (position_id,)
+            )
+
+    def review_suggestion(
+        self,
+        position_id: int,
+        buy_price: int,
+        sell_price: int,
+        reviewed_at: str | None = None,
+    ) -> None:
+        reviewed_at = reviewed_at or datetime.now(UTC).isoformat(timespec="seconds")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE tracked_trades
+                SET current_buy_suggestion = ?, current_sell_suggestion = ?,
+                    suggestion_reviewed_at = ?
+                WHERE position_id = ?
+                """,
+                (buy_price, sell_price, reviewed_at, position_id),
             )
 
     def add_synced_trade(self, trade: SyncedTrade) -> bool:

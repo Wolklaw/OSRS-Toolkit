@@ -34,10 +34,11 @@ want a fresh market snapshot.
 ## Using the GE Flipper
 
 The recommendation panel allocates one cash stack across up to the selected number of GE slots.
-It shows total GP allocated and GP held back. Cash is held back when no additional quantity passes
-the current liquidity, buy-limit, and risk caps; the app does not force weak trades just to spend
-every coin. The **BUY** and **THEN SELL** targets are patient limit offers based on recent trades—not
-guaranteed instant prices.
+It evaluates the complete offer mix by total profit, confidence, usable capital, and available
+slots rather than blindly taking the first ranked rows. It shows total GP allocated and GP held
+back. Cash is held back when no additional quantity passes the current liquidity, buy-limit, and
+risk caps; the app does not force weak trades just to spend every coin. The **BUY** and **THEN
+SELL** targets are patient limit offers based on recent trades—not guaranteed instant prices.
 
 Targets cross-check the latest trade with five-minute and one-hour averages. A spread must also
 have meaningful completed-trade volume on both sides, preventing a single unusual trade from

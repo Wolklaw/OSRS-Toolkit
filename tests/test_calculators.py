@@ -1,4 +1,5 @@
 from osrs_toolkit.calculators import (
+    SKILL_GUIDES,
     SKILL_METHODS,
     alch_candidates,
     conservative_buy_price,
@@ -118,6 +119,19 @@ def test_skilling_catalogue_spans_ten_skills_and_uses_stable_item_ids() -> None:
         "Smithing",
         "Woodcutting",
     }
+    assert SKILL_GUIDES == {
+        "Cooking": "https://oldschool.runescape.wiki/w/Pay-to-play_Cooking_training",
+        "Crafting": "https://oldschool.runescape.wiki/w/Pay-to-play_Crafting_training",
+        "Fletching": "https://oldschool.runescape.wiki/w/Fletching_training",
+        "Smithing": "https://oldschool.runescape.wiki/w/Pay-to-play_Smithing_training",
+        "Herblore": "https://oldschool.runescape.wiki/w/Herblore_training",
+        "Magic": "https://oldschool.runescape.wiki/w/Pay-to-play_Magic_training",
+        "Mining": "https://oldschool.runescape.wiki/w/Pay-to-play_Mining_training",
+        "Woodcutting": "https://oldschool.runescape.wiki/w/Pay-to-play_Woodcutting_training",
+        "Fishing": "https://oldschool.runescape.wiki/w/Pay-to-play_Fishing_training",
+        "Hunter": "https://oldschool.runescape.wiki/w/Hunter_training",
+    }
+    assert set(SKILL_GUIDES) == {method.skill for method in SKILL_METHODS}
 
     mappings = {
         2: ItemMapping(2, "Steel cannonball", True, 11_000, 3),
@@ -133,6 +147,7 @@ def test_skilling_catalogue_spans_ten_skills_and_uses_stable_item_ids() -> None:
     cannonballs = [row for row in rows if row.name.startswith("Smith steel cannonballs")]
     assert len(cannonballs) == 2
     assert all(row.eligible is False for row in cannonballs)
+    assert all(row.guide_url == SKILL_GUIDES["Smithing"] for row in cannonballs)
 
 
 def test_skilling_recipe_supports_multiple_inputs_and_output_tax() -> None:

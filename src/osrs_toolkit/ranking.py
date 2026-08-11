@@ -68,6 +68,7 @@ def rank_flips(
     min_roi: float | None = None,
     max_age_seconds: int = 1_800,
     strategy: str = "Balanced (1–4h)",
+    slot_count: int = 8,
     now: int | None = None,
 ) -> list[FlipCandidate]:
     """Rank actionable flips without pretending that an observed margin is guaranteed."""
@@ -104,11 +105,17 @@ def rank_flips(
         confidence = round(100 * (0.38 * liquidity + 0.34 * freshness + 0.28 * stability))
         if confidence < int(settings["min_confidence"]) or stability < float(settings["min_stability"]):
             continue
-        position_budget = max(buy_price, int(cash_stack * float(settings["capital_fraction"])))
+        slot_fraction = 1 / max(1, slot_count)
+        capital_fraction = max(float(settings["capital_fraction"]), slot_fraction)
+        position_budget = max(buy_price, int(cash_stack * capital_fraction))
         affordable = min(cash_stack // buy_price, position_budget // buy_price)
         limit = item.buy_limit or affordable
         projected_volume = round(point.volume_1h * int(settings["hours"]))
-        liquid_quantity = max(1, round(point.volume_1h * float(settings["volume_fraction"])))
+        volume_fraction = min(
+            float(settings["hours"]),
+            float(settings["volume_fraction"]) * 8 / max(1, slot_count),
+        )
+        liquid_quantity = max(1, round(point.volume_1h * volume_fraction))
         quantity = min(affordable, limit, liquid_quantity)
         if quantity <= 0:
             continue
@@ -153,58 +160,78 @@ def plan_flip_portfolio(
     if cash_stack <= 0 or slot_count <= 0:
         return []
 
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.suggested_quantity > 0 and candidate.buy_price <= cash_stack
+    ]
     selected: list[FlipCandidate] = []
-    minimum_cost = 0
-    for candidate in candidates:
-        if len(selected) >= slot_count:
-            break
-        if candidate.suggested_quantity <= 0:
-            continue
-        if minimum_cost + candidate.buy_price > cash_stack:
-            continue
-        selected.append(candidate)
-        minimum_cost += candidate.buy_price
+    allocation: list[FlipCandidate] = []
+    current_utility = -1
+    current_capital = -1
 
-    if not selected:
-        return []
-
-    # Begin with one item in each selected GE slot, then water-fill the remaining cash.
-    quantities = [1 for _candidate in selected]
-    remaining = cash_stack - minimum_cost
-    active = {
-        index
-        for index, candidate in enumerate(selected)
-        if candidate.suggested_quantity > 1
-    }
-    while active and remaining > 0:
-        share = max(1, remaining // len(active))
-        progressed = False
-        for index in sorted(active):
-            candidate = selected[index]
-            room = candidate.suggested_quantity - quantities[index]
-            units = min(room, share // candidate.buy_price, remaining // candidate.buy_price)
-            if units <= 0:
+    # Forward-select the offer that contributes the most to the complete portfolio at
+    # each step. Ranking remains useful for tie-breaking, but a high score can no longer
+    # hide a lower-ranked offer with materially more total, confidence-adjusted profit.
+    for _slot in range(min(slot_count, len(eligible))):
+        selected_ids = {candidate.item_id for candidate in selected}
+        best_candidate: FlipCandidate | None = None
+        best_allocation: list[FlipCandidate] = []
+        best_metric: tuple[int, int, float] | None = None
+        for candidate in eligible:
+            if candidate.item_id in selected_ids:
                 continue
-            quantities[index] += units
-            remaining -= units * candidate.buy_price
-            progressed = True
-        active = {
-            index
-            for index in active
-            if quantities[index] < selected[index].suggested_quantity
-            and selected[index].buy_price <= remaining
-        }
-        if not progressed:
-            affordable = [
-                index for index in active if selected[index].buy_price <= remaining
-            ]
-            if not affordable:
-                break
-            # Ranking order is retained, so the best remaining opportunity receives the
-            # indivisible unit when an equal capital share is smaller than its item price.
-            index = min(affordable)
-            quantities[index] += 1
-            remaining -= selected[index].buy_price
+            trial_selected = [*selected, candidate]
+            if sum(item.buy_price for item in trial_selected) > cash_stack:
+                continue
+            trial_allocation = _allocate_selected(trial_selected, cash_stack)
+            utility = sum(
+                item.potential_profit * item.confidence for item in trial_allocation
+            )
+            capital = sum(item.capital_required for item in trial_allocation)
+            metric = (utility, capital, sum(item.score for item in trial_allocation))
+            if best_metric is None or metric > best_metric:
+                best_candidate = candidate
+                best_allocation = trial_allocation
+                best_metric = metric
+
+        if best_candidate is None or best_metric is None:
+            break
+        best_utility, best_capital, _score = best_metric
+        if best_utility < current_utility or (
+            best_utility == current_utility and best_capital < current_capital
+        ):
+            break
+        selected.append(best_candidate)
+        allocation = best_allocation
+        current_utility = best_utility
+        current_capital = best_capital
+
+    return allocation
+
+
+def _allocate_selected(
+    selected: list[FlipCandidate], cash_stack: int
+) -> list[FlipCandidate]:
+    """Size a chosen offer set for maximum confidence-adjusted profit."""
+    quantities = [1 for _candidate in selected]
+    remaining = cash_stack - sum(candidate.buy_price for candidate in selected)
+    priority = sorted(
+        range(len(selected)),
+        key=lambda index: (
+            selected[index].profit_each
+            * selected[index].confidence
+            / selected[index].buy_price,
+            selected[index].score,
+        ),
+        reverse=True,
+    )
+    for index in priority:
+        candidate = selected[index]
+        room = candidate.suggested_quantity - quantities[index]
+        units = min(room, remaining // candidate.buy_price)
+        quantities[index] += units
+        remaining -= units * candidate.buy_price
 
     return [
         replace(

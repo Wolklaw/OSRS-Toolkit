@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -92,6 +93,21 @@ class AccountWorker(QObject):
             self.finished.emit(fetch_player(self.character_name))
         except AccountLookupError as exc:
             self.failed.emit(str(exc))
+
+
+class SearchLineEdit(QLineEdit):
+    """A native-feeling search field with a clear action and Escape support."""
+
+    def __init__(self, placeholder: str) -> None:
+        super().__init__()
+        self.setPlaceholderText(placeholder)
+        self.setClearButtonEnabled(True)
+
+    def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.key() == Qt.Key.Key_Escape:
+            self.clear()
+            return
+        super().keyPressEvent(event)
 
 
 class UpdateCheckWorker(QObject):
@@ -175,21 +191,33 @@ class SettingsDialog(QDialog):
         about_text = QLabel(
             "<h2>About OSRS Toolkit</h2>"
             f"<p><b>Version {__version__}</b></p>"
-            "<p>OSRS Toolkit brings live Grand Exchange opportunities and useful profit "
-            "calculators together in one easy-to-use desktop app.</p>"
-            "<p>Use it to explore possible flips, find profitable High Alchemy items, compare "
-            "skilling methods, and plan your Managing Miscellania workers.</p>"
-            "<p><b>Prices</b><br>Recent Grand Exchange trades from the OSRS Wiki and RuneLite "
-            "real-time price service.</p>"
-            "<p><b>Character lookup</b><br>Public skill levels from the official Old School "
-            "RuneScape hiscores. The app never asks for your password, bank PIN, or "
-            "authenticator code.</p>"
-            "<p>Market recommendations are estimates and may not fill at the displayed prices.</p>"
-            "<p>OSRS Toolkit is an independent fan-made app and is not affiliated with or "
-            "endorsed by Jagex. Old School RuneScape and RuneScape are trademarks of Jagex Limited.</p>"
+            "<p>An independent, fan-made market companion with Grand Exchange research, "
+            "profit calculators, and a local trade journal.</p>"
+            "<p><b>Game interaction</b><br>This toolkit does not play Old School RuneScape, "
+            "generate game input, communicate with game worlds, alter network traffic, or "
+            "modify the game client. Optional RuneLite sync only imports local trade events.</p>"
+            "<p><b>Data and privacy</b><br>Prices come from the OSRS Wiki real-time price API. "
+            "Character lookup reads public hiscores. Never enter a Jagex password, bank PIN, "
+            "or authenticator code. Journal data stays on this computer in a version-independent "
+            "user-data folder with automatic recovery backups.</p>"
+            "<p><b>Unofficial fan project</b><br>OSRS Toolkit is not affiliated with, sponsored "
+            "by, or endorsed by Jagex. Jagex, RuneScape, and Old School RuneScape are trademarks "
+            "of Jagex Limited. All game-related intellectual property belongs to Jagex and its "
+            "licensors.</p>"
+            "<p><b>Created using intellectual property belonging to Jagex Limited under the "
+            "terms of Jagex's Fan Content Policy.</b></p>"
+            "<p><a href='https://legal.jagex.com/docs/policies/fan-content-policy'>Fan Content Policy</a>"
+            " &nbsp;â€¢&nbsp; <a href='https://legal.jagex.com/docs/rules/rules-of-old-school-runescape'>"
+            "Rules of Old School RuneScape</a> &nbsp;â€¢&nbsp; "
+            "<a href='https://legal.jagex.com/docs/terms/terms-and-conditions/current'>Terms</a></p>"
+            "<p>Market results are estimates, not guarantees, and may not fill at displayed prices.</p>"
         )
         about_text.setWordWrap(True)
-        about_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        about_text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        about_text.setOpenExternalLinks(True)
         about_layout.addWidget(about_text)
         self.update_status = QLabel("Check GitHub for a newer official release.", objectName="muted")
         self.update_status.setWordWrap(True)
@@ -475,39 +503,138 @@ class TradeEntryDialog(QDialog):
 
 class UpdateTrackedTradeDialog(QDialog):
     STATUSES: ClassVar[list[str]] = [
-        "Pending buy", "Bought", "Listed for sale", "Completed", "Cancelled"
+        "Pending buy", "Bought", "Listed for sale", "Partially sold", "Completed", "Cancelled"
     ]
 
     def __init__(self, trade: TrackedTrade, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Update {trade.item_name}")
-        self.setMinimumWidth(440)
+        self.setMinimumSize(560, 500)
+        self.trade = trade
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.status = QComboBox()
         self.status.addItems(self.STATUSES)
         self.status.setCurrentText(trade.status)
         self.actual_buy = TradeEntryDialog._number_field(0, 2_000_000_000, trade.actual_buy or trade.target_buy)
-        self.actual_sell = TradeEntryDialog._number_field(0, 2_000_000_000, trade.actual_sell or trade.target_sell)
         self.actual_buy.setSuffix(" gp")
-        self.actual_sell.setSuffix(" gp")
         form.addRow("Status", self.status)
         form.addRow("Actual buy price", self.actual_buy)
-        form.addRow("Actual sell price", self.actual_sell)
         layout.addLayout(form)
         preserved = QLabel(
             f"Original targets remain saved: buy {_gp(trade.target_buy)}, "
-            f"sell {_gp(trade.target_sell)}, quantity {trade.quantity:,}.",
+            f"sell {_gp(trade.target_sell)}, quantity {trade.quantity:,}."
+            f"\nStrategy: {trade.strategy}. Current suggestion: buy "
+            f"{_gp(trade.buy_suggestion)}, sell {_gp(trade.sell_suggestion)}"
+            + (
+                f" (reviewed {trade.suggestion_reviewed_at[:10]})."
+                if trade.suggestion_reviewed_at
+                else "."
+            ),
             objectName="muted",
         )
         preserved.setWordWrap(True)
         layout.addWidget(preserved)
+        layout.addWidget(QLabel("Sale fills", objectName="sectionHeader"))
+        self.fills_table = QTableWidget(0, 2)
+        self.fills_table.setHorizontalHeaderLabels(["Quantity", "Sell price"])
+        self.fills_table.horizontalHeader().setStretchLastSection(True)
+        self.fills_table.verticalHeader().setVisible(False)
+        self.fills_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.fills_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.fills_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for fill in trade.sale_fills:
+            self._append_fill(fill.quantity, fill.sell_price)
+        layout.addWidget(self.fills_table, 1)
+
+        fill_controls = QHBoxLayout()
+        self.fill_quantity = TradeEntryDialog._number_field(1, trade.quantity, trade.remaining_quantity or 1)
+        self.fill_price = TradeEntryDialog._number_field(1, 2_000_000_000, trade.target_sell)
+        self.fill_price.setSuffix(" gp")
+        add_fill = QPushButton("Add sale fill")
+        add_fill.clicked.connect(self._add_fill)
+        remove_fill = QPushButton("Remove selected", objectName="secondary")
+        remove_fill.clicked.connect(self._remove_fill)
+        fill_controls.addWidget(QLabel("Quantity"))
+        fill_controls.addWidget(self.fill_quantity)
+        fill_controls.addWidget(QLabel("Price"))
+        fill_controls.addWidget(self.fill_price)
+        fill_controls.addWidget(add_fill)
+        fill_controls.addWidget(remove_fill)
+        layout.addLayout(fill_controls)
+        self.fill_summary = QLabel(objectName="muted")
+        layout.addWidget(self.fill_summary)
+        self._update_fill_summary()
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save
         )
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._accept_if_valid)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _append_fill(self, quantity: int, price: int) -> None:
+        row = self.fills_table.rowCount()
+        self.fills_table.insertRow(row)
+        quantity_cell = QTableWidgetItem(f"{quantity:,}")
+        quantity_cell.setData(Qt.ItemDataRole.UserRole, quantity)
+        price_cell = QTableWidgetItem(_gp(price))
+        price_cell.setData(Qt.ItemDataRole.UserRole, price)
+        self.fills_table.setItem(row, 0, quantity_cell)
+        self.fills_table.setItem(row, 1, price_cell)
+
+    def sale_fills(self) -> list[tuple[int, int]]:
+        return [
+            (
+                int(self.fills_table.item(row, 0).data(Qt.ItemDataRole.UserRole)),
+                int(self.fills_table.item(row, 1).data(Qt.ItemDataRole.UserRole)),
+            )
+            for row in range(self.fills_table.rowCount())
+        ]
+
+    def _add_fill(self) -> None:
+        quantity = self.fill_quantity.value()
+        if sum(fill_quantity for fill_quantity, _price in self.sale_fills()) + quantity > self.trade.quantity:
+            QMessageBox.warning(
+                self,
+                "Too many items",
+                "Sale-fill quantities cannot exceed the tracked quantity.",
+            )
+            return
+        self._append_fill(quantity, self.fill_price.value())
+        self._update_fill_summary()
+
+    def _remove_fill(self) -> None:
+        row = self.fills_table.currentRow()
+        if row >= 0:
+            self.fills_table.removeRow(row)
+            self._update_fill_summary()
+
+    def _update_fill_summary(self) -> None:
+        fills = self.sale_fills()
+        sold = sum(quantity for quantity, _price in fills)
+        remaining = self.trade.quantity - sold
+        average = (
+            round(sum(quantity * price for quantity, price in fills) / sold)
+            if sold
+            else None
+        )
+        average_text = f" â€¢ weighted average {_gp(average)}" if average is not None else ""
+        self.fill_summary.setText(
+            f"Sold {sold:,} of {self.trade.quantity:,} â€¢ {remaining:,} remaining{average_text}"
+        )
+        self.fill_quantity.setMaximum(max(1, remaining))
+        self.fill_quantity.setValue(max(1, remaining))
+
+    def _accept_if_valid(self) -> None:
+        sold = sum(quantity for quantity, _price in self.sale_fills())
+        if self.status.currentText() == "Completed" and sold != self.trade.quantity:
+            QMessageBox.warning(
+                self,
+                "Unaccounted quantity",
+                "A completed trade needs sale fills for the full tracked quantity.",
+            )
+            return
+        self.accept()
 
 
 class SortableTableItem(QTableWidgetItem):
@@ -521,6 +648,46 @@ class SortableTableItem(QTableWidgetItem):
         if isinstance(other, SortableTableItem):
             return self.sort_value < other.sort_value
         return super().__lt__(other)
+
+
+class ResponsiveTableWidget(QTableWidget):
+    """Fill wide viewports while preserving readable widths in compact windows."""
+
+    def __init__(self, column_count: int) -> None:
+        super().__init__(0, column_count)
+        self._preferred_widths: list[int] = []
+        self._applying_widths = False
+
+    def set_preferred_widths(self, widths: list[int]) -> None:
+        self._preferred_widths = widths
+        self._apply_responsive_widths()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        super().resizeEvent(event)
+        self._apply_responsive_widths()
+
+    def _apply_responsive_widths(self) -> None:
+        if self._applying_widths or not self._preferred_widths:
+            return
+        self._applying_widths = True
+        try:
+            preferred_total = sum(self._preferred_widths)
+            available = max(0, self.viewport().width() - 2)
+            widths = list(self._preferred_widths)
+            if available > preferred_total:
+                extra = available - preferred_total
+                distributed = 0
+                for column, preferred in enumerate(self._preferred_widths):
+                    if column == len(widths) - 1:
+                        addition = extra - distributed
+                    else:
+                        addition = round(extra * preferred / preferred_total)
+                        distributed += addition
+                    widths[column] += addition
+            for column, width in enumerate(widths):
+                self.setColumnWidth(column, width)
+        finally:
+            self._applying_widths = False
 
 
 class MainWindow(QMainWindow):
@@ -559,6 +726,8 @@ class MainWindow(QMainWindow):
         self._sync_importer = RuneLiteSyncImporter()
         self._last_sync_message = ""
         self._profit_color = "#70d6a1"
+        self._loss_color = "#ef6b73"
+        self._market_buttons: list[QPushButton] = []
         self._build_ui()
         self._apply_theme(self._theme)
         self._sync_timer = QTimer(self)
@@ -567,6 +736,10 @@ class MainWindow(QMainWindow):
         self._sync_timer.start()
         QTimer.singleShot(100, self._import_runelite_events)
         QTimer.singleShot(250, self.load_market)
+        self._market_timer = QTimer(self)
+        self._market_timer.setInterval(5 * 60 * 1_000)
+        self._market_timer.timeout.connect(self.load_market)
+        self._market_timer.start()
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -636,7 +809,15 @@ class MainWindow(QMainWindow):
 
     def _page_heading(self, title: str, subtitle: str) -> QVBoxLayout:
         layout = QVBoxLayout()
-        layout.addWidget(QLabel(title, objectName="title"))
+        heading = QHBoxLayout()
+        heading.addWidget(QLabel(title, objectName="title"))
+        heading.addStretch()
+        refresh = QPushButton("Refresh market", objectName="refreshButton")
+        refresh.setToolTip("Download the latest market snapshot for every page")
+        refresh.clicked.connect(self.load_market)
+        self._market_buttons.append(refresh)
+        heading.addWidget(refresh)
+        layout.addLayout(heading)
         label = QLabel(subtitle, objectName="muted")
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -649,31 +830,28 @@ class MainWindow(QMainWindow):
             "Find possible margins using recent trades, volume, Grand Exchange tax, and risk checks. Double-click an item for details.",
         )
         controls = QHBoxLayout()
-        self.search = QLineEdit(placeholderText="Search items…")
+        self.search = SearchLineEdit("Search items…")
         self.search.textChanged.connect(self._render_flips)
         self.cash = QSpinBox()
         self.cash.setRange(10_000, 2_000_000_000)
         self.cash.setValue(10_000_000)
         self.cash.setSingleStep(1_000_000)
-        self.cash.setPrefix("Cash stack  ")
         self.cash.setGroupSeparatorShown(True)
         self.cash.valueChanged.connect(self._cash_changed)
         self.slots = QSpinBox()
         self.slots.setRange(1, 8)
         self.slots.setValue(int(QSettings().value("market/ge_slots", 8)))
-        self.slots.setPrefix("GE slots  ")
         self.slots.valueChanged.connect(self._slots_changed)
         self.strategy = QComboBox()
         self.strategy.addItems(list(STRATEGIES))
         self.strategy.setCurrentText("Balanced (1–4h)")
         self.strategy.currentTextChanged.connect(self._strategy_changed)
-        self.refresh = QPushButton("Update prices")
-        self.refresh.clicked.connect(self.load_market)
         controls.addWidget(self.search, 1)
+        controls.addWidget(QLabel("Cash stack"))
         controls.addWidget(self.cash)
+        controls.addWidget(QLabel("GE slots"))
         controls.addWidget(self.slots)
         controls.addWidget(self.strategy)
-        controls.addWidget(self.refresh)
         layout.addLayout(controls)
         self.flip_recommendation = QLabel("Waiting for market prices…", objectName="recommendation")
         self.flip_recommendation.setWordWrap(True)
@@ -688,7 +866,8 @@ class MainWindow(QMainWindow):
         self.track_top_button.clicked.connect(self._track_portfolio)
         layout.addWidget(self.track_top_button)
         self.flip_table = self._table(
-            ["Item", "Buy", "Sell", "Safe max", "Profit ea.", "ROI", "1h volume", "Limit", "Max potential", "Confidence"]
+            ["Item", "Buy", "Sell", "Safe max", "Profit ea.", "ROI", "1h volume", "Limit", "Max potential", "Confidence"],
+            minimum_widths={0: 220},
         )
         self.flip_table.cellDoubleClicked.connect(self._open_table_item)
         layout.addWidget(self.flip_table, 1)
@@ -707,7 +886,8 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.watchlist_empty)
         self.watchlist_table = self._table(
-            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Price age"]
+            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Price age"],
+            minimum_widths={0: 220},
         )
         self.watchlist_table.cellDoubleClicked.connect(self._open_table_item)
         layout.addWidget(self.watchlist_table, 1)
@@ -745,7 +925,11 @@ class MainWindow(QMainWindow):
         actions.addStretch()
         plans_layout.addLayout(actions)
         self.journal_table = self._table(
-            ["Date", "Status", "Item", "Qty", "Buy target", "Actual buy", "Sell target", "Actual sell", "P/L"]
+            ["Date", "Status", "Item", "Qty", "Buy suggestion", "Actual buy", "Sell suggestion", "Actual sell", "P/L"],
+            minimum_widths={0: 105, 1: 120, 2: 230, 8: 130},
+        )
+        self.journal_table.cellDoubleClicked.connect(
+            lambda _row, _column: self._update_selected_trade()
         )
         plans_layout.addWidget(self.journal_table, 1)
         self.journal_tabs.addTab(plans_tab, "Plans && completed")
@@ -770,7 +954,8 @@ class MainWindow(QMainWindow):
         sync_controls.addWidget(remove_button)
         activity_layout.addLayout(sync_controls)
         self.synced_trade_table = self._table(
-            ["Time", "Source", "Character", "Trade", "Given", "Received", "Est. difference"]
+            ["Time", "Source", "Character", "Trade", "Given", "Received", "Est. difference"],
+            minimum_widths={0: 145, 2: 140, 3: 220, 4: 180, 5: 180, 6: 130},
         )
         self.synced_trade_table.cellDoubleClicked.connect(
             lambda _row, _column: self._open_selected_synced_trade()
@@ -794,7 +979,6 @@ class MainWindow(QMainWindow):
         self.alch_budget.setRange(10_000, 2_000_000_000)
         self.alch_budget.setValue(int(QSettings().value("alch/budget", 2_000_000)))
         self.alch_budget.setSingleStep(100_000)
-        self.alch_budget.setPrefix("Budget  ")
         self.alch_budget.setGroupSeparatorShown(True)
         self.alch_budget.valueChanged.connect(self._alch_settings_changed)
         self.alch_safety = QComboBox()
@@ -804,6 +988,7 @@ class MainWindow(QMainWindow):
             saved_policy if saved_policy in ALCH_POLICIES else "Safer"
         )
         self.alch_safety.currentTextChanged.connect(self._alch_settings_changed)
+        controls.addWidget(QLabel("Budget"))
         controls.addWidget(self.alch_budget)
         controls.addWidget(QLabel("Safety"))
         controls.addWidget(self.alch_safety)
@@ -827,8 +1012,8 @@ class MainWindow(QMainWindow):
                 "1h volume",
                 "Age",
                 "Limit",
-                "Magic 55",
-            ]
+            ],
+            minimum_widths={0: 230, 1: 105, 2: 95, 3: 95, 5: 105, 7: 110, 8: 115, 10: 100},
         )
         self.alch_table.cellDoubleClicked.connect(self._open_table_item)
         layout.addWidget(self.alch_table, 1)
@@ -842,7 +1027,7 @@ class MainWindow(QMainWindow):
             "Compare processing and gathering activities across ten skills using current prices.",
         )
         controls = QHBoxLayout()
-        self.skill_search = QLineEdit(placeholderText="Search methods…")
+        self.skill_search = SearchLineEdit("Search methods…")
         self.skill_search.textChanged.connect(self._render_skilling)
         self.skill_filter = QComboBox()
         self.skill_filter.addItem("All skills")
@@ -875,8 +1060,10 @@ class MainWindow(QMainWindow):
                 "Price age",
                 "Level met",
                 "Assumption",
-            ]
+            ],
+            minimum_widths={0: 250, 10: 320},
         )
+        self.skill_table.cellClicked.connect(self._open_skill_guide)
         layout.addWidget(self.skill_table, 1)
         page.setLayout(layout)
         return page
@@ -890,19 +1077,36 @@ class MainWindow(QMainWindow):
         self.kingdom_recommendation = QLabel("Waiting for market prices…", objectName="recommendation")
         self.kingdom_recommendation.setWordWrap(True)
         layout.addWidget(self.kingdom_recommendation)
-        self.kingdom_table = self._table(["Resource", "Value/worker/day", "Cost/worker/day", "Profit/worker/day"])
+        self.kingdom_table = self._table(
+            ["Resource", "Value/worker/day", "Cost/worker/day", "Profit/worker/day"],
+            minimum_widths={0: 220},
+        )
         layout.addWidget(self.kingdom_table, 1)
         page.setLayout(layout)
         return page
 
-    def _table(self, headers: list[str]) -> QTableWidget:
-        table = QTableWidget(0, len(headers))
+    def _table(
+        self,
+        headers: list[str],
+        *,
+        minimum_widths: dict[int, int] | None = None,
+    ) -> QTableWidget:
+        table = ResponsiveTableWidget(len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.setAlternatingRowColors(True)
         table.setSortingEnabled(True)
         table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setStretchLastSection(True)
+        header = table.horizontalHeader()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(64)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        table.setProperty("minimumColumnWidths", minimum_widths or {})
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setTextElideMode(Qt.TextElideMode.ElideRight)
+        table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        table.verticalHeader().setDefaultSectionSize(38)
         return table
 
     def _change_page(self, row: int) -> None:
@@ -983,8 +1187,10 @@ class MainWindow(QMainWindow):
     def load_market(self) -> None:
         if self._thread is not None:
             return
-        self.refresh.setEnabled(False)
-        self.market_status.setText("Loading live market…")
+        for button in self._market_buttons:
+            button.setEnabled(False)
+            button.setText("Refreshing…")
+        self.market_status.setText("Refreshing…")
         self._thread = QThread(self)
         self._worker = MarketWorker()
         self._worker.moveToThread(self._thread)
@@ -1005,15 +1211,19 @@ class MainWindow(QMainWindow):
         used_cache: bool,
     ) -> None:
         self._mappings, self._points = mappings, points
+        self._refresh_overnight_suggestions()
         # The cash field may have changed while the download was in progress.
         self._flips = rank_flips(
             mappings,
             points,
             cash_stack=self.cash.value(),
             strategy=self.strategy.currentText(),
+            slot_count=self.slots.value(),
         )
         self._plan_portfolio()
-        self.refresh.setEnabled(True)
+        for button in self._market_buttons:
+            button.setEnabled(True)
+            button.setText("Refresh market")
         source = "Cached prices" if used_cache else "Prices updated"
         self.market_status.setText(f"{source} • {datetime.now().astimezone():%H:%M:%S}")
         self._render_flips()
@@ -1032,12 +1242,21 @@ class MainWindow(QMainWindow):
             self._points,
             cash_stack=cash_stack,
             strategy=self.strategy.currentText(),
+            slot_count=self.slots.value(),
         )
         self._plan_portfolio()
         self._render_flips()
 
     def _slots_changed(self, slot_count: int) -> None:
         QSettings().setValue("market/ge_slots", slot_count)
+        if self._points:
+            self._flips = rank_flips(
+                self._mappings,
+                self._points,
+                cash_stack=self.cash.value(),
+                strategy=self.strategy.currentText(),
+                slot_count=slot_count,
+            )
         self._plan_portfolio()
         self._render_flips()
 
@@ -1054,6 +1273,7 @@ class MainWindow(QMainWindow):
             self._points,
             cash_stack=self.cash.value(),
             strategy=strategy,
+            slot_count=self.slots.value(),
         )
         self._plan_portfolio()
         self._render_flips()
@@ -1066,7 +1286,9 @@ class MainWindow(QMainWindow):
         )
 
     def _market_failed(self, message: str) -> None:
-        self.refresh.setEnabled(True)
+        for button in self._market_buttons:
+            button.setEnabled(True)
+            button.setText("Refresh market")
         self.market_status.setText(f"Market unavailable • {message}")
 
     def _worker_stopped(self) -> None:
@@ -1143,7 +1365,6 @@ class MainWindow(QMainWindow):
                 f"{row.volume:,}",
                 _short_duration(row.age_seconds),
                 f"{row.buy_limit:,}",
-                _availability(row.eligible),
             ]
             for row in rows
         ]
@@ -1168,6 +1389,39 @@ class MainWindow(QMainWindow):
             f"price age, and caps quantity at {selected.volume_share:.0%} of hourly volume, "
             "the GE buy limit, 1,200 casts, and your budget. Test a small buy first."
         )
+
+    def _refresh_overnight_suggestions(self) -> None:
+        """Review open overnight targets once per local calendar day."""
+        now = datetime.now().astimezone()
+        point_by_id = {point.item_id: point for point in self._points}
+        for trade in self._journal.list_tracked():
+            if (
+                not trade.strategy.startswith("Overnight")
+                or trade.status in {"Completed", "Cancelled"}
+                or trade.item_id is None
+            ):
+                continue
+            try:
+                last_review = datetime.fromisoformat(
+                    trade.suggestion_reviewed_at or trade.created_at
+                ).astimezone()
+            except ValueError:
+                last_review = now.replace(year=1970)
+            if last_review.date() >= now.date():
+                continue
+            point = point_by_id.get(trade.item_id)
+            if point is None:
+                continue
+            age = int(now.timestamp()) - min(point.high_time, point.low_time)
+            if age < 0 or age > 1_800:
+                continue
+            buy_price, sell_price = offer_targets(point)
+            self._journal.review_suggestion(
+                trade.position_id,
+                buy_price,
+                sell_price,
+                now.isoformat(timespec="seconds"),
+            )
 
     def _render_watchlist(self) -> None:
         point_by_id = {point.item_id: point for point in self._points}
@@ -1207,11 +1461,21 @@ class MainWindow(QMainWindow):
                 trade.status,
                 trade.item_name,
                 f"{trade.quantity:,}",
-                _gp(trade.target_buy),
+                f"{_gp(trade.buy_suggestion)} ↻"
+                if trade.suggestion_was_refreshed
+                else _gp(trade.buy_suggestion),
                 _gp(trade.actual_buy) if trade.actual_buy is not None else "—",
-                _gp(trade.target_sell),
-                _gp(trade.actual_sell) if trade.actual_sell is not None else "—",
-                _gp(trade.realized_profit)
+                f"{_gp(trade.sell_suggestion)} ↻"
+                if trade.suggestion_was_refreshed
+                else _gp(trade.sell_suggestion),
+                f"{_gp(trade.average_sell_price)} avg"
+                if trade.average_sell_price is not None
+                else "—",
+                (
+                    f"{_gp(trade.realized_profit)} • {trade.remaining_quantity:,} left"
+                    if trade.realized_profit is not None and trade.remaining_quantity
+                    else _gp(trade.realized_profit)
+                )
                 if trade.realized_profit is not None
                 else f"Est. {_gp(trade.estimated_profit)}",
             ]
@@ -1237,17 +1501,23 @@ class MainWindow(QMainWindow):
             green_columns={8},
             row_ids=[trade.position_id for trade in tracked] + [trade.trade_id for trade in trades],
         )
-        completed_positions = [trade for trade in tracked if trade.realized_profit is not None]
+        realized_positions = [trade for trade in tracked if trade.realized_profit is not None]
         profits = [trade.profit for trade in trades] + [
-            trade.realized_profit or 0 for trade in completed_positions
+            trade.realized_profit or 0 for trade in realized_positions
         ]
         total_profit = sum(profits)
         total_invested = sum(trade.invested for trade in trades) + sum(
-            trade.invested for trade in completed_positions
+            trade.invested for trade in realized_positions
         )
         wins = sum(profit > 0 for profit in profits)
         win_rate = wins / len(profits) * 100 if profits else 0
         self.journal_profit.setText(f"Realized profit\n{_gp(total_profit)}")
+        self.journal_profit.setProperty(
+            "moneyState",
+            "positive" if total_profit > 0 else "negative" if total_profit < 0 else "neutral",
+        )
+        self.journal_profit.style().unpolish(self.journal_profit)
+        self.journal_profit.style().polish(self.journal_profit)
         self.journal_win_rate.setText(
             f"Win rate\n{win_rate:.1f}%" if profits else "Win rate\n—"
         )
@@ -1391,6 +1661,7 @@ class MainWindow(QMainWindow):
                 candidate.suggested_quantity,
                 candidate.buy_price,
                 candidate.sell_price,
+                self.strategy.currentText(),
             )
         self._render_journal()
         self.nav.setCurrentRow(2)
@@ -1402,6 +1673,7 @@ class MainWindow(QMainWindow):
             candidate.suggested_quantity,
             candidate.buy_price,
             candidate.sell_price,
+            self.strategy.currentText(),
         )
         self._render_journal()
         self.nav.setCurrentRow(2)
@@ -1451,9 +1723,19 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         new_status = dialog.status.currentText()
-        actual_buy = dialog.actual_buy.value() if new_status in {"Bought", "Listed for sale", "Completed"} else None
-        actual_sell = dialog.actual_sell.value() if new_status == "Completed" else None
-        self._journal.update_tracked(position_id, new_status, actual_buy, actual_sell)
+        actual_buy = (
+            dialog.actual_buy.value()
+            if new_status
+            in {"Bought", "Listed for sale", "Partially sold", "Completed", "Cancelled"}
+            else None
+        )
+        self._journal.update_tracked(
+            position_id,
+            new_status,
+            actual_buy,
+            None,
+            dialog.sale_fills(),
+        )
         self._render_journal()
 
     def _render_skilling(self) -> None:
@@ -1481,11 +1763,25 @@ class MainWindow(QMainWindow):
                 _signed_gp(row.profit_hour),
                 _short_duration(row.price_age_seconds),
                 _availability(row.eligible),
-                row.notes or "—",
+                f"{row.notes or 'Rate estimate'} · OSRS Wiki guide ↗",
             ]
             for row in rows
         ]
         self._fill_table(self.skill_table, values, green_columns={5, 7})
+        for row_index, row in enumerate(rows):
+            guide_cell = self.skill_table.item(row_index, 10)
+            guide_cell.setData(Qt.ItemDataRole.UserRole, row.guide_url)
+            guide_cell.setToolTip(
+                f"{row.notes or 'Actions per hour are practical estimates.'}\n"
+                "Click to open the relevant OSRS Wiki training guide."
+            )
+            guide_cell.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            guide_cell.setForeground(QColor("#65a9ff"))
+            link_font = guide_cell.font()
+            link_font.setUnderline(True)
+            guide_cell.setFont(link_font)
         self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
         profile_text = (
             f" Requirements checked against {self._profile.name}'s public hiscores."
@@ -1498,6 +1794,15 @@ class MainWindow(QMainWindow):
             "buyer-paid prices; outputs use conservative seller-received prices after GE tax. "
             "Rates are practical estimates, not guarantees—check each assumption before buying supplies."
         )
+
+    def _open_skill_guide(self, row: int, column: int) -> None:
+        if column != 10:
+            return
+        guide_url = self.skill_table.item(row, column).data(Qt.ItemDataRole.UserRole)
+        if isinstance(guide_url, str) and guide_url.startswith(
+            "https://oldschool.runescape.wiki/"
+        ):
+            QDesktopServices.openUrl(QUrl(guide_url))
 
     def _render_kingdom(self) -> None:
         rows = kingdom_results(self._mappings, self._points)
@@ -1527,9 +1832,23 @@ class MainWindow(QMainWindow):
                 if column > 0:
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 if column in green_columns:
-                    cell.setForeground(QColor(self._profit_color))
+                    numeric = _leading_number(value)
+                    if numeric > 0:
+                        cell.setForeground(QColor(self._profit_color))
+                    elif numeric < 0:
+                        cell.setForeground(QColor(self._loss_color))
                 table.setItem(row_index, column, cell)
-        table.resizeColumnsToContents()
+        if values and not table.property("columnsInitialized"):
+            table.resizeColumnsToContents()
+            minimum_widths = table.property("minimumColumnWidths") or {}
+            preferred_widths: list[int] = []
+            for column, width in minimum_widths.items():
+                table.setColumnWidth(column, max(table.columnWidth(column), width))
+            for column in range(table.columnCount()):
+                preferred_widths.append(table.columnWidth(column) + 14)
+            if isinstance(table, ResponsiveTableWidget):
+                table.set_preferred_widths(preferred_widths)
+            table.setProperty("columnsInitialized", True)
         table.setSortingEnabled(True)
 
     def _open_table_item(self, row: int, _column: int) -> None:
@@ -1565,6 +1884,10 @@ class MainWindow(QMainWindow):
             theme, palettes["Dark"]
         )
         self._profit_color = profit
+        self._loss_color = "#d94752" if theme == "Light" else "#ef6b73"
+        icon_variant = "-dark" if theme == "Light" else ""
+        spin_up_icon = _resource_path(f"assets/spin-up{icon_variant}.svg").as_posix()
+        spin_down_icon = _resource_path(f"assets/spin-down{icon_variant}.svg").as_posix()
         self.setStyleSheet(f"""
             QMainWindow, QWidget {{ background: {background}; color: {text}; font-size: 13px; }}
             #sidebar {{ background: {sidebar}; border-right: 1px solid {border}; }}
@@ -1575,16 +1898,38 @@ class MainWindow(QMainWindow):
             #muted, #status {{ color: {muted}; }}
             #recommendation {{ background: {field}; color: {text}; border: 1px solid {border}; border-radius: 8px; padding: 14px; }}
             #summaryCard {{ background: {field}; color: {text}; border: 1px solid {border}; border-radius: 8px; padding: 14px; font-size: 14px; }}
+            #summaryCard[moneyState="positive"] {{ color: {profit}; }}
+            #summaryCard[moneyState="negative"] {{ color: {self._loss_color}; }}
             #nav {{ background: transparent; border: 0; outline: 0; padding-top: 16px; }}
             #nav::item {{ padding: 11px 12px; border-radius: 7px; margin: 1px 2px; }}
             #nav::item:selected {{ background: {header}; color: #d5ad52; }}
-            QLineEdit, QSpinBox, QComboBox {{ background: {field}; border: 1px solid {border}; border-radius: 7px; padding: 9px; }}
+            QLineEdit, QSpinBox, QComboBox {{ background: {field}; border: 1px solid {border}; border-radius: 7px; padding: 7px 10px; min-height: 22px; selection-background-color: #765f2d; }}
+            QSpinBox {{ padding-right: 62px; }}
+            QSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 29px; border-left: 1px solid {border}; border-bottom: 1px solid {border}; border-top-right-radius: 7px; }}
+            QSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 29px; border-left: 1px solid {border}; border-top: 1px solid {border}; border-bottom-right-radius: 7px; }}
+            QSpinBox::up-arrow {{ image: url("{spin_up_icon}"); width: 12px; height: 8px; }}
+            QSpinBox::down-arrow {{ image: url("{spin_down_icon}"); width: 12px; height: 8px; }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {header}; }}
+            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{ border: 1px solid #d5ad52; }}
+            QComboBox::drop-down {{ border: 0; width: 30px; }}
+            QCheckBox {{ spacing: 8px; min-height: 36px; }}
+            QCheckBox::indicator {{ width: 18px; height: 18px; }}
             QPushButton {{ background: #d5ad52; color: #11151b; border: 0; border-radius: 7px; padding: 10px 18px; font-weight: 650; }}
-            QPushButton#secondary, QPushButton#settingsButton {{ background: {header}; color: {text}; border: 1px solid {border}; }}
+            QPushButton:hover {{ background: #e2bd64; }}
+            QPushButton#secondary, QPushButton#settingsButton, QPushButton#refreshButton {{ background: {header}; color: {text}; border: 1px solid {border}; }}
+            QPushButton#secondary:hover, QPushButton#settingsButton:hover, QPushButton#refreshButton:hover {{ border-color: #d5ad52; }}
             QPushButton:disabled {{ background: #645735; color: #aaa; }}
             QTableWidget {{ background: {background}; alternate-background-color: {field}; border: 1px solid {border}; border-radius: 8px; gridline-color: {border}; }}
             QHeaderView::section {{ background: {header}; color: {text}; border: 0; border-bottom: 1px solid {border}; padding: 10px; }}
             QTableWidget::item {{ padding: 7px; }}
+            QTableWidget::item:hover {{ background: {header}; }}
+            QTableWidget::item:selected {{ background: #403a2c; color: {text}; }}
+            QScrollBar:vertical {{ background: {background}; width: 12px; margin: 0; border-radius: 6px; }}
+            QScrollBar:horizontal {{ background: {background}; height: 12px; margin: 0; border-radius: 6px; }}
+            QScrollBar::handle {{ background: {border}; border-radius: 6px; min-height: 30px; min-width: 30px; }}
+            QScrollBar::handle:hover {{ background: {muted}; }}
+            QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; border: 0; }}
+            QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
         """)
         self._render_flips()
         self._render_alch()
@@ -1601,6 +1946,16 @@ def _gp(value: int) -> str:
 def _signed_gp(value: int) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:,} gp"
+
+
+def _leading_number(value: str) -> float:
+    """Extract a formatted result's leading number for sign-aware coloring."""
+    token = value.strip().removeprefix("Est. ").split(" ", 1)[0].replace(",", "")
+    token = token.removesuffix("%")
+    try:
+        return float(token)
+    except ValueError:
+        return 0.0
 
 
 def _availability(value: bool | None) -> str:
