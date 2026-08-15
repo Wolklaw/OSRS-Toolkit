@@ -49,6 +49,14 @@ class SaleFill:
 
 
 @dataclass(frozen=True, slots=True)
+class BuyFill:
+    fill_id: int
+    position_id: int
+    quantity: int
+    buy_price: int
+
+
+@dataclass(frozen=True, slots=True)
 class TrackedTrade:
     position_id: int
     created_at: str
@@ -61,10 +69,12 @@ class TrackedTrade:
     actual_sell: int | None
     status: str
     sale_fills: tuple[SaleFill, ...] = ()
+    buy_fills: tuple[BuyFill, ...] = ()
     strategy: str = "Balanced (1–4h)"
     current_buy_suggestion: int | None = None
     current_sell_suggestion: int | None = None
     suggestion_reviewed_at: str | None = None
+    completed_at: str | None = None
 
     @property
     def estimated_profit(self) -> int:
@@ -110,6 +120,17 @@ class TrackedTrade:
             return None
         proceeds = sum(fill.sell_price * fill.quantity for fill in self.sale_fills)
         return round(proceeds / self.sold_quantity)
+
+    @property
+    def bought_quantity(self) -> int:
+        return sum(fill.quantity for fill in self.buy_fills)
+
+    @property
+    def average_buy_price(self) -> int | None:
+        if not self.buy_fills or self.bought_quantity == 0:
+            return None
+        cost = sum(fill.buy_price * fill.quantity for fill in self.buy_fills)
+        return round(cost / self.bought_quantity)
 
     @property
     def invested(self) -> int:
@@ -167,6 +188,8 @@ class SyncedTrade:
 
 
 class JournalRepository:
+    _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
+
     def __init__(self, database_path: Path | None = None) -> None:
         using_default_path = database_path is None
         if database_path is None:
@@ -275,6 +298,10 @@ class JournalRepository:
                 "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
             )
             connection.execute(
+                "CREATE INDEX IF NOT EXISTS synced_trade_items_event "
+                "ON synced_trade_items(event_id)"
+            )
+            connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tracked_trades (
                     position_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -299,6 +326,7 @@ class JournalRepository:
                 "current_buy_suggestion": "INTEGER",
                 "current_sell_suggestion": "INTEGER",
                 "suggestion_reviewed_at": "TEXT",
+                "completed_at": "TEXT",
             }
             for column, definition in column_migrations.items():
                 if column not in tracked_columns:
@@ -319,6 +347,15 @@ class JournalRepository:
                 SET current_buy_suggestion = COALESCE(current_buy_suggestion, target_buy),
                     current_sell_suggestion = COALESCE(current_sell_suggestion, target_sell),
                     suggestion_reviewed_at = COALESCE(suggestion_reviewed_at, created_at)
+                """
+            )
+            # Positions saved before completion timestamps existed get a best-effort
+            # backfill so period filters do not silently drop old history.
+            connection.execute(
+                """
+                UPDATE tracked_trades
+                SET completed_at = created_at
+                WHERE completed_at IS NULL AND status IN ('Completed', 'Cancelled')
                 """
             )
             connection.execute(
@@ -343,6 +380,31 @@ class JournalRepository:
                   AND NOT EXISTS (
                       SELECT 1 FROM tracked_sale_fills
                       WHERE tracked_sale_fills.position_id = tracked_trades.position_id
+                  )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tracked_buy_fills (
+                    fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    position_id INTEGER NOT NULL
+                        REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    buy_price INTEGER NOT NULL CHECK (buy_price >= 0)
+                )
+                """
+            )
+            # Preserve positions recorded before variable-price buy fills existed: their
+            # single actual_buy price becomes one fill covering the whole quantity.
+            connection.execute(
+                """
+                INSERT INTO tracked_buy_fills (position_id, quantity, buy_price)
+                SELECT position_id, quantity, actual_buy
+                FROM tracked_trades
+                WHERE actual_buy IS NOT NULL
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tracked_buy_fills
+                      WHERE tracked_buy_fills.position_id = tracked_trades.position_id
                   )
                 """
             )
@@ -427,6 +489,9 @@ class JournalRepository:
             fill_rows = connection.execute(
                 "SELECT * FROM tracked_sale_fills ORDER BY fill_id ASC"
             ).fetchall()
+            buy_fill_rows = connection.execute(
+                "SELECT * FROM tracked_buy_fills ORDER BY fill_id ASC"
+            ).fetchall()
         fills_by_position: dict[int, list[SaleFill]] = {}
         for row in fill_rows:
             position_id = int(row["position_id"])
@@ -436,6 +501,17 @@ class JournalRepository:
                     position_id=position_id,
                     quantity=int(row["quantity"]),
                     sell_price=int(row["sell_price"]),
+                )
+            )
+        buy_fills_by_position: dict[int, list[BuyFill]] = {}
+        for row in buy_fill_rows:
+            position_id = int(row["position_id"])
+            buy_fills_by_position.setdefault(position_id, []).append(
+                BuyFill(
+                    fill_id=int(row["fill_id"]),
+                    position_id=position_id,
+                    quantity=int(row["quantity"]),
+                    buy_price=int(row["buy_price"]),
                 )
             )
         return [
@@ -451,6 +527,7 @@ class JournalRepository:
                 actual_sell=int(row["actual_sell"]) if row["actual_sell"] is not None else None,
                 status=str(row["status"]),
                 sale_fills=tuple(fills_by_position.get(int(row["position_id"]), [])),
+                buy_fills=tuple(buy_fills_by_position.get(int(row["position_id"]), [])),
                 strategy=str(row["strategy"]),
                 current_buy_suggestion=(
                     int(row["current_buy_suggestion"])
@@ -467,6 +544,9 @@ class JournalRepository:
                     if row["suggestion_reviewed_at"] is not None
                     else None
                 ),
+                completed_at=(
+                    str(row["completed_at"]) if row["completed_at"] is not None else None
+                ),
             )
             for row in rows
         ]
@@ -478,6 +558,8 @@ class JournalRepository:
         actual_buy: int | None,
         actual_sell: int | None,
         sale_fills: list[tuple[int, int]] | None = None,
+        buy_fills: list[tuple[int, int]] | None = None,
+        quantity: int | None = None,
     ) -> None:
         with self._connect() as connection:
             trade_row = connection.execute(
@@ -485,32 +567,58 @@ class JournalRepository:
             ).fetchone()
             if trade_row is None:
                 return
-            trade_quantity = int(trade_row["quantity"])
+            if quantity is not None and quantity <= 0:
+                raise ValueError("Quantity must be positive")
+            effective_quantity = quantity if quantity is not None else int(trade_row["quantity"])
+
+            if buy_fills is not None:
+                if any(fill_quantity <= 0 or price < 0 for fill_quantity, price in buy_fills):
+                    raise ValueError("Buy fill quantity and price must be positive")
+                bought_quantity = sum(fill_quantity for fill_quantity, _price in buy_fills)
+                if bought_quantity > effective_quantity:
+                    raise ValueError("Buy fills exceed the tracked quantity")
+                if status == "Completed" and bought_quantity != effective_quantity:
+                    raise ValueError("A completed trade must account for the full quantity of buy fills")
+                actual_buy = (
+                    round(
+                        sum(fill_quantity * price for fill_quantity, price in buy_fills)
+                        / bought_quantity
+                    )
+                    if bought_quantity
+                    else None
+                )
+
             if sale_fills is None and actual_sell is not None and status == "Completed":
-                sale_fills = [(trade_quantity, actual_sell)]
+                sale_fills = [(effective_quantity, actual_sell)]
             if sale_fills is not None:
-                if any(quantity <= 0 or price < 0 for quantity, price in sale_fills):
+                if any(fill_quantity <= 0 or price < 0 for fill_quantity, price in sale_fills):
                     raise ValueError("Sale fill quantity and price must be positive")
-                sold_quantity = sum(quantity for quantity, _price in sale_fills)
-                if sold_quantity > trade_quantity:
+                sold_quantity = sum(fill_quantity for fill_quantity, _price in sale_fills)
+                if sold_quantity > effective_quantity:
                     raise ValueError("Sale fills exceed the tracked quantity")
-                if status == "Completed" and sold_quantity != trade_quantity:
+                if status == "Completed" and sold_quantity != effective_quantity:
                     raise ValueError("A completed trade must account for the full quantity")
                 actual_sell = (
                     round(
-                        sum(quantity * price for quantity, price in sale_fills)
+                        sum(fill_quantity * price for fill_quantity, price in sale_fills)
                         / sold_quantity
                     )
                     if sold_quantity
                     else None
                 )
+
+            completed_at = (
+                datetime.now(UTC).isoformat(timespec="seconds")
+                if status in self._TERMINAL_STATUSES
+                else None
+            )
             connection.execute(
                 """
                 UPDATE tracked_trades
-                SET status = ?, actual_buy = ?, actual_sell = ?
+                SET status = ?, actual_buy = ?, actual_sell = ?, quantity = ?, completed_at = ?
                 WHERE position_id = ?
                 """,
-                (status, actual_buy, actual_sell, position_id),
+                (status, actual_buy, actual_sell, effective_quantity, completed_at, position_id),
             )
             if sale_fills is not None:
                 connection.execute(
@@ -522,8 +630,22 @@ class JournalRepository:
                     VALUES (?, ?, ?)
                     """,
                     [
-                        (position_id, quantity, price)
-                        for quantity, price in sale_fills
+                        (position_id, fill_quantity, price)
+                        for fill_quantity, price in sale_fills
+                    ],
+                )
+            if buy_fills is not None:
+                connection.execute(
+                    "DELETE FROM tracked_buy_fills WHERE position_id = ?", (position_id,)
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO tracked_buy_fills (position_id, quantity, buy_price)
+                    VALUES (?, ?, ?)
+                    """,
+                    [
+                        (position_id, fill_quantity, price)
+                        for fill_quantity, price in buy_fills
                     ],
                 )
 
@@ -553,47 +675,58 @@ class JournalRepository:
             )
 
     def add_synced_trade(self, trade: SyncedTrade) -> bool:
+        return self.add_synced_trades([trade])[0]
+
+    def add_synced_trades(self, trades: list[SyncedTrade]) -> list[bool]:
+        """Insert a batch of trades over one connection instead of one per trade."""
+        if not trades:
+            return []
+        imported_at = datetime.now(UTC).isoformat(timespec="seconds")
+        results: list[bool] = []
         with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT OR IGNORE INTO synced_trades (
-                    event_id, occurred_at, imported_at, event_type, account_hash,
-                    account_name, counterparty, direction, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    trade.event_id,
-                    trade.occurred_at,
-                    datetime.now(UTC).isoformat(timespec="seconds"),
-                    trade.event_type,
-                    trade.account_hash,
-                    trade.account_name,
-                    trade.counterparty,
-                    trade.direction,
-                    json.dumps(trade.metadata, separators=(",", ":"), sort_keys=True),
-                ),
-            )
-            if cursor.rowcount == 0:
-                return False
-            connection.executemany(
-                """
-                INSERT INTO synced_trade_items (
-                    event_id, flow, item_id, item_name, quantity, unit_value
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                [
+            for trade in trades:
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO synced_trades (
+                        event_id, occurred_at, imported_at, event_type, account_hash,
+                        account_name, counterparty, direction, metadata_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
                     (
                         trade.event_id,
-                        item.flow,
-                        item.item_id,
-                        item.item_name,
-                        item.quantity,
-                        item.unit_value,
-                    )
-                    for item in trade.items
-                ],
-            )
-        return True
+                        trade.occurred_at,
+                        imported_at,
+                        trade.event_type,
+                        trade.account_hash,
+                        trade.account_name,
+                        trade.counterparty,
+                        trade.direction,
+                        json.dumps(trade.metadata, separators=(",", ":"), sort_keys=True),
+                    ),
+                )
+                if cursor.rowcount == 0:
+                    results.append(False)
+                    continue
+                connection.executemany(
+                    """
+                    INSERT INTO synced_trade_items (
+                        event_id, flow, item_id, item_name, quantity, unit_value
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            trade.event_id,
+                            item.flow,
+                            item.item_id,
+                            item.item_name,
+                            item.quantity,
+                            item.unit_value,
+                        )
+                        for item in trade.items
+                    ],
+                )
+                results.append(True)
+        return results
 
     def list_synced_trades(self, event_type: str | None = None) -> list[SyncedTrade]:
         query = "SELECT * FROM synced_trades"
@@ -635,6 +768,40 @@ class JournalRepository:
             )
             for row in rows
         ]
+
+    def get_synced_trade(self, event_id: str) -> SyncedTrade | None:
+        """Look up one synced trade without reloading every event's items."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM synced_trades WHERE event_id = ?", (event_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            item_rows = connection.execute(
+                "SELECT * FROM synced_trade_items WHERE event_id = ? ORDER BY item_row_id ASC",
+                (event_id,),
+            ).fetchall()
+        items = tuple(
+            SyncedItem(
+                flow=str(item_row["flow"]),
+                item_id=int(item_row["item_id"]),
+                item_name=str(item_row["item_name"]),
+                quantity=int(item_row["quantity"]),
+                unit_value=int(item_row["unit_value"]),
+            )
+            for item_row in item_rows
+        )
+        return SyncedTrade(
+            event_id=str(row["event_id"]),
+            occurred_at=str(row["occurred_at"]),
+            event_type=str(row["event_type"]),
+            account_hash=str(row["account_hash"]),
+            account_name=str(row["account_name"]),
+            counterparty=str(row["counterparty"]) if row["counterparty"] else None,
+            direction=str(row["direction"]),
+            metadata=json.loads(str(row["metadata_json"])),
+            items=items,
+        )
 
     def delete_synced_trade(self, event_id: str) -> None:
         with self._connect() as connection:

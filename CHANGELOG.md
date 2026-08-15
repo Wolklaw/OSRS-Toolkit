@@ -4,6 +4,42 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-14
+
+### Added
+
+- Trade Journal now records buy fills at multiple prices, the same way sale fills already work,
+  with a weighted-average cost basis.
+- Added a "Quantity acquired" field so a buy order cancelled mid-fill can shrink to the amount
+  actually bought and continue through Bought → Listed for sale → Partially sold → Completed
+  instead of being stuck as an all-or-nothing Cancelled entry with no way to sell the leftover.
+- Added an earnings period filter (Today, this week, this month, this year, rolling windows, all
+  time) to the Trade Journal. It scopes both the summary cards and the visible rows; positions
+  still in progress always stay visible regardless of the selected period.
+- Added a Data tab in Settings to move the local database to a location of your choice; existing
+  data is copied automatically and the app switches to it immediately, no restart required.
+- Sorting the Trade Journal by Status now follows the trade lifecycle (Pending buy → Bought →
+  Listed for sale → Partially sold → Completed → Cancelled) instead of alphabetically, so
+  finished trades no longer land between active ones.
+
+### Fixed
+
+- A malformed OSRS hiscores response could permanently disable character lookup until restart.
+- Selected navigation item, selected table row, and Skilling Profit guide links were unreadable in
+  the Light theme.
+- Kingdom Optimizer could get stuck showing "Waiting for market prices…" with fewer than two
+  priced resources.
+- The Skilling Profit guide link opened a browser tab on a single click instead of requiring a
+  double-click.
+- A corrupted saved setting could crash the app on startup instead of falling back to its default.
+- Background threads were not stopped when closing the app.
+- Saving an invalid trade update could raise an unhandled error instead of a message box.
+- Auto-refreshing market data every five minutes silently discarded a manually chosen table sort.
+- Manually resized table columns snapped back to their computed width on the next window resize.
+- RuneLite sync now imports a batch of events over one database connection instead of one per
+  event, and synced trade item lookups use an index instead of a full table scan.
+- Wiki price requests now ask for gzip and identify a contact URL in the User-Agent.
+
 ## [1.4.7] - 2026-08-11
 
 ### Added

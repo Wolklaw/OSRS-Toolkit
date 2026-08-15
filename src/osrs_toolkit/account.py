@@ -52,8 +52,13 @@ def fetch_player(name: str, timeout: float = 10.0) -> PlayerProfile:
     skills: dict[str, int] = {}
     for skill, line in zip(HISCORE_SKILLS, lines, strict=False):
         fields = line.split(",")
-        if len(fields) >= 2:
-            skills[skill] = max(1, int(fields[1])) if skill != "Overall" else int(fields[1])
+        if len(fields) < 2:
+            continue
+        try:
+            level = int(fields[1])
+        except ValueError:
+            continue
+        skills[skill] = level if skill == "Overall" else max(1, level)
     if "Overall" not in skills:
         raise AccountLookupError("The hiscores returned an unexpected response.")
     return PlayerProfile(clean_name, skills)

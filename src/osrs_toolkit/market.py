@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import urllib.error
@@ -17,7 +18,10 @@ class MarketDataError(RuntimeError):
 
 class WikiMarketClient:
     BASE_URL = "https://prices.runescape.wiki/api/v1/osrs"
-    USER_AGENT = f"OSRSToolkit/{__version__} desktop market analysis"
+    USER_AGENT = (
+        f"OSRSToolkit/{__version__} desktop market analysis "
+        "(+https://github.com/Wolklaw/OSRS-Toolkit)"
+    )
 
     def __init__(self, cache_dir: Path | None = None, timeout: float = 12.0) -> None:
         local_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
@@ -28,12 +32,19 @@ class WikiMarketClient:
     def _get(self, route: str) -> dict[str, Any] | list[dict[str, Any]]:
         request = urllib.request.Request(
             f"{self.BASE_URL}/{route}",
-            headers={"User-Agent": self.USER_AGENT, "Accept": "application/json"},
+            headers={
+                "User-Agent": self.USER_AGENT,
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+            },
         )
         cache_file = self.cache_dir / f"{route}.json"
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                payload = json.load(response)
+                body = response.read()
+                if response.headers.get("Content-Encoding") == "gzip":
+                    body = gzip.decompress(body)
+                payload = json.loads(body.decode("utf-8"))
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             cache_file.write_text(json.dumps(payload), encoding="utf-8")
             return payload

@@ -84,9 +84,16 @@ Recommendations enter the journal as **Pending buy** with their original quantit
 targets preserved. A position can move through **Bought**, **Listed for sale**, **Partially sold**,
 **Completed**, or **Cancelled**.
 
-- Record the actual buy price and any number of sale fills at different quantities and prices.
-- See the weighted-average sale price, remaining quantity, and tax-correct realized result.
-- Scan color-coded lifecycle states and filter the table to active trades or any individual status.
+- Record any number of buy fills and sale fills at different quantities and prices — both sides of
+  a trade support the same weighted-average pricing.
+- Cancelled a buy order partway through? Shrink **Quantity acquired** to what actually filled and
+  mark the position **Bought** instead of Cancelled, so the leftover stock still flows through
+  Listed for sale, Partially sold, and Completed.
+- See the weighted-average buy and sale price, remaining quantity, and tax-correct realized result.
+- Scan color-coded lifecycle states, filter the table to active trades or any individual status,
+  and sort by Status in trade-lifecycle order instead of alphabetically.
+- Filter the summary cards and completed/cancelled rows to a time window — today, this week, this
+  month, this year, a rolling range, or all time. Trades still in progress always stay visible.
 - Distinguish clearly labeled projections from signed, color-coded realized profit and loss.
 - Keep original suggestions beside actual execution data, even after the market changes.
 - Double-click any tracked row to update it; completed trades can also be entered manually.
@@ -100,7 +107,8 @@ Journal statistics use trades with realized sale proceeds, including partially s
 Cancelled positions with no realized sale are excluded from win rate.
 
 The journal uses a version-independent local database. Startup backups retain the latest ten
-copies, and recovery logic can migrate data from older storage locations after an update.
+copies, recovery logic can migrate data from older storage locations after an update, and
+**Settings → Data** lets you move the database file to a location of your choice at any time.
 
 ## RuneLite activity
 

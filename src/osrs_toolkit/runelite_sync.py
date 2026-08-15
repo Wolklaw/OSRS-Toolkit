@@ -91,8 +91,9 @@ class RuneLiteSyncImporter:
         if not self.events_dir.exists():
             return ImportResult()
         self.acks_dir.mkdir(parents=True, exist_ok=True)
-        imported = duplicates = rejected = 0
+        rejected = 0
         paths = sorted(self.events_dir.glob("*.json"))[:MAX_EVENTS_PER_IMPORT]
+        parsed: list[tuple[Path, SyncedTrade]] = []
         for path in paths:
             try:
                 if path.is_symlink() or path.stat().st_size > MAX_EVENT_BYTES:
@@ -112,8 +113,13 @@ class RuneLiteSyncImporter:
                 # A partially written or temporarily locked file is not invalid. Leave it in
                 # the queue so the next import pass can retry it.
                 continue
+            parsed.append((path, trade))
 
-            if repository.add_synced_trade(trade):
+        # One connection for the whole batch instead of one per event.
+        results = repository.add_synced_trades([trade for _path, trade in parsed])
+        imported = duplicates = 0
+        for (path, trade), was_imported in zip(parsed, results, strict=True):
+            if was_imported:
                 imported += 1
             else:
                 duplicates += 1

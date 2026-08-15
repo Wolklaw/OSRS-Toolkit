@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Literal
 
 JOURNAL_STATUS_FILTERS = (
@@ -12,6 +13,17 @@ JOURNAL_STATUS_FILTERS = (
     "Partially sold",
     "Completed",
     "Cancelled",
+)
+
+PERIOD_FILTERS = (
+    "All time",
+    "Today",
+    "Last 24 hours",
+    "This week",
+    "Last 7 days",
+    "This month",
+    "Last 30 days",
+    "This year",
 )
 
 _ACTIVE_STATUSES = frozenset(
@@ -47,6 +59,40 @@ class JournalPLPresentation:
 def _signed_gp(value: int) -> str:
     sign = "+" if value > 0 else ""
     return f"{sign}{value:,} gp"
+
+
+def trade_within_period(timestamp: str | None, period: str, now: datetime) -> bool:
+    """Return whether an ISO timestamp falls inside the selected earnings period.
+
+    ``now`` must be timezone-aware; naive stored timestamps are assumed to share its
+    timezone (every timestamp this app writes is UTC, via ``datetime.now(UTC)``).
+    """
+    if period == "All time":
+        return True
+    if timestamp is None:
+        return False
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=now.tzinfo)
+    if period == "Today":
+        return parsed.date() == now.date()
+    if period == "Last 24 hours":
+        return timedelta(0) <= now - parsed <= timedelta(hours=24)
+    if period == "This week":
+        start_of_week = (now - timedelta(days=now.weekday())).date()
+        return start_of_week <= parsed.date() <= now.date()
+    if period == "Last 7 days":
+        return timedelta(0) <= now - parsed <= timedelta(days=7)
+    if period == "This month":
+        return parsed.year == now.year and parsed.month == now.month
+    if period == "Last 30 days":
+        return timedelta(0) <= now - parsed <= timedelta(days=30)
+    if period == "This year":
+        return parsed.year == now.year
+    raise ValueError(f"Unknown period filter: {period}")
 
 
 def journal_status_matches(status: str, selected_filter: str) -> bool:

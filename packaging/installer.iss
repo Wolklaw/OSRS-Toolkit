@@ -1,6 +1,6 @@
 #define MyAppName "OSRS Toolkit"
 #ifndef MyAppVersion
-#define MyAppVersion "1.4.7"
+#define MyAppVersion "1.5.0"
 #endif
 #define MyAppPublisher "OSRS Toolkit"
 #define MyAppExeName "OSRS Toolkit.exe"

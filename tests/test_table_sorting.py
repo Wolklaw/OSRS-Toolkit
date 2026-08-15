@@ -1,4 +1,4 @@
-from osrs_toolkit.app import _table_sort_value
+from osrs_toolkit.app import _JOURNAL_STATUS_ORDER, _table_sort_value
 
 
 def test_formatted_numbers_sort_numerically() -> None:
@@ -39,3 +39,18 @@ def test_journal_profit_variants_sort_by_amount() -> None:
         "+1,234 gp • 7 left",
         "-21,600 gp",
     ]
+
+
+def test_journal_status_order_follows_the_trade_lifecycle_not_alphabet() -> None:
+    """Regression: sorting by Status must not interleave terminal states between active ones."""
+    ranked = sorted(_JOURNAL_STATUS_ORDER, key=_JOURNAL_STATUS_ORDER.get)
+    assert ranked == [
+        "Pending buy",
+        "Bought",
+        "Listed for sale",
+        "Partially sold",
+        "Completed",
+        "Completed (manual)",
+        "Cancelled",
+    ]
+    assert _JOURNAL_STATUS_ORDER["Cancelled"] > _JOURNAL_STATUS_ORDER["Partially sold"]

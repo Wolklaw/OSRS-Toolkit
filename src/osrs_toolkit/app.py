@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ctypes
+import os
+import shutil
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -47,9 +50,11 @@ from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
 from osrs_toolkit.journal_presentation import (
     JOURNAL_STATUS_FILTERS,
+    PERIOD_FILTERS,
     JournalPLPresentation,
     journal_pl_presentation,
     journal_status_matches,
+    trade_within_period,
 )
 from osrs_toolkit.market import WikiMarketClient
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
@@ -99,6 +104,8 @@ class AccountWorker(QObject):
             self.finished.emit(fetch_player(self.character_name))
         except AccountLookupError as exc:
             self.failed.emit(str(exc))
+        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+            self.failed.emit(f"Unexpected error while looking up hiscores: {exc}")
 
 
 class SearchLineEdit(QLineEdit):
@@ -167,16 +174,27 @@ class AccountDialog(QDialog):
         layout.addWidget(buttons)
 
 
+def _default_database_path() -> Path:
+    local_data = Path(os.getenv("LOCALAPPDATA", Path.home()))
+    return local_data / "OSRSToolkit" / "data" / "toolkit.db"
+
+
 class SettingsDialog(QDialog):
     THEMES: ClassVar[list[str]] = ["Dark", "Midnight", "Light"]
 
-    def __init__(self, current_theme: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        current_theme: str,
+        database_path: Path,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setMinimumSize(520, 390)
         self._update_thread: QThread | None = None
         self._update_worker: QObject | None = None
         self._available_release: ReleaseInfo | None = None
+        self.requested_database_path: Path | None = None
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
 
@@ -191,6 +209,33 @@ class SettingsDialog(QDialog):
         appearance_layout.addWidget(theme_note)
         appearance_layout.addStretch()
         tabs.addTab(appearance, "Appearance")
+
+        data = QWidget()
+        data_layout = QVBoxLayout(data)
+        data_layout.addWidget(QLabel("Database location"))
+        self._current_database_path = database_path
+        self.database_path_field = QLineEdit(str(self._current_database_path))
+        self.database_path_field.setReadOnly(True)
+        data_layout.addWidget(self.database_path_field)
+        data_note = QLabel(
+            "Your trade journal, tracked positions, and RuneLite activity are stored in this "
+            "SQLite file. Moving it copies your existing data to the new location; the old "
+            "file is left in place untouched.",
+            objectName="muted",
+        )
+        data_note.setWordWrap(True)
+        data_layout.addWidget(data_note)
+        data_actions = QHBoxLayout()
+        change_location_button = QPushButton("Change location…", objectName="secondary")
+        change_location_button.clicked.connect(self._choose_database_location)
+        default_location_button = QPushButton("Use default location", objectName="secondary")
+        default_location_button.clicked.connect(self._use_default_database_location)
+        data_actions.addWidget(change_location_button)
+        data_actions.addWidget(default_location_button)
+        data_actions.addStretch()
+        data_layout.addLayout(data_actions)
+        data_layout.addStretch()
+        tabs.addTab(data, "Data")
 
         about = QWidget()
         about_layout = QVBoxLayout(about)
@@ -259,6 +304,26 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _choose_database_location(self) -> None:
+        chosen, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Choose database location",
+            str(self._current_database_path),
+            "SQLite Database (*.db)",
+        )
+        if not chosen:
+            return
+        self._set_requested_database_path(Path(chosen))
+
+    def _use_default_database_location(self) -> None:
+        self._set_requested_database_path(_default_database_path())
+
+    def _set_requested_database_path(self, path: Path) -> None:
+        if path == self._current_database_path:
+            return
+        self.requested_database_path = path
+        self.database_path_field.setText(str(path))
 
     def _update_action(self) -> None:
         if self._update_thread is not None and self._update_thread.isRunning():
@@ -515,17 +580,25 @@ class UpdateTrackedTradeDialog(QDialog):
     def __init__(self, trade: TrackedTrade, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Update {trade.item_name}")
-        self.setMinimumSize(560, 500)
+        self.setMinimumSize(560, 640)
         self.trade = trade
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.status = QComboBox()
         self.status.addItems(self.STATUSES)
         self.status.setCurrentText(trade.status)
-        self.actual_buy = TradeEntryDialog._number_field(0, 2_000_000_000, trade.actual_buy or trade.target_buy)
-        self.actual_buy.setSuffix(" gp")
+        floor = max(1, trade.bought_quantity, trade.sold_quantity)
+        self.quantity_acquired = TradeEntryDialog._number_field(
+            floor, max(floor, trade.quantity), trade.quantity
+        )
+        self.quantity_acquired.setToolTip(
+            "Reduce this if a buy order was cancelled early and only part of it filled — "
+            "the position becomes the smaller amount you actually hold, so it can still be "
+            "listed and sold."
+        )
+        self.quantity_acquired.valueChanged.connect(self._quantity_acquired_changed)
         form.addRow("Status", self.status)
-        form.addRow("Actual buy price", self.actual_buy)
+        form.addRow("Quantity acquired", self.quantity_acquired)
         layout.addLayout(form)
         preserved = QLabel(
             f"Original targets remain saved: buy {_gp(trade.target_buy)}, "
@@ -541,36 +614,73 @@ class UpdateTrackedTradeDialog(QDialog):
         )
         preserved.setWordWrap(True)
         layout.addWidget(preserved)
-        layout.addWidget(QLabel("Sale fills", objectName="sectionHeader"))
-        self.fills_table = QTableWidget(0, 2)
-        self.fills_table.setHorizontalHeaderLabels(["Quantity", "Sell price"])
-        self.fills_table.horizontalHeader().setStretchLastSection(True)
-        self.fills_table.verticalHeader().setVisible(False)
-        self.fills_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.fills_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.fills_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        for fill in trade.sale_fills:
-            self._append_fill(fill.quantity, fill.sell_price)
-        layout.addWidget(self.fills_table, 1)
 
-        fill_controls = QHBoxLayout()
-        self.fill_quantity = TradeEntryDialog._number_field(1, trade.quantity, trade.remaining_quantity or 1)
-        self.fill_price = TradeEntryDialog._number_field(1, 2_000_000_000, trade.target_sell)
-        self.fill_price.setSuffix(" gp")
-        add_fill = QPushButton("Add sale fill")
-        add_fill.clicked.connect(self._add_fill)
-        remove_fill = QPushButton("Remove selected", objectName="secondary")
-        remove_fill.clicked.connect(self._remove_fill)
-        fill_controls.addWidget(QLabel("Quantity"))
-        fill_controls.addWidget(self.fill_quantity)
-        fill_controls.addWidget(QLabel("Price"))
-        fill_controls.addWidget(self.fill_price)
-        fill_controls.addWidget(add_fill)
-        fill_controls.addWidget(remove_fill)
-        layout.addLayout(fill_controls)
-        self.fill_summary = QLabel(objectName="muted")
-        layout.addWidget(self.fill_summary)
-        self._update_fill_summary()
+        layout.addWidget(QLabel("Buy fills", objectName="sectionHeader"))
+        self.buy_fills_table = QTableWidget(0, 2)
+        self.buy_fills_table.setHorizontalHeaderLabels(["Quantity", "Buy price"])
+        self.buy_fills_table.horizontalHeader().setStretchLastSection(True)
+        self.buy_fills_table.verticalHeader().setVisible(False)
+        self.buy_fills_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.buy_fills_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.buy_fills_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for buy_fill in trade.buy_fills:
+            self._append_buy_fill(buy_fill.quantity, buy_fill.buy_price)
+        layout.addWidget(self.buy_fills_table, 1)
+
+        buy_fill_controls = QHBoxLayout()
+        self.buy_fill_quantity = TradeEntryDialog._number_field(
+            1, trade.quantity, max(1, trade.quantity - trade.bought_quantity)
+        )
+        self.buy_fill_price = TradeEntryDialog._number_field(1, 2_000_000_000, trade.target_buy)
+        self.buy_fill_price.setSuffix(" gp")
+        add_buy_fill = QPushButton("Add buy fill")
+        add_buy_fill.clicked.connect(self._add_buy_fill)
+        remove_buy_fill = QPushButton("Remove selected", objectName="secondary")
+        remove_buy_fill.clicked.connect(self._remove_buy_fill)
+        buy_fill_controls.addWidget(QLabel("Quantity"))
+        buy_fill_controls.addWidget(self.buy_fill_quantity)
+        buy_fill_controls.addWidget(QLabel("Price"))
+        buy_fill_controls.addWidget(self.buy_fill_price)
+        buy_fill_controls.addWidget(add_buy_fill)
+        buy_fill_controls.addWidget(remove_buy_fill)
+        layout.addLayout(buy_fill_controls)
+        self.buy_fill_summary = QLabel(objectName="muted")
+        layout.addWidget(self.buy_fill_summary)
+
+        layout.addWidget(QLabel("Sale fills", objectName="sectionHeader"))
+        self.sale_fills_table = QTableWidget(0, 2)
+        self.sale_fills_table.setHorizontalHeaderLabels(["Quantity", "Sell price"])
+        self.sale_fills_table.horizontalHeader().setStretchLastSection(True)
+        self.sale_fills_table.verticalHeader().setVisible(False)
+        self.sale_fills_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.sale_fills_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.sale_fills_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for sale_fill in trade.sale_fills:
+            self._append_sale_fill(sale_fill.quantity, sale_fill.sell_price)
+        layout.addWidget(self.sale_fills_table, 1)
+
+        sale_fill_controls = QHBoxLayout()
+        self.sale_fill_quantity = TradeEntryDialog._number_field(
+            1, trade.quantity, trade.remaining_quantity or 1
+        )
+        self.sale_fill_price = TradeEntryDialog._number_field(1, 2_000_000_000, trade.target_sell)
+        self.sale_fill_price.setSuffix(" gp")
+        add_sale_fill = QPushButton("Add sale fill")
+        add_sale_fill.clicked.connect(self._add_sale_fill)
+        remove_sale_fill = QPushButton("Remove selected", objectName="secondary")
+        remove_sale_fill.clicked.connect(self._remove_sale_fill)
+        sale_fill_controls.addWidget(QLabel("Quantity"))
+        sale_fill_controls.addWidget(self.sale_fill_quantity)
+        sale_fill_controls.addWidget(QLabel("Price"))
+        sale_fill_controls.addWidget(self.sale_fill_price)
+        sale_fill_controls.addWidget(add_sale_fill)
+        sale_fill_controls.addWidget(remove_sale_fill)
+        layout.addLayout(sale_fill_controls)
+        self.sale_fill_summary = QLabel(objectName="muted")
+        layout.addWidget(self.sale_fill_summary)
+
+        self._update_buy_fill_summary()
+        self._update_sale_fill_summary()
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save
         )
@@ -578,66 +688,137 @@ class UpdateTrackedTradeDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def _append_fill(self, quantity: int, price: int) -> None:
-        row = self.fills_table.rowCount()
-        self.fills_table.insertRow(row)
+    def _quantity_acquired_changed(self, _value: int) -> None:
+        self._update_buy_fill_summary()
+        self._update_sale_fill_summary()
+
+    def _append_buy_fill(self, quantity: int, price: int) -> None:
+        row = self.buy_fills_table.rowCount()
+        self.buy_fills_table.insertRow(row)
         quantity_cell = QTableWidgetItem(f"{quantity:,}")
         quantity_cell.setData(Qt.ItemDataRole.UserRole, quantity)
         price_cell = QTableWidgetItem(_gp(price))
         price_cell.setData(Qt.ItemDataRole.UserRole, price)
-        self.fills_table.setItem(row, 0, quantity_cell)
-        self.fills_table.setItem(row, 1, price_cell)
+        self.buy_fills_table.setItem(row, 0, quantity_cell)
+        self.buy_fills_table.setItem(row, 1, price_cell)
+
+    def buy_fills(self) -> list[tuple[int, int]]:
+        return [
+            (
+                int(self.buy_fills_table.item(row, 0).data(Qt.ItemDataRole.UserRole)),
+                int(self.buy_fills_table.item(row, 1).data(Qt.ItemDataRole.UserRole)),
+            )
+            for row in range(self.buy_fills_table.rowCount())
+        ]
+
+    def _add_buy_fill(self) -> None:
+        quantity = self.buy_fill_quantity.value()
+        existing = sum(fill_quantity for fill_quantity, _price in self.buy_fills())
+        if existing + quantity > self.quantity_acquired.value():
+            QMessageBox.warning(
+                self,
+                "Too many items",
+                "Buy-fill quantities cannot exceed the acquired quantity.",
+            )
+            return
+        self._append_buy_fill(quantity, self.buy_fill_price.value())
+        self._update_buy_fill_summary()
+
+    def _remove_buy_fill(self) -> None:
+        row = self.buy_fills_table.currentRow()
+        if row >= 0:
+            self.buy_fills_table.removeRow(row)
+            self._update_buy_fill_summary()
+
+    def _update_buy_fill_summary(self) -> None:
+        fills = self.buy_fills()
+        bought = sum(quantity for quantity, _price in fills)
+        acquired = self.quantity_acquired.value()
+        remaining = max(0, acquired - bought)
+        average = (
+            round(sum(quantity * price for quantity, price in fills) / bought)
+            if bought
+            else None
+        )
+        average_text = f" • weighted average {_gp(average)}" if average is not None else ""
+        self.buy_fill_summary.setText(
+            f"Bought {bought:,} of {acquired:,} • {remaining:,} remaining{average_text}"
+        )
+        self.buy_fill_quantity.setMaximum(max(1, remaining))
+        self.buy_fill_quantity.setValue(max(1, remaining))
+
+    def _append_sale_fill(self, quantity: int, price: int) -> None:
+        row = self.sale_fills_table.rowCount()
+        self.sale_fills_table.insertRow(row)
+        quantity_cell = QTableWidgetItem(f"{quantity:,}")
+        quantity_cell.setData(Qt.ItemDataRole.UserRole, quantity)
+        price_cell = QTableWidgetItem(_gp(price))
+        price_cell.setData(Qt.ItemDataRole.UserRole, price)
+        self.sale_fills_table.setItem(row, 0, quantity_cell)
+        self.sale_fills_table.setItem(row, 1, price_cell)
 
     def sale_fills(self) -> list[tuple[int, int]]:
         return [
             (
-                int(self.fills_table.item(row, 0).data(Qt.ItemDataRole.UserRole)),
-                int(self.fills_table.item(row, 1).data(Qt.ItemDataRole.UserRole)),
+                int(self.sale_fills_table.item(row, 0).data(Qt.ItemDataRole.UserRole)),
+                int(self.sale_fills_table.item(row, 1).data(Qt.ItemDataRole.UserRole)),
             )
-            for row in range(self.fills_table.rowCount())
+            for row in range(self.sale_fills_table.rowCount())
         ]
 
-    def _add_fill(self) -> None:
-        quantity = self.fill_quantity.value()
-        if sum(fill_quantity for fill_quantity, _price in self.sale_fills()) + quantity > self.trade.quantity:
+    def _add_sale_fill(self) -> None:
+        quantity = self.sale_fill_quantity.value()
+        existing = sum(fill_quantity for fill_quantity, _price in self.sale_fills())
+        if existing + quantity > self.quantity_acquired.value():
             QMessageBox.warning(
                 self,
                 "Too many items",
-                "Sale-fill quantities cannot exceed the tracked quantity.",
+                "Sale-fill quantities cannot exceed the acquired quantity.",
             )
             return
-        self._append_fill(quantity, self.fill_price.value())
-        self._update_fill_summary()
+        self._append_sale_fill(quantity, self.sale_fill_price.value())
+        self._update_sale_fill_summary()
 
-    def _remove_fill(self) -> None:
-        row = self.fills_table.currentRow()
+    def _remove_sale_fill(self) -> None:
+        row = self.sale_fills_table.currentRow()
         if row >= 0:
-            self.fills_table.removeRow(row)
-            self._update_fill_summary()
+            self.sale_fills_table.removeRow(row)
+            self._update_sale_fill_summary()
 
-    def _update_fill_summary(self) -> None:
+    def _update_sale_fill_summary(self) -> None:
         fills = self.sale_fills()
         sold = sum(quantity for quantity, _price in fills)
-        remaining = self.trade.quantity - sold
+        acquired = self.quantity_acquired.value()
+        remaining = max(0, acquired - sold)
         average = (
             round(sum(quantity * price for quantity, price in fills) / sold)
             if sold
             else None
         )
         average_text = f" • weighted average {_gp(average)}" if average is not None else ""
-        self.fill_summary.setText(
-            f"Sold {sold:,} of {self.trade.quantity:,} • {remaining:,} remaining{average_text}"
+        self.sale_fill_summary.setText(
+            f"Sold {sold:,} of {acquired:,} • {remaining:,} remaining{average_text}"
         )
-        self.fill_quantity.setMaximum(max(1, remaining))
-        self.fill_quantity.setValue(max(1, remaining))
+        self.sale_fill_quantity.setMaximum(max(1, remaining))
+        self.sale_fill_quantity.setValue(max(1, remaining))
 
     def _accept_if_valid(self) -> None:
-        sold = sum(quantity for quantity, _price in self.sale_fills())
-        if self.status.currentText() == "Completed" and sold != self.trade.quantity:
+        quantity = self.quantity_acquired.value()
+        status = self.status.currentText()
+        bought = sum(fill_quantity for fill_quantity, _price in self.buy_fills())
+        sold = sum(fill_quantity for fill_quantity, _price in self.sale_fills())
+        if status == "Completed" and sold != quantity:
             QMessageBox.warning(
                 self,
                 "Unaccounted quantity",
-                "A completed trade needs sale fills for the full tracked quantity.",
+                "A completed trade needs sale fills for the full acquired quantity.",
+            )
+            return
+        if status == "Completed" and bought != quantity:
+            QMessageBox.warning(
+                self,
+                "Unaccounted quantity",
+                "A completed trade needs buy fills for the full acquired quantity.",
             )
             return
         self.accept()
@@ -663,6 +844,19 @@ class ResponsiveTableWidget(QTableWidget):
         super().__init__(0, column_count)
         self._preferred_widths: list[int] = []
         self._applying_widths = False
+        self._user_resized_columns: set[int] = set()
+        self.horizontalHeader().sectionResized.connect(self._section_resized)
+
+    def _section_resized(self, column: int, _old_width: int, _new_width: int) -> None:
+        if not self._applying_widths:
+            self._user_resized_columns.add(column)
+
+    def begin_bulk_resize(self) -> None:
+        """Suspend user-resize tracking around programmatic sizing (e.g. initial layout)."""
+        self._applying_widths = True
+
+    def end_bulk_resize(self) -> None:
+        self._applying_widths = False
 
     def set_preferred_widths(self, widths: list[int]) -> None:
         self._preferred_widths = widths
@@ -677,21 +871,30 @@ class ResponsiveTableWidget(QTableWidget):
             return
         self._applying_widths = True
         try:
-            preferred_total = sum(self._preferred_widths)
-            available = max(0, self.viewport().width() - 2)
-            widths = list(self._preferred_widths)
-            if available > preferred_total:
+            flexible_columns = [
+                column
+                for column in range(len(self._preferred_widths))
+                if column not in self._user_resized_columns
+            ]
+            if not flexible_columns:
+                return
+            locked_width = sum(self.columnWidth(column) for column in self._user_resized_columns)
+            preferred_total = sum(self._preferred_widths[column] for column in flexible_columns)
+            available = max(0, self.viewport().width() - 2 - locked_width)
+            widths = dict(enumerate(self._preferred_widths))
+            if available > preferred_total > 0:
                 extra = available - preferred_total
                 distributed = 0
-                for column, preferred in enumerate(self._preferred_widths):
-                    if column == len(widths) - 1:
+                for index, column in enumerate(flexible_columns):
+                    preferred = self._preferred_widths[column]
+                    if index == len(flexible_columns) - 1:
                         addition = extra - distributed
                     else:
                         addition = round(extra * preferred / preferred_total)
                         distributed += addition
                     widths[column] += addition
-            for column, width in enumerate(widths):
-                self.setColumnWidth(column, width)
+            for column in flexible_columns:
+                self.setColumnWidth(column, widths[column])
         finally:
             self._applying_widths = False
 
@@ -728,12 +931,21 @@ class MainWindow(QMainWindow):
         if not isinstance(saved_watchlist, list):
             saved_watchlist = [saved_watchlist]
         self._watchlist = {int(item_id) for item_id in saved_watchlist if str(item_id).isdigit()}
-        self._journal = JournalRepository()
+        saved_database_path = QSettings().value("journal/database_path")
+        try:
+            self._journal = JournalRepository(
+                Path(str(saved_database_path)) if saved_database_path else None
+            )
+        except OSError:
+            # The configured location may be unavailable (e.g. a removed drive). Fall
+            # back to the default so the app can still start.
+            self._journal = JournalRepository()
         self._sync_importer = RuneLiteSyncImporter()
         self._last_sync_message = ""
         self._profit_color = "#70d6a1"
         self._loss_color = "#ef6b73"
         self._muted_color = "#91a0b4"
+        self._link_color = "#65a9ff"
         self._journal_status_colors = {
             "Pending buy": "#65a9ff",
             "Bought": "#d5ad52",
@@ -744,6 +956,10 @@ class MainWindow(QMainWindow):
             "Cancelled": self._muted_color,
         }
         self._market_buttons: list[QPushButton] = []
+        self._cash_debounce = QTimer(self)
+        self._cash_debounce.setSingleShot(True)
+        self._cash_debounce.setInterval(200)
+        self._cash_debounce.timeout.connect(self._cash_changed)
         self._build_ui()
         self._apply_theme(self._theme)
         self._sync_timer = QTimer(self)
@@ -853,10 +1069,10 @@ class MainWindow(QMainWindow):
         self.cash.setValue(10_000_000)
         self.cash.setSingleStep(1_000_000)
         self.cash.setGroupSeparatorShown(True)
-        self.cash.valueChanged.connect(self._cash_changed)
+        self.cash.valueChanged.connect(self._schedule_cash_changed)
         self.slots = QSpinBox()
         self.slots.setRange(1, 8)
-        self.slots.setValue(int(QSettings().value("market/ge_slots", 8)))
+        self.slots.setValue(_setting_int("market/ge_slots", 8, minimum=1, maximum=8))
         self.slots.valueChanged.connect(self._slots_changed)
         self.strategy = QComboBox()
         self.strategy.addItems(list(STRATEGIES))
@@ -923,6 +1139,23 @@ class MainWindow(QMainWindow):
         summary.addWidget(self.journal_profit)
         summary.addWidget(self.journal_win_rate)
         summary.addWidget(self.journal_invested)
+        summary.addStretch()
+        summary.addWidget(QLabel("Period", objectName="muted"))
+        self.journal_period_filter = QComboBox()
+        self.journal_period_filter.addItems(PERIOD_FILTERS)
+        saved_period = str(QSettings().value("journal/period_filter", PERIOD_FILTERS[0]))
+        self.journal_period_filter.setCurrentText(
+            saved_period if saved_period in PERIOD_FILTERS else PERIOD_FILTERS[0]
+        )
+        self.journal_period_filter.setMinimumWidth(140)
+        self.journal_period_filter.setToolTip(
+            "Limit the summary cards and completed/cancelled rows below to this window. "
+            "Trades still in progress always stay visible."
+        )
+        self.journal_period_filter.currentTextChanged.connect(
+            self._journal_period_filter_changed
+        )
+        summary.addWidget(self.journal_period_filter)
         layout.addLayout(summary)
 
         self.journal_tabs = QTabWidget()
@@ -958,7 +1191,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.journal_status_filter)
         plans_layout.addLayout(actions)
         self.journal_filter_empty = QLabel(
-            "No journal entries match this status filter.", objectName="status"
+            "No journal entries match this status and period filter.", objectName="status"
         )
         plans_layout.addWidget(self.journal_filter_empty)
         self.journal_table = self._table(
@@ -1014,7 +1247,9 @@ class MainWindow(QMainWindow):
         controls = QHBoxLayout()
         self.alch_budget = QSpinBox()
         self.alch_budget.setRange(10_000, 2_000_000_000)
-        self.alch_budget.setValue(int(QSettings().value("alch/budget", 2_000_000)))
+        self.alch_budget.setValue(
+            _setting_int("alch/budget", 2_000_000, minimum=10_000, maximum=2_000_000_000)
+        )
         self.alch_budget.setSingleStep(100_000)
         self.alch_budget.setGroupSeparatorShown(True)
         self.alch_budget.valueChanged.connect(self._alch_settings_changed)
@@ -1100,7 +1335,7 @@ class MainWindow(QMainWindow):
             ],
             minimum_widths={0: 250, 10: 320},
         )
-        self.skill_table.cellClicked.connect(self._open_skill_guide)
+        self.skill_table.cellDoubleClicked.connect(self._open_skill_guide)
         layout.addWidget(self.skill_table, 1)
         page.setLayout(layout)
         return page
@@ -1151,12 +1386,55 @@ class MainWindow(QMainWindow):
             self.pages.setCurrentIndex(row)
 
     def open_settings(self) -> None:
-        dialog = SettingsDialog(self._theme, self)
+        dialog = SettingsDialog(self._theme, self._journal.database_path, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._theme = dialog.theme.currentText()
         QSettings().setValue("appearance/theme", self._theme)
         self._apply_theme(self._theme)
+        if dialog.requested_database_path is not None:
+            self._change_database_location(dialog.requested_database_path)
+
+    def _change_database_location(self, new_path: Path) -> None:
+        old_path = self._journal.database_path
+        if new_path == old_path:
+            return
+        if new_path.exists():
+            answer = QMessageBox.question(
+                self,
+                "Database already exists at this location",
+                f"{new_path} already contains a database.\n\n"
+                "Use the existing file there (Yes), or replace it with your current "
+                "journal data (No)?",
+                QMessageBox.StandardButton.Yes
+                | QMessageBox.StandardButton.No
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer == QMessageBox.StandardButton.Cancel:
+                return
+            replace_existing = answer == QMessageBox.StandardButton.No
+        else:
+            replace_existing = True
+        try:
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            if replace_existing and old_path.exists():
+                shutil.copy2(old_path, new_path)
+            new_repository = JournalRepository(new_path)
+        except OSError as exc:
+            QMessageBox.warning(
+                self, "Could not change database location", f"{exc}"
+            )
+            return
+        self._journal = new_repository
+        QSettings().setValue("journal/database_path", str(new_path))
+        self._render_journal()
+        self._render_synced_trades()
+        QMessageBox.information(
+            self,
+            "Database location updated",
+            f"Now using the database at:\n{new_path}",
+        )
 
     def connect_character(self) -> None:
         dialog = AccountDialog(self)
@@ -1270,14 +1548,18 @@ class MainWindow(QMainWindow):
         self._render_skilling()
         self._render_kingdom()
 
-    def _cash_changed(self, cash_stack: int) -> None:
-        """Re-rank the local snapshot immediately; no market download is needed."""
+    def _schedule_cash_changed(self, _cash_stack: int) -> None:
+        """Coalesce rapid spinbox ticks (e.g. holding an arrow key) into one re-rank."""
+        self._cash_debounce.start()
+
+    def _cash_changed(self) -> None:
+        """Re-rank the local snapshot; no market download is needed."""
         if not self._points:
             return
         self._flips = rank_flips(
             self._mappings,
             self._points,
-            cash_stack=cash_stack,
+            cash_stack=self.cash.value(),
             strategy=self.strategy.currentText(),
             slot_count=self.slots.value(),
         )
@@ -1405,13 +1687,15 @@ class MainWindow(QMainWindow):
             ]
             for row in rows
         ]
+        already_sorted = bool(self.alch_table.property("columnsInitialized"))
         self._fill_table(
             self.alch_table,
             values,
             green_columns={5, 8, 9},
             row_ids=[row.item_id for row in rows],
         )
-        self.alch_table.sortItems(8, Qt.SortOrder.DescendingOrder)
+        if not already_sorted:
+            self.alch_table.sortItems(8, Qt.SortOrder.DescendingOrder)
         selected = ALCH_POLICIES[self.alch_safety.currentText()]
         age_text = (
             _short_duration(selected.max_age_seconds)
@@ -1493,13 +1777,26 @@ class MainWindow(QMainWindow):
         QSettings().setValue("journal/status_filter", selected_filter)
         self._render_journal()
 
+    def _journal_period_filter_changed(self, selected_period: str) -> None:
+        QSettings().setValue("journal/period_filter", selected_period)
+        self._render_journal()
+
     def _render_journal(self) -> None:
         tracked = self._journal.list_tracked()
         trades = self._journal.list_all()
         selected_filter = self.journal_status_filter.currentText()
+        selected_period = self.journal_period_filter.currentText()
+        now = datetime.now(UTC)
         rendered_rows: list[tuple[list[str], int, str, JournalPLPresentation]] = []
         for trade in tracked:
             if not journal_status_matches(trade.status, selected_filter):
+                continue
+            # Active positions have no completed_at yet, so the period filter — which
+            # scopes *history* — never hides them; only finished (completed/cancelled)
+            # rows are subject to it, matching the summary cards above.
+            if trade.completed_at is not None and not trade_within_period(
+                trade.completed_at, selected_period, now
+            ):
                 continue
             profit = journal_pl_presentation(
                 trade.status,
@@ -1517,7 +1814,9 @@ class MainWindow(QMainWindow):
                         f"{_gp(trade.buy_suggestion)} ↻"
                         if trade.suggestion_was_refreshed
                         else _gp(trade.buy_suggestion),
-                        _gp(trade.actual_buy) if trade.actual_buy is not None else "—",
+                        f"{_gp(trade.average_buy_price)} avg"
+                        if trade.average_buy_price is not None
+                        else "—",
                         f"{_gp(trade.sell_suggestion)} ↻"
                         if trade.suggestion_was_refreshed
                         else _gp(trade.sell_suggestion),
@@ -1534,6 +1833,8 @@ class MainWindow(QMainWindow):
         for trade in trades:
             raw_status = "Completed (manual)"
             if not journal_status_matches(raw_status, selected_filter):
+                continue
+            if not trade_within_period(trade.recorded_at, selected_period, now):
                 continue
             profit = journal_pl_presentation(
                 raw_status,
@@ -1578,6 +1879,11 @@ class MainWindow(QMainWindow):
             raw_status = status_cell.text().removeprefix("● ")
             status_cell.setData(Qt.ItemDataRole.UserRole, raw_status)
             status_cell.setToolTip(raw_status)
+            if isinstance(status_cell, SortableTableItem):
+                status_cell.sort_value = (
+                    _JOURNAL_STATUS_ORDER.get(raw_status, len(_JOURNAL_STATUS_ORDER)),
+                    raw_status,
+                )
             status_cell.setTextAlignment(
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             )
@@ -1604,12 +1910,20 @@ class MainWindow(QMainWindow):
                 profit_cell.setForeground(QColor(self._muted_color))
             profit_cell.setToolTip(profit.tooltip)
 
-        realized_positions = [trade for trade in tracked if trade.realized_profit is not None]
-        profits = [trade.profit for trade in trades] + [
+        period_trades = [
+            trade for trade in trades if trade_within_period(trade.recorded_at, selected_period, now)
+        ]
+        realized_positions = [
+            trade
+            for trade in tracked
+            if trade.realized_profit is not None
+            and trade_within_period(trade.completed_at, selected_period, now)
+        ]
+        profits = [trade.profit for trade in period_trades] + [
             trade.realized_profit or 0 for trade in realized_positions
         ]
         total_profit = sum(profits)
-        total_invested = sum(trade.invested for trade in trades) + sum(
+        total_invested = sum(trade.invested for trade in period_trades) + sum(
             trade.invested for trade in realized_positions
         )
         wins = sum(profit > 0 for profit in profits)
@@ -1710,14 +2024,7 @@ class MainWindow(QMainWindow):
         event_id = self.synced_trade_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         if not isinstance(event_id, str):
             return None
-        return next(
-            (
-                trade
-                for trade in self._journal.list_synced_trades()
-                if trade.event_id == event_id
-            ),
-            None,
-        )
+        return self._journal.get_synced_trade(event_id)
 
     def _open_selected_synced_trade(self) -> None:
         trade = self._selected_synced_trade()
@@ -1826,19 +2133,19 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         new_status = dialog.status.currentText()
-        actual_buy = (
-            dialog.actual_buy.value()
-            if new_status
-            in {"Bought", "Listed for sale", "Partially sold", "Completed", "Cancelled"}
-            else None
-        )
-        self._journal.update_tracked(
-            position_id,
-            new_status,
-            actual_buy,
-            None,
-            dialog.sale_fills(),
-        )
+        try:
+            self._journal.update_tracked(
+                position_id,
+                new_status,
+                None,
+                None,
+                dialog.sale_fills(),
+                dialog.buy_fills(),
+                dialog.quantity_acquired.value(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Could not save trade", str(exc))
+            return
         self._render_journal()
 
     def _render_skilling(self) -> None:
@@ -1870,6 +2177,7 @@ class MainWindow(QMainWindow):
             ]
             for row in rows
         ]
+        already_sorted = bool(self.skill_table.property("columnsInitialized"))
         self._fill_table(self.skill_table, values, green_columns={5, 7})
         for row_index, row in enumerate(rows):
             guide_cell = self.skill_table.item(row_index, 10)
@@ -1881,11 +2189,12 @@ class MainWindow(QMainWindow):
             guide_cell.setTextAlignment(
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             )
-            guide_cell.setForeground(QColor("#65a9ff"))
+            guide_cell.setForeground(QColor(self._link_color))
             link_font = guide_cell.font()
             link_font.setUnderline(True)
             guide_cell.setFont(link_font)
-        self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
+        if not already_sorted:
+            self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
         profile_text = (
             f" Requirements checked against {self._profile.name}'s public hiscores."
             if self._profile
@@ -1916,6 +2225,10 @@ class MainWindow(QMainWindow):
                 f"Recommended: 10 workers on {rows[0].resource} and 5 on {rows[1].resource}. "
                 f"Estimated primary-output profit: {_gp(rows[0].profit_worker * 10 + rows[1].profit_worker * 5)} per day."
             )
+        else:
+            self.kingdom_recommendation.setText(
+                "Waiting for enough priced resources to recommend a worker split…"
+            )
 
     def _fill_table(
         self,
@@ -1942,6 +2255,9 @@ class MainWindow(QMainWindow):
                         cell.setForeground(QColor(self._loss_color))
                 table.setItem(row_index, column, cell)
         if values and not table.property("columnsInitialized"):
+            is_responsive = isinstance(table, ResponsiveTableWidget)
+            if is_responsive:
+                table.begin_bulk_resize()
             table.resizeColumnsToContents()
             minimum_widths = table.property("minimumColumnWidths") or {}
             preferred_widths: list[int] = []
@@ -1949,7 +2265,8 @@ class MainWindow(QMainWindow):
                 table.setColumnWidth(column, max(table.columnWidth(column), width))
             for column in range(table.columnCount()):
                 preferred_widths.append(table.columnWidth(column) + 14)
-            if isinstance(table, ResponsiveTableWidget):
+            if is_responsive:
+                table.end_bulk_resize()
                 table.set_preferred_widths(preferred_widths)
             table.setProperty("columnsInitialized", True)
         table.setSortingEnabled(True)
@@ -1979,16 +2296,27 @@ class MainWindow(QMainWindow):
 
     def _apply_theme(self, theme: str) -> None:
         palettes = {
-            "Dark": ("#11151b", "#171c24", "#e8edf3", "#91a0b4", "#1a2029", "#28313d", "#1e252f", "#70d6a1"),
-            "Midnight": ("#08111f", "#0d192b", "#e5efff", "#8fa5c4", "#122139", "#263b59", "#172942", "#67d7c4"),
-            "Light": ("#f3f5f7", "#e7ebef", "#1d2833", "#5e6b78", "#ffffff", "#cbd3dc", "#dfe5eb", "#16845b"),
+            "Dark": (
+                "#11151b", "#171c24", "#e8edf3", "#91a0b4", "#1a2029", "#28313d", "#1e252f",
+                "#70d6a1", "#d5ad52", "#403a2c", "#e8edf3", "#65a9ff", "#28313d", "#91a0b4",
+            ),
+            "Midnight": (
+                "#08111f", "#0d192b", "#e5efff", "#8fa5c4", "#122139", "#263b59", "#172942",
+                "#67d7c4", "#d5ad52", "#403a2c", "#e5efff", "#65a9ff", "#263b59", "#8fa5c4",
+            ),
+            "Light": (
+                "#f3f5f7", "#e7ebef", "#1d2833", "#5e6b78", "#ffffff", "#cbd3dc", "#dfe5eb",
+                "#16845b", "#8a6500", "#dbe6f5", "#1d2833", "#1f64a8", "#d6dbe0", "#8a939c",
+            ),
         }
-        background, sidebar, text, muted, field, border, header, profit = palettes.get(
-            theme, palettes["Dark"]
-        )
+        (
+            background, sidebar, text, muted, field, border, header, profit,
+            accent_text, selection_bg, selection_text, link, disabled_bg, disabled_text,
+        ) = palettes.get(theme, palettes["Dark"])
         self._profit_color = profit
         self._loss_color = "#d94752" if theme == "Light" else "#ef6b73"
         self._muted_color = muted
+        self._link_color = link
         if theme == "Light":
             pending, bought, listed, partial = (
                 "#1f64a8",
@@ -2029,7 +2357,7 @@ class MainWindow(QMainWindow):
             #summaryCard[moneyState="negative"] {{ color: {self._loss_color}; }}
             #nav {{ background: transparent; border: 0; outline: 0; padding-top: 16px; }}
             #nav::item {{ padding: 11px 12px; border-radius: 7px; margin: 1px 2px; }}
-            #nav::item:selected {{ background: {header}; color: #d5ad52; }}
+            #nav::item:selected {{ background: {header}; color: {accent_text}; }}
             QLineEdit, QSpinBox, QComboBox {{ background: {field}; border: 1px solid {border}; border-radius: 7px; padding: 7px 10px; min-height: 22px; selection-background-color: #765f2d; }}
             QSpinBox {{ padding-right: 62px; }}
             QSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 29px; border-left: 1px solid {border}; border-bottom: 1px solid {border}; border-top-right-radius: 7px; }}
@@ -2045,12 +2373,12 @@ class MainWindow(QMainWindow):
             QPushButton:hover {{ background: #e2bd64; }}
             QPushButton#secondary, QPushButton#settingsButton, QPushButton#refreshButton {{ background: {header}; color: {text}; border: 1px solid {border}; }}
             QPushButton#secondary:hover, QPushButton#settingsButton:hover, QPushButton#refreshButton:hover {{ border-color: #d5ad52; }}
-            QPushButton:disabled {{ background: #645735; color: #aaa; }}
+            QPushButton:disabled {{ background: {disabled_bg}; color: {disabled_text}; }}
             QTableWidget {{ background: {background}; alternate-background-color: {field}; border: 1px solid {border}; border-radius: 8px; gridline-color: {border}; }}
             QHeaderView::section {{ background: {header}; color: {text}; border: 0; border-bottom: 1px solid {border}; padding: 10px; }}
             QTableWidget::item {{ padding: 7px; }}
             QTableWidget::item:hover {{ background: {header}; }}
-            QTableWidget::item:selected {{ background: #403a2c; color: {text}; }}
+            QTableWidget::item:selected {{ background: {selection_bg}; color: {selection_text}; }}
             QScrollBar:vertical {{ background: {background}; width: 12px; margin: 0; border-radius: 6px; }}
             QScrollBar:horizontal {{ background: {background}; height: 12px; margin: 0; border-radius: 6px; }}
             QScrollBar::handle {{ background: {border}; border-radius: 6px; min-height: 30px; min-width: 30px; }}
@@ -2064,6 +2392,33 @@ class MainWindow(QMainWindow):
         self._render_journal()
         self._render_skilling()
         self._render_kingdom()
+
+    def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        for thread in (self._thread, self._account_thread):
+            if thread is not None and thread.isRunning():
+                thread.quit()
+                thread.wait(2_000)
+        super().closeEvent(event)
+
+
+_JOURNAL_STATUS_ORDER: dict[str, int] = {
+    "Pending buy": 0,
+    "Bought": 1,
+    "Listed for sale": 2,
+    "Partially sold": 3,
+    "Completed": 4,
+    "Completed (manual)": 4,
+    "Cancelled": 5,
+}
+
+
+def _setting_int(key: str, default: int, *, minimum: int, maximum: int) -> int:
+    """Read an int QSetting, falling back to the default on a corrupted value."""
+    try:
+        value = int(QSettings().value(key, default))
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, minimum), maximum)
 
 
 def _gp(value: int) -> str:

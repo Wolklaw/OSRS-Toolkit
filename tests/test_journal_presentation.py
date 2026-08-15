@@ -1,10 +1,14 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from osrs_toolkit.journal_presentation import (
     JOURNAL_STATUS_FILTERS,
+    PERIOD_FILTERS,
     JournalPLPresentation,
     journal_pl_presentation,
     journal_status_matches,
+    trade_within_period,
 )
 
 
@@ -119,3 +123,51 @@ def test_cancelled_break_even_with_sale_fills_is_described_as_realized() -> None
     )
 
     assert presentation.tooltip == "Realized break-even result."
+
+
+NOW = datetime(2026, 8, 14, 18, 0, 0, tzinfo=UTC)
+
+
+def test_all_time_period_always_matches_including_missing_timestamp() -> None:
+    assert trade_within_period(None, "All time", NOW) is True
+    assert trade_within_period("2020-01-01T00:00:00+00:00", "All time", NOW) is True
+
+
+def test_missing_timestamp_excluded_from_every_specific_period() -> None:
+    for period in PERIOD_FILTERS:
+        if period == "All time":
+            continue
+        assert trade_within_period(None, period, NOW) is False
+
+
+def test_today_matches_same_calendar_day_only() -> None:
+    assert trade_within_period("2026-08-14T02:00:00+00:00", "Today", NOW) is True
+    assert trade_within_period("2026-08-13T23:59:00+00:00", "Today", NOW) is False
+
+
+def test_last_24_hours_is_a_rolling_window() -> None:
+    assert trade_within_period("2026-08-13T19:00:00+00:00", "Last 24 hours", NOW) is True
+    assert trade_within_period("2026-08-13T17:00:00+00:00", "Last 24 hours", NOW) is False
+    assert trade_within_period("2026-08-14T18:30:00+00:00", "Last 24 hours", NOW) is False
+
+
+def test_this_week_starts_on_monday() -> None:
+    # 2026-08-14 is a Friday, so Monday 2026-08-10 starts this week.
+    assert trade_within_period("2026-08-10T00:00:00+00:00", "This week", NOW) is True
+    assert trade_within_period("2026-08-09T23:00:00+00:00", "This week", NOW) is False
+
+
+def test_this_month_and_this_year_use_calendar_boundaries() -> None:
+    assert trade_within_period("2026-08-01T00:00:00+00:00", "This month", NOW) is True
+    assert trade_within_period("2026-07-31T23:00:00+00:00", "This month", NOW) is False
+    assert trade_within_period("2026-01-01T00:00:00+00:00", "This year", NOW) is True
+    assert trade_within_period("2025-12-31T23:00:00+00:00", "This year", NOW) is False
+
+
+def test_naive_timestamps_are_assumed_to_share_now_timezone() -> None:
+    assert trade_within_period("2026-08-14T02:00:00", "Today", NOW) is True
+
+
+def test_unknown_period_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown period filter"):
+        trade_within_period("2026-08-14T00:00:00+00:00", "Decade", NOW)
