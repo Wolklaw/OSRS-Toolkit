@@ -4,6 +4,22 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-19
+
+### Fixed
+
+- A journal row's "come see this" flash could arrive long after it stopped mattering. A
+  sale finishing while the Trade Journal wasn't the page on screen queued a flash that
+  stayed queued no matter how long that took — by design, so it wasn't lost — but nothing
+  cancelled it if the coins got collected straight off the Grand Exchange interface before
+  the journal was ever opened. Widening the Status filter later would still play it,
+  lighting up a row for money that was already collected. Collecting an item now cancels
+  any flash still queued for the position it finished, the same way the app already reads
+  a slot disappearing from the plugin's own file as the sign a player took it. A flash
+  still queued because a position just reached "Bought" is untouched by this — that one
+  means go list this, and collecting the goods is what makes that possible, not what
+  answers it.
+
 ## [1.0.0] - 2026-08-19
 
 ### Highlights

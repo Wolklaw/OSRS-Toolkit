@@ -728,3 +728,119 @@ def test_a_second_flip_finishing_still_shows_while_the_first_stays_queued(
     assert _lit_rows(window) == {"Dragon bones"}
     assert window._pending_journal_flash == {hidden}
     assert window.nav.item(_JOURNAL_PAGE).text() == "Trade Journal  ●"
+
+
+# --- collecting answers a queued "Completed" flash before anyone sees it ----------------
+
+
+def test_collecting_a_finished_sale_cancels_the_flash_nobody_saw_yet(
+    window: MainWindow, tmp_path: Path
+) -> None:
+    """The scenario reported live: a sale finishes while the player is in-game, they
+    collect the coins straight off the Grand Exchange interface, and only afterwards open
+    the app. The flash was still queued behind the default "Active trades" filter — the
+    exact case ``_release_pending_flashes`` holds it for — but collecting already answered
+    the only thing it was going to say."""
+    position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
+    window._journal.update_tracked(
+        position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
+    )
+    window._render_journal()
+    assert window._pending_journal_flash == {position_id}
+
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "SOLD")})
+    window._render_ge_offers()
+    assert window._pending_journal_flash == {position_id}
+
+    _write_slots(root, {})  # the plugin drops a slot the instant it is collected
+    window._render_ge_offers()
+
+    assert window._pending_journal_flash == set()
+
+
+def test_the_sidebar_dot_goes_dark_the_moment_it_is_collected(
+    window: MainWindow, tmp_path: Path
+) -> None:
+    """The dot exists to say something is waiting; collecting is exactly what stops it
+    being true, so it should not linger a render behind the pending set clearing."""
+    position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
+    window._journal.update_tracked(
+        position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
+    )
+    window._render_journal()
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "SOLD")})
+    window._render_ge_offers()
+    assert window.nav.item(_JOURNAL_PAGE).text() == "Trade Journal  ●"
+
+    _write_slots(root, {})
+    window._render_ge_offers()
+
+    assert window.nav.item(_JOURNAL_PAGE).text() == "Trade Journal"
+
+
+def test_a_cancelled_flash_never_plays_even_if_the_filter_widens_later(
+    window: MainWindow, qt_app: QApplication, tmp_path: Path
+) -> None:
+    """Once collecting has answered it, widening the filter afterwards must not resurrect
+    it — the row already reads "Completed"; lighting it up now says nothing new."""
+    position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
+    window._journal.update_tracked(
+        position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
+    )
+    window.journal_status_filter.setCurrentText("Active trades")
+    window._render_journal()
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "SOLD")})
+    window._render_ge_offers()
+    _write_slots(root, {})
+    window._render_ge_offers()
+    assert window._pending_journal_flash == set()
+
+    _watching(window, qt_app)
+    window.journal_status_filter.setCurrentText("All statuses")
+
+    assert _lit_rows(window) == set()
+    assert window._journal_flasher.is_lit(position_id) is False
+
+
+def test_collecting_a_bought_item_does_not_cancel_the_go_list_flash(
+    window: MainWindow, tmp_path: Path
+) -> None:
+    """A "Bought" flash means something different from a "Completed" one — go list this —
+    and collecting the goods from a finished buy is what makes listing possible, not what
+    answers it, so this reason must survive the same collection event that cancels the
+    other one."""
+    position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
+    window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
+    window._render_journal()
+    assert window._pending_journal_flash == {position_id}
+
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "BOUGHT")})
+    window._render_ge_offers()
+    _write_slots(root, {})
+    window._render_ge_offers()
+
+    assert window._pending_journal_flash == {position_id}
+
+
+def test_collecting_an_unrelated_item_leaves_the_queue_alone(
+    window: MainWindow, tmp_path: Path
+) -> None:
+    """The cancellation is keyed to the specific item collected, not "something on the
+    Grand Exchange changed" — a different position's flash must not be swept up with it."""
+    position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
+    window._journal.update_tracked(
+        position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
+    )
+    window._render_journal()
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "SOLD", item_id=999)})
+    window._render_ge_offers()
+
+    _write_slots(root, {})
+    window._render_ge_offers()
+
+    assert window._pending_journal_flash == {position_id}

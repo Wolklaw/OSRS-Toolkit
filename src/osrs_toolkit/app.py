@@ -72,6 +72,7 @@ from PySide6.QtWidgets import (
 from osrs_toolkit import __version__
 from osrs_toolkit.account import AccountLookupError, PlayerProfile, fetch_player
 from osrs_toolkit.attention import (
+    FLIP_CLOSED_STATUS,
     READY_TO_SELL_STATUS,
     journal_alert_positions,
     newly_reached,
@@ -1884,7 +1885,15 @@ class MainWindow(QMainWindow):
         # these and announces nothing, or every offer left finished overnight would blink
         # for attention the moment the app opened.
         self._journal_statuses: dict[int, str] | None = None
+        #: Position id -> item id, alongside ``_journal_statuses`` — what a queued flash
+        #: needs to check against a Grand Exchange slot, which only knows items.
+        self._journal_item_ids: dict[int, int | None] = {}
         self._ge_slot_states: dict[int, str] | None = None
+        #: Items currently sitting finished-but-uncollected on the Grand Exchange. None on
+        #: the same terms as ``_ge_slot_states`` — nothing yet read, or a character just
+        #: connected — so a fresh read is never mistaken for everything on it having just
+        #: been collected.
+        self._ge_terminal_items: frozenset[int] | None = None
         #: What the Needs attention card is counting, so clicking it can go and show them.
         self._attention_positions: set[int] = set()
         # Held until the surface each points at is actually being looked at — see
@@ -3637,6 +3646,7 @@ class MainWindow(QMainWindow):
         statuses = {trade.position_id: trade.status for trade in tracked}
         self._flash_journal_rows(journal_alert_positions(self._journal_statuses, statuses))
         self._journal_statuses = statuses
+        self._journal_item_ids = {trade.position_id: trade.item_id for trade in tracked}
         selected_filter = self.journal_status_filter.currentText()
         selected_period = self.journal_period_filter.currentText()
         # Local, not UTC: "Today" has to mean the user's calendar day, the same day
@@ -4111,6 +4121,7 @@ class MainWindow(QMainWindow):
             # connects is where that character already was, not something that just
             # happened, so the next read has to seed afresh.
             self._ge_slot_states = None
+            self._ge_terminal_items = None
             return
         slots = self._sync_importer.read_offer_state(account_hash)
         states = {slot_index: slot.state for slot_index, slot in slots.items()}
@@ -4118,6 +4129,12 @@ class MainWindow(QMainWindow):
             newly_reached(self._ge_slot_states, states, TERMINAL_OFFER_STATES)
         )
         self._ge_slot_states = states
+        terminal_items = frozenset(
+            slot.item_id for slot in slots.values() if slot.is_terminal and slot.item_id > 0
+        )
+        if self._ge_terminal_items is not None:
+            self._cancel_stale_completed_flashes(self._ge_terminal_items - terminal_items)
+        self._ge_terminal_items = terminal_items
         for slot_index, card in enumerate(self.ge_slot_cards):
             slot = slots.get(slot_index)
             if slot is None:
@@ -4135,6 +4152,36 @@ class MainWindow(QMainWindow):
             return
         self._pending_journal_flash |= pending
         self._release_pending_flashes()
+
+    def _cancel_stale_completed_flashes(self, collected_item_ids: frozenset[int]) -> None:
+        """Drop a queued "come see this" flash once collecting it already answered it.
+
+        A flash queued for a position reaching "Completed" means one thing: the coins are
+        sitting on the Grand Exchange waiting for you. If the Journal page was never the
+        one open, that flash stays queued regardless of how long that takes — see
+        ``_release_pending_flashes`` — and by the time it would finally play, the coins
+        may already be collected. Collecting them is a real click in the game this app
+        never sees happen, only that it already has, the same way ``_render_ge_offers``
+        already reads a slot disappearing from the plugin's own file as the sign of it.
+        Painting the flash after that tells nobody anything they do not already know; it
+        only lights up a row about money that is already theirs.
+
+        Only the "Completed" reason is dropped this way. A flash still queued because a
+        position just reached "Bought" means something else — go list this — and
+        collecting the goods is what makes that possible, not what answers it, so it
+        stays queued exactly as before.
+        """
+        if self._journal_statuses is None or not collected_item_ids:
+            return
+        stale = {
+            position_id
+            for position_id in self._pending_journal_flash
+            if self._journal_item_ids.get(position_id) in collected_item_ids
+            and self._journal_statuses.get(position_id) == FLIP_CLOSED_STATUS
+        }
+        if stale:
+            self._pending_journal_flash -= stale
+            self._update_journal_badge()
 
     def _flash_ge_slots(self, slot_indexes: Iterable[int]) -> None:
         """Queue an attention blink on these Grand Exchange slot cards."""
