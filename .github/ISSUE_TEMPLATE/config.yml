@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: RuneLite plugin issues
+    url: https://github.com/Wolklaw/osrs-toolkit-runelite/issues
+    about: >
+      Problems with the companion plugin itself, such as it not loading in RuneLite or not
+      queueing fills, belong in the plugin repository.
+  - name: Security vulnerability
+    url: https://github.com/Wolklaw/OSRS-Toolkit/blob/main/SECURITY.md
+    about: >
+      Do not open a public issue for an exploitable security problem. Report it by email
+      instead. See the security policy.
+  - name: Wrong prices or missing items
+    url: https://oldschool.runescape.wiki/w/RuneScape:Real-time_Prices
+    about: >
+      Prices come from the OSRS Wiki real-time API. If an item has not traded recently the
+      toolkit shows its trade age rather than inventing a price.

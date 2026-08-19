@@ -1,0 +1,14 @@
+# Text files are stored and checked out with LF on every platform.
+#
+# Without this, a Windows clone with core.autocrlf=true wants CRLF in the
+# working tree while the repository stores LF. Files then get reported as
+# modified forever even though their content is identical to HEAD, and the
+# noise hides real changes. Pinning the ending here keeps the result the same
+# for everyone regardless of their local git settings.
+* text=auto eol=lf
+
+# Never line-ending convert binary assets or build output.
+*.ico binary
+*.png binary
+*.zip binary
+*.exe binary

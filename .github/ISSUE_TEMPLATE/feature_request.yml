@@ -1,0 +1,48 @@
+name: Feature request
+description: Suggest a calculation, a page, or a change to how something works.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        Describe the trading or skilling situation the toolkit handles badly today. What
+        you currently do instead is useful context.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should the toolkit do
+      description: >
+        If this involves a calculation, include the formula or the source you would trust
+        for it. Wiki links are ideal.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where would this live
+      options:
+        - GE Flipper
+        - Watchlist
+        - Trade Journal
+        - Performance
+        - RuneLite activity or sync
+        - Alch Finder
+        - Skilling Profit
+        - PvM Readiness
+        - Settings or app-wide
+        - A new page
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        Please note that the toolkit will not automate gameplay, read game memory, place
+        offers, or do anything else that interacts with the game client. Requests along
+        those lines will be closed. See the game boundaries section of the README.

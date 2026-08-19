@@ -1,0 +1,94 @@
+name: Bug report
+description: Something in the desktop app behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The three fields below (version, build, and what happened)
+        are what make a bug reproducible, so please fill them in even if the problem looks
+        obvious.
+
+        For issues with the RuneLite plugin itself, such as it not appearing in RuneLite,
+        use the [plugin repository](https://github.com/Wolklaw/osrs-toolkit-runelite/issues)
+        instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Toolkit version
+      description: Shown at the bottom of the sidebar, and under Settings > About.
+      placeholder: "1.7.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: build
+    attributes:
+      label: Which build
+      options:
+        - Setup .exe (installed)
+        - Portable .zip
+        - Running from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what the app did instead.
+      placeholder: |
+        1. Opened GE Flipper with a 10m cash stack and 8 slots.
+        2. Clicked Track all 8 recommended offers.
+        3. Expected 8 pending positions. Only 6 appeared.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which page or feature
+      options:
+        - GE Flipper
+        - Watchlist
+        - Trade Journal
+        - Performance
+        - RuneLite activity or sync
+        - Alch Finder
+        - Skilling Profit
+        - PvM Readiness
+        - Settings, themes, or updates
+        - Install, launch, or crash on start
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_text
+    attributes:
+      label: Error message
+      description: >
+        Paste the exact text of any error dialog. The app does not write a log file, so
+        this text and a screenshot are usually the only record of a failure.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or anything else
+      description: >
+        Screenshots are very helpful for wrong numbers or layout problems. Please crop or
+        blur your RuneScape display name if you would rather not share it.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am on the latest release, or I have stated above why I cannot upgrade.
+          required: true
+        - label: >
+            I have not included a Jagex password, bank PIN, or authenticator code. The
+            toolkit never asks for these and they must never be posted here.
+          required: true
