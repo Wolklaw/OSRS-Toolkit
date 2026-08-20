@@ -32,6 +32,12 @@ MAX_LOADOUT_ITEMS = 1_200
 MAX_SKILLS = 40
 MAX_REJECTED_FILES = 200
 MAX_OFFER_STATE_BYTES = 16_384
+MAX_OFFER_SCREEN_BYTES = 4_096
+#: How long a written "the offer box is open" file stays believable. The plugin deletes it the
+#: moment the box closes and re-stamps it on its own ten-second heartbeat while it stays open, so
+#: the only thing this window is really guarding against is a client that stopped existing with
+#: the box still up — which deletes nothing on its way out.
+OFFER_SCREEN_MAX_AGE_SECONDS = 45
 # The Grand Exchange has exactly 8 offer slots, members or not (F2P just has fewer usable
 # ones) — never more, so this both sizes the dashboard and bounds a malformed state file.
 GE_SLOT_COUNT = 8
@@ -106,6 +112,32 @@ class GEOfferSlot:
     @property
     def percent_filled(self) -> float:
         return self.quantity_filled / self.total_quantity * 100 if self.total_quantity else 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class GEOfferScreen:
+    """Where in the Grand Exchange the player is standing in game right now.
+
+    Alone among the things the plugin reports, this is about something that has not happened
+    yet. The numbers a trade needs are already sitting on a row of the trade journal, and this
+    is what lets the journal say which row while the player is in front of the interface that
+    wants them.
+
+    A trade is a session, not a moment, so this says as much as it can at each stage of one.
+    ``item_id`` of 0 is the interface open on nothing in particular — watching an offer fill, or
+    collecting one — which the caller pairs with the slots it already reads. A real ``item_id``
+    is the "Set up offer" box open on that item: the one screen in the whole process with two
+    empty boxes waiting to be typed into.
+    """
+
+    item_id: int
+    item_name: str
+    side: str | None
+
+    @property
+    def focused(self) -> bool:
+        """Whether the player is on one item rather than the interface at large."""
+        return self.item_id > 0
 
 
 def ge_offer_status_label(state: str) -> str:
@@ -213,6 +245,46 @@ class RuneLiteSyncImporter:
             if parsed is not None:
                 slots[parsed.slot] = parsed
         return slots
+
+    def read_offer_screen(self, account_hash: str) -> GEOfferScreen | None:
+        """The Grand Exchange offer box the player has open, or None if there is none.
+
+        No file, an unreadable file, and a stamp too old to trust all answer the same way,
+        because they mean the same thing to a caller about to point at something: don't. The age
+        check is what covers the one case deleting the file cannot — see
+        ``OFFER_SCREEN_MAX_AGE_SECONDS``.
+        """
+        safe_hash = re.sub(r"[^a-f0-9]", "", account_hash) or "unknown"
+        path = self.state_dir / f"{safe_hash}-screen.json"
+        try:
+            if path.is_symlink() or path.stat().st_size > MAX_OFFER_SCREEN_BYTES:
+                return None
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        try:
+            written_at = datetime.fromisoformat(_text(payload.get("updated_at"), "updated_at", 64))
+        except (SyncEventError, ValueError):
+            return None
+        written_at = written_at.replace(tzinfo=UTC) if written_at.tzinfo is None else written_at
+        if (datetime.now(UTC) - written_at).total_seconds() > OFFER_SCREEN_MAX_AGE_SECONDS:
+            return None
+        # An unreadable item is the interface open on nothing in particular, not a bad file: the
+        # plugin writes exactly that whenever the player is at the Grand Exchange without a box
+        # up, and that on its own is worth knowing.
+        try:
+            item_id = _positive_int(payload.get("item_id"), "item id")
+            item_name = _text(payload.get("item_name"), "item name", 128)
+        except SyncEventError:
+            return GEOfferScreen(item_id=0, item_name="", side=None)
+        side = payload.get("side")
+        return GEOfferScreen(
+            item_id=item_id,
+            item_name=item_name,
+            side=side if side in ("buy", "sell") else None,
+        )
 
     def import_pending(
         self,

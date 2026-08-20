@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -170,6 +171,87 @@ def journal_display_status(
     if item_id is None or item_id in placed_item_ids:
         return status
     return PLANNED_STATUS
+
+
+#: Where a position's next move is to buy, and where it is to sell. A row is a candidate for the
+#: open offer box on whichever side it still has something left to do: nothing bought yet, or
+#: bought and waiting to be listed.
+_BUY_SIDE_STATUSES = frozenset({"Pending buy"})
+_SELL_SIDE_STATUSES = frozenset({"Bought", "Listed for sale", "Partially sold"})
+
+
+def offer_screen_is_sell_side(status: str) -> bool:
+    """Whether what a position needs next is a sale rather than a buy.
+
+    Which of the two price columns is the one the player is about to type into, and so which one
+    the highlight has to be on.
+    """
+    return status in _SELL_SIDE_STATUSES
+
+
+def offer_screen_positions(
+    item_id: int | None,
+    side: str | None,
+    candidates: Iterable[tuple[int, int | None, str]],
+) -> frozenset[int]:
+    """The journal rows an open Grand Exchange offer box is about.
+
+    ``candidates`` is ``(position id, item id, stored status)`` for every tracked position; the
+    stored status, not the displayed one, because "Planned" is a label the table puts on a
+    pending buy and not a state a position is ever in.
+
+    Every row for the item, narrowed to the ones whose next move is the side being offered: a
+    flip already bought and waiting to be listed is not what the player is looking at while
+    setting up a buy. The narrowing gives way rather than answering nothing — an item whose only
+    rows are on the other side, or in a status with no side at all like Supplies, still lights
+    them, because the row wanted is far likelier to be one of those than none of them.
+
+    Several rows for one item is an ordinary thing to have and they are all returned. Picking one
+    would mean guessing which of two identical pending buys the player means, and guessing wrong
+    points at the wrong quantity — the exact number this is supposed to be telling them.
+    """
+    if not item_id:
+        return frozenset()
+    matches = {
+        position_id: status
+        for position_id, candidate_item_id, status in candidates
+        if candidate_item_id == item_id
+    }
+    wanted = (
+        _BUY_SIDE_STATUSES
+        if side == "buy"
+        else _SELL_SIDE_STATUSES
+        if side == "sell"
+        else None
+    )
+    if wanted is not None:
+        on_side = frozenset(
+            position_id for position_id, status in matches.items() if status in wanted
+        )
+        if on_side:
+            return on_side
+    return frozenset(matches)
+
+
+def live_offer_positions(
+    live_offers: Iterable[tuple[int, str | None]],
+    candidates: Iterable[tuple[int, int | None, str]],
+) -> frozenset[int]:
+    """The journal rows the offers already out on the Grand Exchange are about.
+
+    What the highlight falls back to for the rest of the trade. Setting an offer up is one screen
+    of a session that goes on through watching it fill and collecting it, and the row stays worth
+    pointing at the whole way — but from the confirm onwards the interface no longer names an
+    item, only the slots do. ``live_offers`` is ``(item id, side)`` per occupied slot, and each is
+    matched to rows exactly as an open box would be, so a row lights for the same reasons at
+    every stage rather than by two rules that could disagree.
+
+    ``candidates`` is consumed once per offer, so it must be a sequence rather than an iterator.
+    """
+    return frozenset().union(
+        *(offer_screen_positions(item_id, side, candidates) for item_id, side in live_offers),
+        frozenset(),
+    )
 
 
 _ATTENTION_STATUSES = frozenset({"Listed for sale", "Partially sold"})

@@ -4,6 +4,35 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-20
+
+### Highlights
+
+- Stand at the Grand Exchange in-game and the journal rows you are trading now pick themselves
+  out on their own — the row washed blue, and inside it the Quantity and the price for the side
+  you are on in the same blue. Those are the figures the game is waiting on, and until now
+  finding them meant reading down a table of near-identical rows with the interface already
+  open.
+- It follows a whole trade rather than one screen of it. Open the "Set up offer" box and the
+  highlight narrows to that one item while you type; confirm, and it stays on the row while the
+  offer fills and while you collect it; walk away and it goes out. Selling works the same way
+  and points at the sell price instead.
+
+### Added
+
+- Blue is deliberately not the yellow of the "this just finished" blink. Yellow means something
+  happened while you were away; blue means you are looking at it right now. A row that wants
+  both gets the blink first and the steady wash back underneath when the blink is over.
+- Several rows for one item all light up rather than one being guessed at — two pending buys of
+  the same teleport are an ordinary thing to have, and pointing at the wrong one would be
+  pointing at the wrong quantity.
+- A "Bought" row keeps the amber or red already on its price to ask. That colour says whether
+  the price clears what the item cost, which this highlight has no way to say, so it is not
+  painted over.
+- Requires the companion RuneLite plugin, which now reports where in the Grand Exchange you are
+  alongside the slots it already reported. Nothing is uploaded, it stops with Grand Exchange
+  tracking, and an older plugin simply never highlights anything.
+
 ## [1.0.1] - 2026-08-19
 
 ### Fixed

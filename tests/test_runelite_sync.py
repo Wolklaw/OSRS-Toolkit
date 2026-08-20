@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from osrs_toolkit.journal import JournalRepository
-from osrs_toolkit.runelite_sync import RuneLiteSyncImporter
+from osrs_toolkit.runelite_sync import (
+    OFFER_SCREEN_MAX_AGE_SECONDS,
+    RuneLiteSyncImporter,
+)
 
 
 def _event(event_type: str, payload: dict[str, object]) -> dict[str, object]:
@@ -1077,3 +1081,95 @@ def test_ge_offer_status_label_reads_naturally() -> None:
     assert ge_offer_status_label("BUYING") == "Buying"
     assert ge_offer_status_label("BOUGHT") == "Bought — collect"
     assert ge_offer_status_label("CANCELLED_SELL") == "Cancelled — collect"
+
+
+def _write_offer_screen(root: Path, account_hash: str, payload: object) -> None:
+    state_dir = root / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / f"{account_hash}-screen.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+
+def _screen_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "updated_at": datetime.now(UTC).isoformat(),
+        "item_id": 21_802,
+        "item_name": "Revenant cave teleport",
+        "side": "buy",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_read_offer_screen_reads_the_box_the_plugin_says_is_open(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    _write_offer_screen(root, "abc123", _screen_payload())
+
+    screen = RuneLiteSyncImporter(root).read_offer_screen("abc123")
+
+    assert screen is not None
+    assert screen.item_id == 21_802
+    assert screen.item_name == "Revenant cave teleport"
+    assert screen.side == "buy"
+
+
+def test_read_offer_screen_is_none_when_no_box_is_open(tmp_path: Path) -> None:
+    assert RuneLiteSyncImporter(tmp_path / "sync").read_offer_screen("abc123") is None
+
+
+def test_read_offer_screen_stops_believing_a_stamp_that_stopped_moving(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "sync"
+    stale = datetime.now(UTC) - timedelta(seconds=OFFER_SCREEN_MAX_AGE_SECONDS + 5)
+    _write_offer_screen(root, "abc123", _screen_payload(updated_at=stale.isoformat()))
+
+    assert RuneLiteSyncImporter(root).read_offer_screen("abc123") is None
+
+
+def test_read_offer_screen_drops_a_side_it_does_not_recognise(tmp_path: Path) -> None:
+    """A side that means nothing is worse than no side: it would narrow to the wrong rows."""
+    root = tmp_path / "sync"
+    _write_offer_screen(root, "abc123", _screen_payload(side="haggle"))
+
+    screen = RuneLiteSyncImporter(root).read_offer_screen("abc123")
+
+    assert screen is not None
+    assert screen.side is None
+
+
+def test_read_offer_screen_refuses_a_malformed_file(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    state_dir = root / "state"
+    state_dir.mkdir(parents=True)
+    (state_dir / "abc123-screen.json").write_text("{not json", encoding="utf-8")
+
+    assert RuneLiteSyncImporter(root).read_offer_screen("abc123") is None
+
+
+def test_read_offer_screen_reads_no_item_as_standing_there_unfocused(tmp_path: Path) -> None:
+    """At the Grand Exchange with no box up — watching an offer fill, or collecting one."""
+    root = tmp_path / "sync"
+    _write_offer_screen(root, "abc123", _screen_payload(item_id=0, item_name=None, side=None))
+
+    screen = RuneLiteSyncImporter(root).read_offer_screen("abc123")
+
+    assert screen is not None
+    assert screen.focused is False
+    assert screen.item_id == 0
+
+
+def test_read_offer_screen_scopes_by_account_hash(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    _write_offer_screen(root, "abc123", _screen_payload())
+
+    assert RuneLiteSyncImporter(root).read_offer_screen("different") is None
+
+
+def test_read_offer_screen_rejects_an_oversized_file(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    _write_offer_screen(root, "abc123", _screen_payload(item_name="x" * 8_000))
+
+    assert RuneLiteSyncImporter(root).read_offer_screen("abc123") is None

@@ -107,6 +107,11 @@ targets preserved. A position can move through **Bought**, **Listed for sale**, 
   way round. The same flash marks a sale closing out, and the rows a newly tracked plan just
   created. A flash that happens while you are in-game waits: the sidebar carries a dot until
   you come back and look, then plays.
+- Stand at the Grand Exchange in-game and the rows you are trading pick themselves out on their
+  own: the row washed blue, with the Quantity and the price for the side you are on picked out
+  inside it. It follows a whole trade — the "Set up offer" box narrows it to the one item while
+  you type, it stays on the row while the offer fills and while you collect, and it goes out when
+  you walk away.
 - Click any Grand Exchange slot to jump straight to that item's journal row, widening the
   status and period filters if they were hiding it.
 - Record any number of buy fills and sale fills at different quantities and prices. Both sides of
@@ -192,6 +197,9 @@ including while the desktop app is closed, and imported automatically when the t
 - A synced buy fill with nothing tracked yet starts a new Journal position sized to the offer's
   real total quantity, so later fills of the same order keep landing on it instead of only
   appearing once the whole order is filled.
+- Where in the Grand Exchange you are standing is reported alongside the slots, so the Trade
+  Journal can point at the row whose quantity and price the game is waiting on. It is part of
+  Grand Exchange tracking and stops with it; nothing is uploaded.
 - Optional PvM gear sync is **off by default**: when enabled and you open your bank in-game, the
   plugin records your equipped gear, inventory, bank contents, and skill levels for the PvM
   Readiness page. Nothing is uploaded.
