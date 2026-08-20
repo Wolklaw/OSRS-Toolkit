@@ -13,9 +13,13 @@ from osrs_toolkit.models import ItemMapping, MarketPoint
 # dose so any charge level satisfies them; strip it before comparing names.
 _DOSE_SUFFIX = re.compile(r"\s*\(\d+\)\s*$")
 
+# An imbued item (e.g. "Slayer helmet (i)") is a strict upgrade of its base form, so owning
+# the imbued version should satisfy a checklist that just asks for the base item.
+_IMBUED_SUFFIX = re.compile(r"\s*\(i\)\s*$")
+
 
 def _normalize_name(name: str) -> str:
-    return _DOSE_SUFFIX.sub("", name).casefold().strip()
+    return _IMBUED_SUFFIX.sub("", _DOSE_SUFFIX.sub("", name)).casefold().strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,10 +142,24 @@ def _prayer_and_food(
     )
 
 
+# Current best-in-slot-ish melee weapons, shared across every "strong melee weapon" checklist
+# entry so an account with modern gear (fang, scythe, soulreaper axe, ...) isn't flagged as
+# missing a weapon slot just because a given boss's list predates that item.
+_META_MELEE_WEAPONS: tuple[str, ...] = (
+    "Osmumten's fang",
+    "Scythe of vitur",
+    "Ghrazi rapier",
+    "Soulreaper axe",
+    "Blade of saeldor",
+    "Abyssal tentacle",
+    "Abyssal whip",
+)
+
+
 PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     PvmActivity(
         name="Vorkath",
-        wiki_url="https://oldschool.runescape.wiki/w/Vorkath",
+        wiki_url="https://oldschool.runescape.wiki/w/Vorkath/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 70, "Prayer": 43, "Defence": 60},
         gear=(
             GearRequirement("Anti-dragon breath protection", ("Anti-dragon shield", "Dragonfire shield", "Dragonfire ward")),
@@ -154,11 +172,11 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Zulrah",
-        wiki_url="https://oldschool.runescape.wiki/w/Zulrah",
+        wiki_url="https://oldschool.runescape.wiki/w/Zulrah/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 70, "Magic": 70, "Prayer": 43},
         gear=(
             GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")),
-            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff")),
+            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff", "Tumeken's shadow")),
             GearRequirement("Anti-venom", ("Anti-venom", "Anti-venom+")),
             GearRequirement("Serpentine helm or equivalent poison immunity", ("Serpentine helm", "Anti-venom+")),
         ),
@@ -168,10 +186,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="General Graardor (Bandos)",
-        wiki_url="https://oldschool.runescape.wiki/w/General_Graardor",
+        wiki_url="https://oldschool.runescape.wiki/w/General_Graardor/Strategies",
         skill_requirements={"Hitpoints": 70, "Strength": 70, "Defence": 65, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Armadyl godsword", "Ghrazi rapier", "Abyssal whip", "Abyssal tentacle")),
+            GearRequirement("Strong melee weapon", ("Armadyl godsword",) + _META_MELEE_WEAPONS),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=900_000,
@@ -180,7 +198,7 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Kree'arra (Armadyl)",
-        wiki_url="https://oldschool.runescape.wiki/w/Kree%27arra",
+        wiki_url="https://oldschool.runescape.wiki/w/Kree%27arra/Strategies",
         skill_requirements={"Hitpoints": 70, "Ranged": 70, "Defence": 65, "Prayer": 43},
         gear=(
             GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow")),
@@ -192,19 +210,19 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Cerberus",
-        wiki_url="https://oldschool.runescape.wiki/w/Cerberus",
+        wiki_url="https://oldschool.runescape.wiki/w/Cerberus/Strategies",
         skill_requirements={"Hitpoints": 75, "Slayer": 91, "Defence": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal tentacle", "Ghrazi rapier", "Abyssal whip", "Scythe of vitur")),
-            GearRequirement("Souls/spirits protection", ("Antifire potion", "Super antifire potion")),
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
+            GearRequirement("Antifire protection (lava pools)", ("Antifire potion", "Super antifire potion")),
         ),
         gross_gp_per_hour=1_700_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 5),
-        notes="Requires 91 Slayer to damage at all, regardless of task. Prayer flicking between attack styles is expected for efficient kills.",
+        notes="Requires 91 Slayer to damage at all, regardless of task. Its ghostly souls drain prayer or hitpoints on contact — a spectral spirit shield or Ward of Arceuus cuts that drain, though neither is required.",
     ),
     PvmActivity(
         name="King Black Dragon",
-        wiki_url="https://oldschool.runescape.wiki/w/King_Black_Dragon",
+        wiki_url="https://oldschool.runescape.wiki/w/King_Black_Dragon/Strategies",
         skill_requirements={"Hitpoints": 65, "Prayer": 43},
         gear=(
             GearRequirement("Anti-dragon breath protection", ("Anti-dragon shield", "Dragonfire shield", "Dragonfire ward", "Super antifire potion")),
@@ -215,10 +233,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Giant Mole",
-        wiki_url="https://oldschool.runescape.wiki/w/Giant_Mole",
+        wiki_url="https://oldschool.runescape.wiki/w/Giant_Mole/Strategies",
         skill_requirements={"Hitpoints": 50},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal whip", "Abyssal tentacle", "Dragon scimitar")),
+            GearRequirement("Strong melee weapon", ("Dragon scimitar",) + _META_MELEE_WEAPONS),
         ),
         gross_gp_per_hour=450_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 4),
@@ -226,10 +244,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Barrows",
-        wiki_url="https://oldschool.runescape.wiki/w/Barrows",
+        wiki_url="https://oldschool.runescape.wiki/w/Barrows/Strategies",
         skill_requirements={"Hitpoints": 50, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal whip", "Abyssal tentacle", "Dragon scimitar", "Ghrazi rapier")),
+            GearRequirement("Strong melee weapon", ("Dragon scimitar",) + _META_MELEE_WEAPONS),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=650_000,
@@ -238,10 +256,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Kalphite Queen",
-        wiki_url="https://oldschool.runescape.wiki/w/Kalphite_Queen",
+        wiki_url="https://oldschool.runescape.wiki/w/Kalphite_Queen/Strategies",
         skill_requirements={"Hitpoints": 50},
         gear=(
-            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Zaryte crossbow")),
+            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Zaryte crossbow", "Twisted bow", "Tumeken's shadow")),
         ),
         gross_gp_per_hour=400_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 6),
@@ -249,11 +267,11 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Dagannoth Kings",
-        wiki_url="https://oldschool.runescape.wiki/w/Dagannoth_Kings",
+        wiki_url="https://oldschool.runescape.wiki/w/Dagannoth_Kings/Strategies",
         skill_requirements={"Hitpoints": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Melee weapon", ("Abyssal whip", "Abyssal tentacle", "Ghrazi rapier")),
-            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow")),
+            GearRequirement("Melee weapon", _META_MELEE_WEAPONS),
+            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=700_000,
@@ -262,10 +280,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Corporeal Beast",
-        wiki_url="https://oldschool.runescape.wiki/w/Corporeal_Beast",
+        wiki_url="https://oldschool.runescape.wiki/w/Corporeal_Beast/Strategies",
         skill_requirements={"Hitpoints": 75, "Strength": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Ghrazi rapier", "Abyssal tentacle", "Scythe of vitur")),
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
             GearRequirement("Spirit shield or equivalent", ("Spectral spirit shield", "Elysian spirit shield", "Arcane spirit shield")),
         ),
         gross_gp_per_hour=1_200_000,
@@ -274,10 +292,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Thermonuclear Smoke Devil",
-        wiki_url="https://oldschool.runescape.wiki/w/Thermonuclear_smoke_devil",
+        wiki_url="https://oldschool.runescape.wiki/w/Thermonuclear_smoke_devil/Strategies",
         skill_requirements={"Slayer": 93, "Hitpoints": 70},
         gear=(
-            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Armadyl crossbow")),
+            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Armadyl crossbow", "Tumeken's shadow")),
             GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask")),
         ),
         gross_gp_per_hour=500_000,
@@ -286,10 +304,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Kraken",
-        wiki_url="https://oldschool.runescape.wiki/w/Kraken",
+        wiki_url="https://oldschool.runescape.wiki/w/Kraken/Strategies",
         skill_requirements={"Slayer": 87, "Magic": 68},
         gear=(
-            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff")),
+            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff", "Tumeken's shadow")),
         ),
         gross_gp_per_hour=600_000,
         supplies=_prayer_and_food(2, _SHARK, "Shark", 8),
@@ -297,11 +315,11 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Alchemical Hydra",
-        wiki_url="https://oldschool.runescape.wiki/w/Alchemical_Hydra",
+        wiki_url="https://oldschool.runescape.wiki/w/Alchemical_Hydra/Strategies",
         skill_requirements={"Slayer": 95, "Hitpoints": 75, "Defence": 70},
         gear=(
-            GearRequirement("Strong melee weapon", ("Dragon hunter lance", "Scythe of vitur", "Abyssal tentacle")),
-            GearRequirement("Ranged weapon", ("Dragon hunter crossbow", "Armadyl crossbow")),
+            GearRequirement("Strong melee weapon", ("Dragon hunter lance",) + _META_MELEE_WEAPONS),
+            GearRequirement("Ranged weapon", ("Dragon hunter crossbow", "Armadyl crossbow", "Zaryte crossbow")),
         ),
         gross_gp_per_hour=1_900_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
@@ -309,10 +327,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Grotesque Guardians",
-        wiki_url="https://oldschool.runescape.wiki/w/Grotesque_Guardians",
+        wiki_url="https://oldschool.runescape.wiki/w/Grotesque_Guardians/Strategies",
         skill_requirements={"Slayer": 75, "Hitpoints": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Ghrazi rapier", "Abyssal tentacle", "Blade of saeldor")),
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=1_100_000,
@@ -321,10 +339,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Sarachnis",
-        wiki_url="https://oldschool.runescape.wiki/w/Sarachnis",
+        wiki_url="https://oldschool.runescape.wiki/w/Sarachnis/Strategies",
         skill_requirements={"Hitpoints": 50},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal whip", "Rune scimitar", "Dragon scimitar")),
+            GearRequirement("Strong melee weapon", ("Rune scimitar", "Dragon scimitar") + _META_MELEE_WEAPONS),
         ),
         gross_gp_per_hour=350_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 5),
@@ -332,10 +350,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Vet'ion",
-        wiki_url="https://oldschool.runescape.wiki/w/Vet%27ion",
+        wiki_url="https://oldschool.runescape.wiki/w/Vet%27ion/Strategies",
         skill_requirements={"Hitpoints": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal whip", "Abyssal tentacle", "Ghrazi rapier")),
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=450_000,
@@ -344,10 +362,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Callisto",
-        wiki_url="https://oldschool.runescape.wiki/w/Callisto",
+        wiki_url="https://oldschool.runescape.wiki/w/Callisto/Strategies",
         skill_requirements={"Hitpoints": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Strong melee weapon", ("Abyssal whip", "Abyssal tentacle", "Ghrazi rapier")),
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=450_000,
@@ -356,26 +374,143 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
     ),
     PvmActivity(
         name="Venenatis",
-        wiki_url="https://oldschool.runescape.wiki/w/Venenatis",
+        wiki_url="https://oldschool.runescape.wiki/w/Venenatis/Strategies",
         skill_requirements={"Hitpoints": 70, "Ranged": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Ranged or melee weapon", ("Toxic blowpipe", "Abyssal whip", "Armadyl crossbow")),
+            GearRequirement("Ranged or melee weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow") + _META_MELEE_WEAPONS),
             GearRequirement("Anti-venom", ("Anti-venom", "Anti-venom+")),
         ),
         gross_gp_per_hour=450_000,
         supplies=_prayer_and_food(2, _SHARK, "Shark", 7),
-        notes="Wilderness boss (level 464) — other players can attack you here. Applies venom; anti-venom is strongly recommended.",
+        notes="Wilderness boss (level 464) — other players can attack you here. Applies venom; anti-venom is strongly recommended (plain anti-poison does not cure or block venom).",
     ),
     PvmActivity(
         name="Chaos Elemental",
-        wiki_url="https://oldschool.runescape.wiki/w/Chaos_Elemental",
+        wiki_url="https://oldschool.runescape.wiki/w/Chaos_Elemental/Strategies",
         skill_requirements={"Hitpoints": 60},
         gear=(
-            GearRequirement("Strong melee or ranged weapon", ("Abyssal whip", "Toxic blowpipe", "Rune crossbow")),
+            GearRequirement("Strong melee or ranged weapon", ("Toxic blowpipe", "Rune crossbow", "Zaryte crossbow") + _META_MELEE_WEAPONS),
         ),
         gross_gp_per_hour=300_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 6),
         notes="Wilderness boss (level 305) — other players can attack you here. Randomly teleports players around its arena.",
+    ),
+    PvmActivity(
+        name="Duke Sucellus",
+        wiki_url="https://oldschool.runescape.wiki/w/Duke_Sucellus/Strategies",
+        skill_requirements={"Hitpoints": 75, "Defence": 90, "Prayer": 70},
+        gear=(
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
+            GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask")),
+        ),
+        gross_gp_per_hour=8_300_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Requires Desert Treasure II. Face protection roughly halves the poisonous gas vent damage during the fight; Protect from Melee cuts the icicle and slam damage.",
+    ),
+    PvmActivity(
+        name="Vardorvis",
+        wiki_url="https://oldschool.runescape.wiki/w/Vardorvis/Strategies",
+        skill_requirements={"Hitpoints": 75, "Defence": 90, "Prayer": 70},
+        gear=(
+            GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
+            GearRequirement("Protection prayer access", ("Prayer potion",)),
+        ),
+        gross_gp_per_hour=7_800_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Requires Desert Treasure II. Protect from Melee is the default prayer; switch to Protect from Missiles for the Head Gaze special attack.",
+    ),
+    PvmActivity(
+        name="The Leviathan",
+        wiki_url="https://oldschool.runescape.wiki/w/The_Leviathan/Strategies",
+        skill_requirements={"Hitpoints": 75, "Ranged": 90, "Defence": 70, "Prayer": 74},
+        gear=(
+            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement("Protection prayer access", ("Prayer potion",)),
+        ),
+        gross_gp_per_hour=6_300_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Requires Desert Treasure II. Melee cannot reach the Leviathan — ranged only. Also requires Shadow spellbook access to stun it between phases.",
+    ),
+    PvmActivity(
+        name="The Whisperer",
+        wiki_url="https://oldschool.runescape.wiki/w/The_Whisperer/Strategies",
+        skill_requirements={"Hitpoints": 75, "Magic": 90, "Prayer": 77},
+        gear=(
+            GearRequirement("Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")),
+            GearRequirement("Blackstone fragment", ("Blackstone fragment",)),
+        ),
+        gross_gp_per_hour=6_000_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Requires Desert Treasure II. The Blackstone fragment is mandatory to start the fight. Her sanity meter drains in the Shadow Realm — running it out is fatal.",
+    ),
+    PvmActivity(
+        name="Phantom Muspah",
+        wiki_url="https://oldschool.runescape.wiki/w/Phantom_Muspah/Strategies",
+        skill_requirements={"Hitpoints": 75, "Ranged": 90, "Defence": 80, "Prayer": 74},
+        gear=(
+            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement("Protection prayer access", ("Prayer potion",)),
+        ),
+        gross_gp_per_hour=5_900_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Requires Secrets of the North. Melee is not recommended; the boss punishes it in its enraged form. Protect from Magic blocks its corruption effect outright.",
+    ),
+    PvmActivity(
+        name="Nex",
+        wiki_url="https://oldschool.runescape.wiki/w/Nex/Strategies",
+        skill_requirements={"Hitpoints": 70, "Ranged": 90, "Defence": 90, "Prayer": 74},
+        gear=(
+            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement("Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")),
+            GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask", "Gas mask")),
+        ),
+        gross_gp_per_hour=6_500_000,
+        supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
+        notes="Effectively requires a team or duo — 3,400 hitpoints and five Ancient Magicks phases make solo unrealistic. GP/hr shown is a team rate; duo splits run notably higher.",
+    ),
+    PvmActivity(
+        name="Scurrius",
+        wiki_url="https://oldschool.runescape.wiki/w/Scurrius/Strategies",
+        skill_requirements={"Hitpoints": 60, "Prayer": 43},
+        gear=(
+            GearRequirement("Protection prayer access", ("Prayer potion",)),
+        ),
+        gross_gp_per_hour=190_000,
+        supplies=_prayer_and_food(1, _SHARK, "Shark", 5),
+        notes="No formal requirements beyond 60 combat. Attacks rotate between melee, ranged, and magic, so quick prayer switching matters more than any one weapon.",
+    ),
+    PvmActivity(
+        name="Blue Moon",
+        wiki_url="https://oldschool.runescape.wiki/w/Moons_of_Peril/Strategies",
+        skill_requirements={"Hitpoints": 75},
+        gear=(
+            GearRequirement("Crush weapon", ("Elder maul", "Dragon warhammer", "Bone mace")),
+        ),
+        gross_gp_per_hour=1_750_000,
+        supplies=(SupplyItem(_SHARK, "Shark", 5),),
+        notes="Requires the Perilous Moons quest. Weak to crush. Protection prayers don't block her attacks, so gear and food carry the fight, not prayer flicking.",
+    ),
+    PvmActivity(
+        name="Blood Moon",
+        wiki_url="https://oldschool.runescape.wiki/w/Moons_of_Peril/Strategies",
+        skill_requirements={"Hitpoints": 75},
+        gear=(
+            GearRequirement("Slash weapon", ("Scythe of vitur", "Soulreaper axe", "Abyssal tentacle", "Dragon scimitar")),
+        ),
+        gross_gp_per_hour=1_750_000,
+        supplies=(SupplyItem(_SHARK, "Shark", 5),),
+        notes="Requires the Perilous Moons quest. Weak to slash. Protection prayers don't block her attacks, so gear and food carry the fight, not prayer flicking.",
+    ),
+    PvmActivity(
+        name="Eclipse Moon",
+        wiki_url="https://oldschool.runescape.wiki/w/Moons_of_Peril/Strategies",
+        skill_requirements={"Hitpoints": 75},
+        gear=(
+            GearRequirement("Stab weapon", ("Osmumten's fang", "Ghrazi rapier", "Zamorakian spear", "Dragon dagger")),
+        ),
+        gross_gp_per_hour=1_750_000,
+        supplies=(SupplyItem(_SHARK, "Shark", 5),),
+        notes="Requires the Perilous Moons quest. Weak to stab. Protection prayers don't block her attacks, so gear and food carry the fight, not prayer flicking.",
     ),
 )
 

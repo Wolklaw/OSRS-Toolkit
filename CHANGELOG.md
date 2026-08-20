@@ -4,6 +4,34 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-20
+
+### Highlights
+
+- PvM Readiness now covers 30 bosses instead of 20, adding Duke Sucellus, Vardorvis, The
+  Leviathan, and The Whisperer (Desert Treasure II), Phantom Muspah, Nex, Scurrius, and the
+  three Perilous Moons bosses (Blue Moon, Blood Moon, Eclipse Moon).
+- PvM Readiness's gear checklists were out of date: a maxed melee weapon like Osmumten's fang,
+  Scythe of vitur, Soulreaper axe, or Blade of saeldor didn't count toward "strong melee
+  weapon," so a well-geared account could be told it was missing something it plainly owned.
+  Every melee checklist now recognizes current best-in-slot weapons.
+- Double-clicking a PvM Readiness row now opens the boss's Strategies page on the wiki
+  instead of its general overview page — the page that actually explains how to fight it.
+
+### Fixed
+
+- GE Flipper's "Track all 1 recommended offers" button said "offers" even with exactly one
+  offer to track. It now says "offer" when there's just one.
+- PvM Readiness didn't recognize an imbued item as satisfying a checklist that just asked for
+  the base item — an imbued slayer helmet, for example, was flagged as a missing face mask.
+  An imbued item is strictly better than its base form, so it now counts.
+- Cerberus's second gear checklist entry was labeled "Souls/spirits protection" but actually
+  checked for antifire potions. Antifire is real at Cerberus — it's for the lava pools he
+  stands you in, a different mechanic from the ghostly "souls" that drain your prayer — the
+  label just described the wrong one. Relabeled to "Antifire protection (lava pools)," with a
+  note on what actually reduces the souls' drain (a spectral spirit shield or Ward of
+  Arceuus, neither required).
+
 ## [1.1.0] - 2026-08-20
 
 ### Highlights

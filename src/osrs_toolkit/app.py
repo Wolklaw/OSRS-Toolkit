@@ -3456,8 +3456,9 @@ class MainWindow(QMainWindow):
         )
         if self._portfolio:
             self.track_top_button.setEnabled(True)
+            offer_count = len(self._portfolio)
             self.track_top_button.setText(
-                f"Track all {len(self._portfolio)} recommended offers"
+                f"Track all {offer_count} recommended offer{'' if offer_count == 1 else 's'}"
             )
             self.alternative_recommendation_button.setEnabled(True)
             allocated = sum(item.capital_required for item in self._portfolio)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osrs-toolkit"
-version = "1.1.0"
+version = "1.1.1"
 description = "A Windows desktop companion for Old School RuneScape market analysis and trade tracking."
 readme = "README.md"
 license = { file = "LICENSE" }
