@@ -4,6 +4,17 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-20
+
+### Fixed
+
+- PvM Readiness's Perilous Moons checklists (Blue Moon, Blood Moon, Eclipse Moon) only
+  recognized 3-4 weapons each, missing several the wiki's own strategy guide recommends —
+  including the moons' own reward weapons, Dual macuahuitl and Belle's folly. An account
+  correctly geared for a moon could be told it was missing a weapon it was holding.
+- Eclipse Moon's stab checklist referenced "Zamorakian spear," which isn't a real item name
+  and could never match anything a player owned. Corrected to Zamorakian hasta.
+
 ## [1.1.1] - 2026-08-20
 
 ### Highlights
