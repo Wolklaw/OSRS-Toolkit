@@ -4,6 +4,19 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-20
+
+### Fixed
+
+- PvM Readiness's "Missing gear" column named only the requirement category (e.g. "Ranged
+  weapon"), not which items would satisfy it — you had to already know the checklist to
+  know what to buy or bank. It now lists the specific items accepted for that slot.
+- The Leviathan, Phantom Muspah, and Nex all required a ranged weapon but left the Toxic
+  blowpipe off their accepted list, despite it being wiki-recommended gear for all three —
+  an account holding one could be told it needed a ranged weapon it already owned.
+- The in-app update check only ran once, at startup. A session left open for a while would
+  never notice a release published after launch. It now rechecks automatically every hour.
+
 ## [1.1.2] - 2026-08-20
 
 ### Fixed

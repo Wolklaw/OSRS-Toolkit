@@ -748,14 +748,33 @@ class SettingsDialog(QDialog):
 
         support = QWidget()
         support_layout = QVBoxLayout(support)
+        help_text = QLabel(
+            "<h2>Get help</h2>"
+            "<p>Found a bug, have a feature request, or something isn't working right? "
+            "Here's how to reach me:</p>"
+            "<p><b>Project page</b><br>"
+            "<a href='https://github.com/Wolklaw/OSRS-Toolkit'>github.com/Wolklaw/OSRS-Toolkit</a> "
+            "&mdash; report an issue, check the changelog, or browse the source.</p>"
+            "<p><b>Email</b><br>"
+            "<a href='mailto:wolklawgaming@gmail.com'>wolklawgaming@gmail.com</a></p>"
+            "<p><b>In-game</b><br>Lord Wolklaw</p>"
+        )
+        help_text.setWordWrap(True)
+        help_text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        help_text.setOpenExternalLinks(True)
+        support_layout.addWidget(help_text)
         support_text = QLabel(
-            "OSRS Toolkit is free to use. If it saves you time and you would like to support "
+            "<h2>Support development</h2>"
+            "<p>OSRS Toolkit is free to use. If it saves you time and you would like to support "
             "its development, you can leave an optional tip. Every feature remains available "
-            "whether you tip or not."
+            "whether you tip or not.</p>"
         )
         support_text.setWordWrap(True)
         support_layout.addWidget(support_text)
-        tip_button = QPushButton("Tip the developer (optional)")
+        tip_button = QPushButton("Tip the developer (optional)", objectName="secondary")
         tip_button.clicked.connect(
             lambda: QDesktopServices.openUrl(QUrl("https://paypal.me/wolklaw"))
         )
@@ -1977,6 +1996,13 @@ class MainWindow(QMainWindow):
         self._market_timer.setInterval(5 * 60 * 1_000)
         self._market_timer.timeout.connect(self.load_market)
         self._market_timer.start()
+        # The startup check only sees releases published before this launch. A session left
+        # open for hours would otherwise never learn about one published after — recheck on
+        # the same quiet, dialog-only-if-newer terms as startup.
+        self._update_check_timer = QTimer(self)
+        self._update_check_timer.setInterval(60 * 60 * 1_000)
+        self._update_check_timer.timeout.connect(self._start_startup_update_check)
+        self._update_check_timer.start()
 
     def _build_ui(self) -> None:
         root = QWidget()

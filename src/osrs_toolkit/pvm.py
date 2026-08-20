@@ -424,7 +424,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/The_Leviathan/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 90, "Defence": 70, "Prayer": 74},
         gear=(
-            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement(
+                "Ranged weapon",
+                ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow", "Toxic blowpipe"),
+            ),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=6_300_000,
@@ -448,7 +451,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Phantom_Muspah/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 90, "Defence": 80, "Prayer": 74},
         gear=(
-            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement(
+                "Ranged weapon",
+                ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow", "Toxic blowpipe"),
+            ),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=5_900_000,
@@ -460,7 +466,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Nex/Strategies",
         skill_requirements={"Hitpoints": 70, "Ranged": 90, "Defence": 90, "Prayer": 74},
         gear=(
-            GearRequirement("Ranged weapon", ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow")),
+            GearRequirement(
+                "Ranged weapon",
+                ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow", "Toxic blowpipe"),
+            ),
             GearRequirement("Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")),
             GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask", "Gas mask")),
         ),
@@ -583,7 +592,7 @@ def assess_readiness(
         if skills.get(skill, 1) < required
     )
     missing_gear = tuple(
-        requirement.label
+        f"{requirement.label} ({', '.join(requirement.any_of)})"
         for requirement in activity.gear
         if not any(_normalize_name(item_name) in owned_names for item_name in requirement.any_of)
     )
