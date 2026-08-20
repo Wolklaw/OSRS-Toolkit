@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -19,6 +20,21 @@ USER_AGENT = (
 )
 _FINALIZE_ATTEMPTS = 5
 _FINALIZE_RETRY_SECONDS = 0.4
+
+# Inno Setup registers an uninstall entry under the AppId in packaging/installer.iss with
+# "_is1" appended. Changing the AppId there without changing it here would leave every
+# installed copy believing it is portable, quietly demoting in-place updates back to the
+# wizard, so the two are a pair.
+_SETUP_APP_ID = "{D8518C0E-7D14-47D9-A9D8-4030E3B25DB6}_is1"
+_UNINSTALL_KEY = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{_SETUP_APP_ID}"
+
+
+@dataclass(frozen=True)
+class InstallLocation:
+    """A registered installation the setup program can update where it stands."""
+
+    directory: Path
+    all_users: bool
 
 
 @dataclass(frozen=True)
@@ -81,7 +97,7 @@ def download_installer(
     progress: Callable[[int], None] | None = None,
     timeout: float = 60.0,
 ) -> Path:
-    update_dir = Path(tempfile.gettempdir()) / "OSRSToolkitUpdate"
+    update_dir = update_directory()
     update_dir.mkdir(parents=True, exist_ok=True)
     destination = update_dir / release.installer_name
     partial = destination.with_suffix(destination.suffix + ".part")
@@ -135,5 +151,92 @@ def _finalize_download(partial: Path, destination: Path) -> None:
     ) from last_error
 
 
-def launch_installer(path: Path) -> None:
-    subprocess.Popen([str(path)], close_fds=True)
+def update_directory() -> Path:
+    """Where the downloaded installer and its log live — outside the folder being replaced."""
+    return Path(tempfile.gettempdir()) / "OSRSToolkitUpdate"
+
+
+def application_directory() -> Path:
+    """The folder the running build was started from."""
+    return Path(sys.executable).parent
+
+
+def find_install(app_directory: Path | None = None) -> InstallLocation | None:
+    """The registered installation this running copy belongs to, if it is one.
+
+    A portable copy is not an installation: nothing registered it, nothing knows how to
+    remove it, and rewriting its folder from underneath it is not this program's business.
+    Setup records the folder it installed into, so "is the code now running the installed
+    copy?" is answered by comparing that folder against this one — rather than by looking
+    for Program Files somewhere in the path, which a portable folder is free to sit inside
+    too, and which says nothing about whether there is an installation to update.
+    """
+    if sys.platform != "win32":
+        return None
+    import winreg
+
+    directory = (app_directory or application_directory()).resolve()
+    # Machine-wide first: both registrations can exist at once, and the one this
+    # executable is actually running from is the one that answers the question.
+    for root, all_users in (
+        (winreg.HKEY_LOCAL_MACHINE, True),
+        (winreg.HKEY_CURRENT_USER, False),
+    ):
+        try:
+            with winreg.OpenKey(root, _UNINSTALL_KEY) as key:
+                location = str(winreg.QueryValueEx(key, "InstallLocation")[0]).strip()
+        except OSError:
+            continue
+        if not location:
+            continue
+        try:
+            registered = Path(location).resolve()
+        except OSError:
+            continue
+        if registered == directory:
+            return InstallLocation(directory=directory, all_users=all_users)
+    return None
+
+
+def silent_install_arguments(installer: Path, install: InstallLocation) -> list[str]:
+    """The command line that replaces an installed copy without showing a wizard.
+
+    ``/DIR`` and the privilege switch together are what keep an update where it already
+    is. Left to its defaults the setup program installs wherever it is entitled to, so a
+    machine-wide copy updated by an unelevated app would land in the user's own folder and
+    leave the original sitting there — two installations, one of them stale, and a Start
+    Menu entry pointing at whichever was written last.
+    """
+    return [
+        str(installer),
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/NOCANCEL",
+        # Read by the [Run] section of packaging/installer.iss: start the app again once
+        # the files are in place, because this update closed it in order to replace them.
+        "/RELAUNCH=1",
+        "/ALLUSERS" if install.all_users else "/CURRENTUSER",
+        f"/DIR={install.directory}",
+        # The app is gone by the time anything can go wrong, so this log is the only
+        # account of a failed update that anyone could later be asked for.
+        f"/LOG={update_directory() / 'install.log'}",
+    ]
+
+
+def start_installer(path: Path, install: InstallLocation | None = None) -> None:
+    """Hand the update to the setup program and get out of its way.
+
+    An installed copy is replaced in place and restarted with no wizard: the app has
+    already asked whether to update, and putting the same question in a second window is
+    not consent, it is another dialog. A portable copy still gets the wizard, because for
+    it the wizard asks something real — it is being offered an installed copy it does not
+    have, rather than a newer version of one it does.
+
+    Detached, because what it is about to overwrite includes this process's own executable.
+    """
+    arguments = silent_install_arguments(path, install) if install else [str(path)]
+    creation_flags = 0
+    if sys.platform == "win32":
+        creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(arguments, close_fds=True, creationflags=creation_flags)

@@ -24,7 +24,12 @@ if ($LASTEXITCODE -ne 0) { throw "Tests failed." }
 if ($LASTEXITCODE -ne 0) { throw "Code-quality checks failed." }
 & $Python tools\make_icon.py
 if ($LASTEXITCODE -ne 0) { throw "Icon generation failed." }
-& $Python -m PyInstaller --noconfirm --clean packaging\osrs_toolkit.spec
+& $Python tools\make_installer_art.py
+if ($LASTEXITCODE -ne 0) { throw "Installer artwork generation failed." }
+# Nuitka, not PyInstaller, since 1.1 — packaging\build_app.py says why, and carries the
+# full argument list. Expect this step to take minutes rather than seconds: it is a C
+# compile of the whole application and its dependencies, not an archive of them.
+& $Python packaging\build_app.py
 if ($LASTEXITCODE -ne 0) { throw "Application packaging failed." }
 
 New-Item -ItemType Directory -Path $ReleaseDir -Force | Out-Null

@@ -146,8 +146,9 @@ from osrs_toolkit.updater import (
     ReleaseInfo,
     download_installer,
     fetch_latest_release,
+    find_install,
     is_newer_version,
-    launch_installer,
+    start_installer,
 )
 
 
@@ -322,6 +323,11 @@ class UpdateAvailableDialog(QDialog):
 
     Owns the download so both the start-up check and the manual check in Settings
     install an update the same way.
+
+    What "install" means depends on what this copy is. An installed one is replaced where
+    it stands and reopened, with no second wizard to sit through — this window already
+    asked. A portable one is offered the wizard, which for it is a real question rather
+    than a repeat of this one.
     """
 
     def __init__(
@@ -333,6 +339,9 @@ class UpdateAvailableDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.release = release
+        # Settled before anything is downloaded so the window can say which of the two
+        # things is about to happen, rather than finding out after the download.
+        self._install = find_install()
         self._download_thread: QThread | None = None
         self._download_worker: QObject | None = None
         self.setWindowTitle("Update available")
@@ -340,15 +349,18 @@ class UpdateAvailableDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"<h2>Version {release.version} is available</h2>"))
         summary = QLabel(
-            f"You are running version {__version__}. The installer is downloaded from the "
-            "official GitHub release and its SHA-256 digest is verified before it opens."
+            f"You are running version {__version__}. The update is downloaded from the "
+            "official GitHub release and its SHA-256 digest is verified before it is applied."
         )
         summary.setWordWrap(True)
         layout.addWidget(summary)
         note = QLabel(
-            "Save any work first — this app closes when the installer opens. If you use the "
-            "portable edition, this creates a standard installed copy and leaves your portable "
-            "folder unchanged.",
+            "Save any work first — this app closes, updates itself, and reopens on the new "
+            "version. There is no installer to click through."
+            if self._install
+            else "Save any work first — this app closes when the installer opens. You are "
+            "running the portable edition, so this creates a standard installed copy and "
+            "leaves your portable folder unchanged.",
             objectName="muted",
         )
         note.setWordWrap(True)
@@ -417,12 +429,18 @@ class UpdateAvailableDialog(QDialog):
         thread.start()
 
     def _downloaded(self, path: Path) -> None:
-        self._report("Verified. Opening the installer…")
+        self._report(
+            "Verified. Installing the update — this window closes and the app reopens."
+            if self._install
+            else "Verified. Opening the installer…"
+        )
         try:
-            launch_installer(path)
+            start_installer(path, self._install)
         except Exception as exc:  # noqa: BLE001 - present launch failures to the user.
             self._download_failed(str(exc))
             return
+        # The setup program cannot replace this executable while it is running, so leaving
+        # is the last step of the update rather than a consequence of it.
         QApplication.quit()
 
     def _download_failed(self, message: str) -> None:
@@ -442,7 +460,7 @@ class UpdateAvailableDialog(QDialog):
         # finish rather than leaving a half-written installer behind.
         if self._download_thread is not None and self._download_thread.isRunning():
             self._report(
-                "Finishing the download — this window closes when the installer opens."
+                "Finishing the download — this window closes when the update starts."
             )
             event.ignore()
             return
@@ -818,8 +836,8 @@ class SettingsDialog(QDialog):
         if is_newer_version(release.version, __version__):
             self._available_release = release
             self.update_status.setText(
-                f"Version {release.version} is available. The installer will be downloaded "
-                "from the official GitHub release and verified before it opens."
+                f"Version {release.version} is available. It is downloaded from the official "
+                "GitHub release and verified before it is applied."
             )
             self.update_button.setText(f"Download and install {release.version}")
         else:
@@ -5492,9 +5510,18 @@ def _table_sort_value(value: str) -> tuple[int, float | str]:
 
 
 def _resource_path(relative_path: str) -> Path:
-    """Find bundled resources in releases and project resources during development."""
-    bundled_root = getattr(sys, "_MEIPASS", None)
-    root = Path(bundled_root) if bundled_root else Path(__file__).resolve().parents[2]
+    """Find bundled resources in releases and project resources during development.
+
+    A compiled build lays its data files out beside the executable, and marks every module
+    it compiled with ``__compiled__``. Neither is true of a source checkout, where the
+    files sit at the top of the project tree instead — two directories above this one.
+    Asking which build this is has to come first: ``__file__`` still points somewhere in a
+    compiled build, just not anywhere the changelog and icons were put.
+    """
+    if "__compiled__" in globals():
+        root = Path(sys.executable).parent
+    else:
+        root = Path(__file__).resolve().parents[2]
     return root / relative_path
 
 

@@ -4,6 +4,58 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-20
+
+### Highlights
+
+- Updates install themselves. Say yes and the app closes, replaces itself, and reopens on the new
+  version. There is no wizard to click through and no second window asking a question you have
+  already answered — the only thing you do is decide.
+- The app is compiled now rather than packaged. The old build put it behind a bootloader stub
+  shared with every other program built the same way, so antivirus that had learned to distrust
+  that stub distrusted this app for what other people shipped inside it. There is no shared stub
+  any more, and nothing in the build is compressed in the way scanners treat as hiding something.
+- The setup wizard looks like it belongs to the app it installs, with its own artwork, the licence
+  it ships under, and publisher and support links that Windows shows in its own Apps & features
+  list rather than a blank entry.
+
+### Changed
+
+- Updating an installed copy no longer opens the installer. The download is still fetched from the
+  official GitHub release and still checked against its SHA-256 digest before anything is touched;
+  what changed is what happens after. The update is written into the folder the app already
+  occupies and the app is started again from it.
+- An update stays where it was. A copy installed for all users updates as one, and a copy
+  installed for the current user stays that way. Left to its own defaults the installer would put
+  an update wherever it had permission to, which for a machine-wide install updated by an
+  unelevated app meant a second copy in the user's own folder and the original left behind, stale.
+- Portable copies still get the wizard, deliberately. For a portable folder the wizard asks a real
+  question rather than repeating one: it offers an installed copy that does not exist yet, and
+  leaves the portable folder alone. Nothing about a portable copy is replaced behind your back.
+- Builds are compiled with Nuitka instead of packaged with PyInstaller. This is the change behind
+  the false-positive virus warnings, and it comes with a cost worth stating: a release build now
+  takes minutes of C compilation rather than seconds of archiving.
+- The executable is no longer UPX-compressed. Compressed sections are a strong signal on their
+  own to a scanner, since compressing a program is chiefly how one hides what it contains. The
+  build is bigger and less interesting to look at, which is the point.
+
+### Added
+
+- The application and the setup program both carry full version information — publisher, product,
+  description, and version — visible in the file's Properties. The old build recorded none of it,
+  which is a poor look for an unsigned program: nothing to check and nothing declared.
+- The setup wizard shows the GNU GPL v3 the app is released under, and its entry in Apps &
+  features links to the project, its issue tracker, and its releases page.
+- Setup closes a running copy rather than failing on a file in use, and refuses to run twice at
+  once.
+
+### Known limitations
+
+- Releases are still not code-signed, so Windows SmartScreen continues to show an **Unknown
+  publisher** warning on first run. Nothing in this release changes that, and nothing except a
+  code-signing certificate can. The changes here reduce antivirus false positives, which is a
+  different problem with a different cause.
+
 ## [1.0.2] - 2026-08-20
 
 ### Highlights

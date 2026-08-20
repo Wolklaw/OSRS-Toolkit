@@ -62,6 +62,14 @@ that no longer exists.
 
 `build-release.ps1` produces the setup executable and the portable archive.
 
+The application is compiled with Nuitka rather than packaged with PyInstaller, which means the
+release build needs a C compiler and takes minutes rather than seconds. Nuitka fetches the Zig
+toolchain into its own cache on the first run if it finds nothing else installed; an existing
+MSVC or MinGW installation is used in preference. `packaging/build_app.py` holds the argument
+list and explains the reasoning, which is mostly about false-positive virus warnings. Building
+the setup wizard additionally needs Inno Setup 6; without it the script still produces the
+portable archive and says so.
+
 A version bump has to be made in two places, which is easy to half-finish: `version` in
 `pyproject.toml` and `__version__` in `src/osrs_toolkit/__init__.py`. The second one is the
 one that matters at runtime. It is what the sidebar, the About tab, and the update check

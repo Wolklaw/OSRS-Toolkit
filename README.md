@@ -43,7 +43,7 @@ The [latest release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest) co
 
 | Build | Best for | What you get |
 |---|---|---|
-| **Setup `.exe`** (recommended) | Most players | Guided install, Start Menu entry, optional desktop shortcut, uninstaller, and in-app updates. |
+| **Setup `.exe`** (recommended) | Most players | Guided install, Start Menu entry, optional desktop shortcut, uninstaller, and updates that apply themselves. |
 | **Portable `.zip`** | A folder or USB drive | Extract anywhere and open `OSRS Toolkit.exe`; nothing is installed. |
 
 Python, PowerShell, and developer tools are not required. Releases are not currently code-signed,
@@ -306,9 +306,16 @@ If the API is temporarily unavailable, the app can fall back to its last local c
 OSRS Toolkit checks for a newer official release in the background when it starts. Nothing
 appears while you are up to date; when a newer version exists, a window offers to install it,
 remind you later, or skip that version. The same check runs on demand from **Settings → About**.
-Either way the installer is downloaded from the official GitHub release, verified against the
-GitHub-provided SHA-256 digest, and only then opened. Portable copies install the standard
-edition and leave the portable folder unchanged.
+Either way the update is downloaded from the official GitHub release and verified against the
+GitHub-provided SHA-256 digest before anything is replaced.
+
+An installed copy then updates itself. The app closes, the new version is written into the same
+folder, and the app reopens on it — there is no installer to click through, and no second
+window asking a question you already answered. An install made for all users updates as one, and
+a per-user install stays per-user, so an update never strands a second copy somewhere else.
+Portable copies are the exception: they are offered the setup wizard instead, because for them it
+asks something real — it creates a standard installed copy and leaves the portable folder
+unchanged.
 
 After an update, a **What's new** window lists that version's changes once, taken from the
 bundled [changelog](CHANGELOG.md). It stays available from **Settings → About**.
