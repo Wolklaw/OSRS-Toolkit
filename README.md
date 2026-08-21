@@ -52,6 +52,7 @@ yet, so Windows may warn you about an **Unknown publisher**. Only download from 
 Releases page.
 
 More detail further down:
+[Do I need the plugin?](#do-i-need-the-plugin) ·
 [Why prices look old](#market-data-fetch-time-vs-trade-age) ·
 [Small things that make it nicer to use](#daily-use-details) ·
 [Updates and privacy](#updates-privacy-and-game-boundaries) ·
@@ -177,6 +178,40 @@ never tell you different things about the same trade. Trades you typed in yourse
 **Manual entry**; they never had a plan, so they sit out of Plan vs. actual. A position started
 straight from a RuneLite offer uses that offer's own price as its target, so by definition it shows
 no drift on the buy side.
+
+## Do I need the plugin?
+
+No. Everything that reads the market works on its own, and you can keep the journal by hand. The
+plugin is there so you don't have to type in what you just did in-game.
+
+**Works without it:**
+
+- GE Flipper, Watchlist, Alch Finder, and Skilling Profit, in full. They only need prices.
+- Hiding skilling methods above your levels — that's a public hiscores lookup on your display
+  name, nothing to install.
+- The whole Trade Journal, as long as you record buys and sells yourself. Statuses, partial fills,
+  tax, filters, and CSV export all behave the same.
+- Performance, in full, on whatever you've recorded. A plan you tracked from GE Flipper still gets
+  graded against fills you typed in by hand.
+- The yellow flash when you track a new plan.
+- Themes, backups, moving the database, and updates.
+
+**Needs the plugin:**
+
+- Fills recorded for you — every buy and sell, partial or complete, including while the app is
+  shut.
+- Positions that open the moment you place an offer, and move to Listed for sale when you list
+  something.
+- The live eight-slot Grand Exchange panel above the journal.
+- The yellow flash when a buy finishes or a sale closes out.
+- The blue highlight that follows the row you're trading while you're stood at the GE.
+- The RuneLite activity page itself, and player-to-player trade records (a second switch, also off
+  by default).
+- PvM Readiness verdicts. Without gear sync every boss reads **Unknown** — you still get the
+  checklists, the requirements, and the GP/hr estimates, just not whether *you* can do it.
+
+**What the plugin never does:** log into anything, click anything, change your offers, or send
+your trades anywhere.
 
 ## RuneLite activity
 
