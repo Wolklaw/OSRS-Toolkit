@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">PvM readiness</h2>
+  <p class="hint">Checked against your most recent gear and bank snapshot from the plugin.</p>
+
+  {% if not has_snapshot %}
+  <div class="empty">
+    No snapshot yet. Turn on "Sync gear and bank for PvM readiness" in the plugin's settings,
+    then open your bank in game.
+  </div>
+  {% else %}
+  <table>
+    <thead>
+      <tr><th>Activity</th><th>Ready</th><th>Missing skills</th><th>Missing gear</th><th>Net gp/hr</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in readiness %}
+      <tr>
+        <td><a href="{{ entry.activity.wiki_url }}" target="_blank" rel="noopener">{{ entry.activity.name }}</a></td>
+        <td class="{{ 'positive' if entry.is_ready else 'negative' }}">{{ 'Ready' if entry.is_ready else 'Not ready' }}</td>
+        <td>
+          {% if entry.missing_skills %}
+            {% for skill in entry.missing_skills %}{{ skill.skill }} {{ skill.current_level }}/{{ skill.required_level }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% else %}&mdash;{% endif %}
+        </td>
+        <td>
+          {% if entry.missing_gear %}{{ entry.missing_gear | join(", ") }}{% else %}&mdash;{% endif %}
+        </td>
+        <td>
+          {% if entry.net_gp_per_hour is not none %}{{ "{:,}".format(entry.net_gp_per_hour) }}{% else %}&mdash;{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+
+{% endblock %}

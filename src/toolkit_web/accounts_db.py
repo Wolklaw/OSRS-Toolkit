@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS account (
     avatar          TEXT,
     pairing_token   TEXT,
     created_at      TEXT NOT NULL,
-    last_login_at   TEXT NOT NULL
+    last_login_at   TEXT NOT NULL,
+    goal_label      TEXT,
+    goal_target     INTEGER,
+    goal_created_at TEXT
 );
 """
 
@@ -39,10 +42,27 @@ class Account:
     pairing_token: str | None
     created_at: str
     last_login_at: str
+    goal_label: str | None
+    goal_target: int | None
+    goal_created_at: str | None
 
     @property
     def paired(self) -> bool:
         return bool(self.pairing_token)
+
+    @property
+    def has_goal(self) -> bool:
+        return self.goal_target is not None
+
+
+#: Columns added after the table's first release. A fresh database gets them from SCHEMA
+#: above; a database that already exists needs each added by hand so its one real row — a
+#: login, a pairing token — is not lost the way dropping and recreating the table would lose it.
+_MIGRATION_COLUMNS = {
+    "goal_label": "TEXT",
+    "goal_target": "INTEGER",
+    "goal_created_at": "TEXT",
+}
 
 
 class AccountsDB:
@@ -51,6 +71,10 @@ class AccountsDB:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(SCHEMA)
+            existing = {row["name"] for row in connection.execute("PRAGMA table_info(account)")}
+            for column, sql_type in _MIGRATION_COLUMNS.items():
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE account ADD COLUMN {column} {sql_type}")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
@@ -110,6 +134,33 @@ class AccountsDB:
                 (token, discord_user_id),
             )
 
+    def set_savings_goal(self, discord_user_id: str, label: str, target: int) -> None:
+        """Replace any goal already set. Progress toward it is graded from this moment
+        onward — see ``toolkit_web.app``, which reads ``goal_created_at`` as the start of the
+        window profit is scored against, matching how the desktop window's own goal works.
+
+        Stamped to whole-second precision deliberately, not ``_stamp()``'s microseconds: a
+        manual trade recorded a moment after the goal is set carries a journal timestamp
+        truncated to the second (``JournalRepository.add``), and comparing that against a
+        microsecond-precision boundary could read a trade added a fraction of a second later
+        as having happened before the goal existed.
+        """
+        created_at = datetime.now(UTC).isoformat(timespec="seconds")
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE account SET goal_label = ?, goal_target = ?, goal_created_at = ?"
+                " WHERE discord_user_id = ?",
+                (label, target, created_at, discord_user_id),
+            )
+
+    def clear_savings_goal(self, discord_user_id: str) -> None:
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE account SET goal_label = NULL, goal_target = NULL,"
+                " goal_created_at = NULL WHERE discord_user_id = ?",
+                (discord_user_id,),
+            )
+
 
 def _row_to_account(row: sqlite3.Row) -> Account:
     return Account(
@@ -119,4 +170,7 @@ def _row_to_account(row: sqlite3.Row) -> Account:
         pairing_token=row["pairing_token"],
         created_at=row["created_at"],
         last_login_at=row["last_login_at"],
+        goal_label=row["goal_label"],
+        goal_target=row["goal_target"],
+        goal_created_at=row["goal_created_at"],
     )

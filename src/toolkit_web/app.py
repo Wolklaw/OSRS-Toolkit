@@ -16,13 +16,24 @@ from pathlib import Path
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.formatting import compact_items, synced_trade_label
+from osrs_toolkit.market import MarketDataError
+from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
+from osrs_toolkit.ranking import STRATEGIES, plan_flip_portfolio, rank_flips
+from osrs_toolkit.savings_goal import (
+    SavingsProgress,
+    daily_profit_rate,
+    estimate_days_remaining,
+    realized_profit_since,
+)
 from osrs_toolkit.sync_source import HttpSyncSource
 
 from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.config import Settings
 from toolkit_web.importing import journal_for
+from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
 from toolkit_web.token_probe import probe_token
@@ -39,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     accounts = AccountsDB(settings.accounts_db_path)
     signer = SessionSigner(settings.session_secret)
+    market = MarketCache(settings.data_dir / "market-cache")
     templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
     app = FastAPI(
@@ -110,6 +122,130 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "activity.html",
             {"account": account, "activity": rows, "window_days": ACTIVITY_WINDOW_DAYS},
         )
+
+    @app.get("/flips", response_class=HTMLResponse)
+    def flips_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        cash_stack: int = 10_000_000,
+        strategy: str = "Balanced (1–4h)",
+    ) -> HTMLResponse:
+        context = {
+            "account": account,
+            "strategies": list(STRATEGIES),
+            "strategy": strategy,
+            "cash_stack": cash_stack,
+        }
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            return templates.TemplateResponse(
+                request, "flips.html", {**context, "market_unavailable": True}
+            )
+        candidates = rank_flips(mappings, points, cash_stack=cash_stack, strategy=strategy)
+        portfolio = plan_flip_portfolio(candidates, cash_stack)
+        return templates.TemplateResponse(
+            request,
+            "flips.html",
+            {
+                **context,
+                "market_unavailable": False,
+                "portfolio": [serialize(candidate) for candidate in portfolio],
+                # Capped for the page rather than for the ranking itself — the portfolio above
+                # already picked the offers actually worth using this cash stack on, and a
+                # browsable list past a couple dozen rows stops being something anyone reads.
+                "candidates": [serialize(candidate) for candidate in candidates[:30]],
+            },
+        )
+
+    @app.get("/buy-limits", response_class=HTMLResponse)
+    def buy_limits_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+        try:
+            mappings, _points = market.snapshot()
+        except MarketDataError:
+            return templates.TemplateResponse(
+                request, "buy_limits.html", {"account": account, "market_unavailable": True}
+            )
+        limits = {item.item_id: item.buy_limit for item in mappings.values() if item.buy_limit}
+        repository = journal_for(settings, account)
+        now = datetime.now(UTC)
+        recent_fills = repository.list_synced_trades(
+            event_type="ge_fill", since=now - timedelta(hours=4)
+        )
+        statuses = buy_limit_status(recent_fills, limits, now)
+        return templates.TemplateResponse(
+            request,
+            "buy_limits.html",
+            {
+                "account": account,
+                "market_unavailable": False,
+                "statuses": [serialize(status) for status in statuses],
+            },
+        )
+
+    @app.get("/pvm", response_class=HTMLResponse)
+    def pvm_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+        repository = journal_for(settings, account)
+        snapshot = repository.get_latest_loadout_snapshot()
+        readiness = assess_all(snapshot)
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            mappings, points = {}, []
+        rows = []
+        for entry in readiness:
+            row = serialize(entry)
+            if points:
+                estimate = estimate_gp_per_hour(entry.activity, mappings, points)
+                row["net_gp_per_hour"] = estimate.net_gp_per_hour if estimate.priced else None
+            else:
+                row["net_gp_per_hour"] = None
+            rows.append(row)
+        return templates.TemplateResponse(
+            request,
+            "pvm.html",
+            {"account": account, "readiness": rows, "has_snapshot": snapshot is not None},
+        )
+
+    @app.get("/savings-goal", response_class=HTMLResponse)
+    def savings_goal_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+        context = {"account": account}
+        if not account.has_goal:
+            return templates.TemplateResponse(request, "savings_goal.html", context)
+        repository = journal_for(settings, account)
+        tracked = repository.list_tracked()
+        manual = repository.list_all()
+        since = datetime.fromisoformat(account.goal_created_at)
+        now = datetime.now(UTC)
+        saved = realized_profit_since(tracked, manual, since)
+        progress = SavingsProgress(
+            label=account.goal_label, target=account.goal_target, saved=saved
+        )
+        rate = daily_profit_rate(tracked, manual, now)
+        eta_days = estimate_days_remaining(progress.remaining, rate)
+        context["progress"] = serialize(progress)
+        context["daily_rate"] = round(rate)
+        context["eta_days"] = round(eta_days) if eta_days is not None else None
+        return templates.TemplateResponse(request, "savings_goal.html", context)
+
+    @app.post("/api/savings-goal")
+    def set_savings_goal(payload: dict, account: Account = CurrentAccount) -> dict:
+        label = payload.get("label")
+        try:
+            target = int(payload.get("target"))
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail="target must be a whole number") from error
+        if not isinstance(label, str) or not label.strip():
+            raise HTTPException(status_code=422, detail="label is required")
+        if target <= 0:
+            raise HTTPException(status_code=422, detail="target must be a positive amount")
+        accounts.set_savings_goal(account.discord_user_id, label.strip(), target)
+        return {"ok": True}
+
+    @app.delete("/api/savings-goal")
+    def clear_savings_goal(account: Account = CurrentAccount) -> dict:
+        accounts.clear_savings_goal(account.discord_user_id)
+        return {"ok": True}
 
     # -- auth ----------------------------------------------------------------------------
 

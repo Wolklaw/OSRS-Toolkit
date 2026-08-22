@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Buy limits</h2>
+  <p class="hint">Rolling 4-hour window, from Grand Exchange fills the plugin has synced.</p>
+
+  {% if market_unavailable %}
+  <div class="empty">Live buy limits couldn't be reached just now — try again shortly.</div>
+  {% elif statuses %}
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Bought</th><th>Limit</th><th>Remaining</th><th>Resets at</th></tr>
+    </thead>
+    <tbody>
+      {% for status in statuses %}
+      <tr>
+        <td>{{ status.item_name }}</td>
+        <td>{{ status.bought_recently }}</td>
+        <td>{{ status.limit }}</td>
+        <td class="{{ 'negative' if status.remaining == 0 else '' }}">{{ status.remaining }}</td>
+        <td>{{ status.resets_at[:16].replace("T", " ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing bought in the last 4 hours.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

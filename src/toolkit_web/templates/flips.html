@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Flip suggestions</h2>
+  <form method="get" class="row">
+    <input type="text" name="cash_stack" value="{{ cash_stack }}" style="max-width:160px" placeholder="Cash stack">
+    <select name="strategy" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.7rem;">
+      {% for option in strategies %}
+      <option value="{{ option }}" {% if option == strategy %}selected{% endif %}>{{ option }}</option>
+      {% endfor %}
+    </select>
+    <button class="button" type="submit">Update</button>
+  </form>
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">Live prices couldn't be reached just now — try again shortly.</div>
+</div>
+{% else %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Suggested portfolio</h2>
+  <p class="hint">One diversified plan for the cash stack above, sized to stay inside safe buy limits.</p>
+  {% if portfolio %}
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Buy</th><th>Sell</th><th>Qty</th><th>Capital</th><th>Est. profit</th><th>ROI</th></tr>
+    </thead>
+    <tbody>
+      {% for candidate in portfolio %}
+      <tr>
+        <td>{{ candidate.name }}</td>
+        <td>{{ "{:,}".format(candidate.buy_price) }}</td>
+        <td>{{ "{:,}".format(candidate.sell_price) }}</td>
+        <td>{{ candidate.suggested_quantity }}</td>
+        <td>{{ "{:,}".format(candidate.capital_required) }}</td>
+        <td class="positive">{{ "{:+,}".format(candidate.potential_profit) }}</td>
+        <td>{{ "%.1f"|format(candidate.roi) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing clears this strategy's bar right now.</div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">All ranked candidates</h2>
+  {% if candidates %}
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Buy</th><th>Sell</th><th>ROI</th><th>Confidence</th><th>1h volume</th></tr>
+    </thead>
+    <tbody>
+      {% for candidate in candidates %}
+      <tr>
+        <td>{{ candidate.name }}</td>
+        <td>{{ "{:,}".format(candidate.buy_price) }}</td>
+        <td>{{ "{:,}".format(candidate.sell_price) }}</td>
+        <td>{{ "%.1f"|format(candidate.roi) }}%</td>
+        <td>{{ candidate.confidence }}%</td>
+        <td>{{ "{:,}".format(candidate.hourly_volume) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing clears this strategy's bar right now.</div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}

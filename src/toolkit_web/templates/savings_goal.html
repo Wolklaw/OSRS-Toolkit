@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if not account.has_goal %}
+<div class="panel">
+  <h2 style="margin-top:0">Set a savings goal</h2>
+  <p class="hint">Progress counts realized profit from this moment forward, from both synced
+    trades and the manual log.</p>
+  <div class="row">
+    <input type="text" id="goal-label" placeholder="What are you saving for?" autocomplete="off">
+    <input type="text" id="goal-target" placeholder="Target (gp)" autocomplete="off" style="max-width:180px">
+    <button class="button" onclick="setGoal()">Set goal</button>
+  </div>
+  <div class="status-msg" id="goal-status"></div>
+</div>
+{% else %}
+<div class="panel">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ progress.label }}</h2>
+    <button class="button secondary" onclick="clearGoal()">Clear goal</button>
+  </div>
+  <div class="stats" style="margin-top:1rem">
+    <div class="stat">
+      <div class="label">Saved</div>
+      <div class="value {{ 'positive' if progress.saved >= 0 else 'negative' }}">{{ "{:,}".format(progress.saved) }} gp</div>
+    </div>
+    <div class="stat">
+      <div class="label">Target</div>
+      <div class="value">{{ "{:,}".format(progress.target) }} gp</div>
+    </div>
+    <div class="stat">
+      <div class="label">Progress</div>
+      <div class="value">{{ "%.1f"|format(progress.percent) }}%</div>
+    </div>
+    <div class="stat">
+      <div class="label">Recent daily rate</div>
+      <div class="value {{ 'positive' if daily_rate >= 0 else 'negative' }}">{{ "{:+,}".format(daily_rate) }} gp</div>
+    </div>
+  </div>
+  {% if progress.is_reached %}
+  <p class="hint" style="color:var(--good)">Goal reached.</p>
+  {% elif eta_days is not none %}
+  <p class="hint">At the recent rate, about {{ eta_days }} day{{ 's' if eta_days != 1 else '' }} to go.</p>
+  {% else %}
+  <p class="hint">Not enough recent profit to project an ETA yet.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function setGoal() {
+    const status = document.getElementById('goal-status');
+    const label = document.getElementById('goal-label').value.trim();
+    const target = document.getElementById('goal-target').value.trim();
+    if (!label || !target) {
+      status.textContent = 'Fill in both fields.';
+      status.className = 'status-msg error';
+      return;
+    }
+    const response = await fetch('/api/savings-goal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label, target: Number(target) }),
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      status.textContent = body.detail || 'Could not set that goal.';
+      status.className = 'status-msg error';
+      return;
+    }
+    location.reload();
+  }
+
+  async function clearGoal() {
+    if (!confirm('Clear this savings goal?')) { return; }
+    await fetch('/api/savings-goal', { method: 'DELETE' });
+    location.reload();
+  }
+</script>
+{% endblock %}
