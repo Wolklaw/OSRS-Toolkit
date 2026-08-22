@@ -339,6 +339,36 @@ class OfferCancelled:
     total_quantity: int
 
 
+def _is_newer(incoming: object, existing: object) -> bool:
+    """Whether ``incoming`` was written after ``existing``.
+
+    Parsed rather than compared as text: the two sides stamp their own rows, and an offset of
+    "+00:00" against a "Z" would order wrongly as a string while meaning the same instant.
+    """
+    return _as_moment(incoming) > _as_moment(existing)
+
+
+def _as_moment(stamp: object) -> datetime:
+    if not isinstance(stamp, str) or not stamp:
+        return datetime.min.replace(tzinfo=UTC)
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+
+def _now() -> str:
+    """The stamp that decides which side of a sync wins, at microsecond precision.
+
+    Not truncated to seconds like ``recorded_at`` is. Two edits inside one second would share
+    a stamp, and then neither could be seen as newer than the other: a delete made in the same
+    second as its insert would never travel, and an edit landing in the same second as a
+    client's watermark would be skipped by the next export and lost for good.
+    """
+    return datetime.now(UTC).isoformat()
+
+
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
 
@@ -450,6 +480,193 @@ class JournalRepository:
         for old_backup in backups[:-10]:
             old_backup.unlink(missing_ok=True)
 
+    #: The tables that travel, and what their local primary key is called. Deliberately only
+    #: these two: everything else in this journal is already named by something both sides
+    #: agree on, so it merges on what it is rather than needing to be reconciled.
+    _SYNC_TABLES: ClassVar[dict[str, str]] = {
+        "trades": "trade_id",
+        "tracked_trades": "position_id",
+    }
+
+    #: Fills hang off a position and have no identity of their own. They are carried with it
+    #: and replaced wholesale when it changes, rather than merged row by row -- they are
+    #: derived from the position's own history, so the winning position's fills are the right
+    #: ones by definition, and matching them individually would be work in service of nothing.
+    _FILL_TABLES: ClassVar[dict[str, tuple[str, ...]]] = {
+        "tracked_sale_fills": ("quantity", "sell_price"),
+        "tracked_buy_fills": ("quantity", "buy_price"),
+    }
+
+    def sync_version(self) -> dict:
+        """The cheapest honest answer to whether anything has changed.
+
+        Two indexed scalars per table and nothing serialized. A client polls this on a timer,
+        so it has to stay something the machine hosting it will not feel -- the pull that
+        actually costs something only happens when this number moves.
+        """
+        with self._connect() as connection:
+            latest = ""
+            counts = {}
+            for table in self._SYNC_TABLES:
+                row = connection.execute(
+                    f"SELECT MAX(updated_at) AS latest, COUNT(*) AS total FROM {table}"
+                ).fetchone()
+                counts[table] = int(row["total"])
+                latest = max(latest, str(row["latest"] or ""))
+        return {"version": latest, "counts": counts}
+
+    def sync_export(self, since: str | None = None) -> dict:
+        """Every row that changed after ``since``, tombstones included.
+
+        Carrying deletions is the whole reason tombstones exist, so they are exported like any
+        other row rather than filtered out the way every ordinary read filters them.
+        """
+        payload: dict[str, list[dict]] = {}
+        with self._connect() as connection:
+            for table, primary_key in self._SYNC_TABLES.items():
+                if since:
+                    rows = connection.execute(
+                        f"SELECT * FROM {table} WHERE updated_at > ? ORDER BY updated_at",
+                        (since,),
+                    ).fetchall()
+                else:
+                    rows = connection.execute(
+                        f"SELECT * FROM {table} ORDER BY updated_at"
+                    ).fetchall()
+                exported = []
+                for row in rows:
+                    # .keys() is load-bearing: iterating a sqlite3.Row yields its values,
+                    # not its column names, so SIM118's suggestion would silently
+                    # build a record keyed by the data itself.
+                    record = {
+                        key: row[key]
+                        for key in row.keys()  # noqa: SIM118
+                        if key != primary_key
+                    }
+                    if not record.get("sync_uid"):
+                        # Nothing to recognise it by on the other side, so sending it could
+                        # only ever create a duplicate. Cannot happen after the migration.
+                        continue
+                    if table == "tracked_trades":
+                        for fill_table, columns in self._FILL_TABLES.items():
+                            fills = connection.execute(
+                                f"SELECT {', '.join(columns)} FROM {fill_table}"
+                                " WHERE position_id = ? ORDER BY fill_id",
+                                (row[primary_key],),
+                            ).fetchall()
+                            record[fill_table] = [dict(fill) for fill in fills]
+                    exported.append(record)
+                payload[table] = exported
+        return payload
+
+    def sync_apply(self, payload: dict) -> dict[str, int]:
+        """Merge rows in, newest ``updated_at`` winning. Returns what actually changed.
+
+        Last-write-wins, which is the right shape for one person with one desktop and one
+        browser rather than a system with real concurrent writers. A row arriving older than
+        the one already here is dropped, so a slow client replaying stale state cannot walk
+        the journal backwards.
+
+        Unknown columns are ignored rather than rejected, so a newer build on one side can
+        send a column an older build on the other has never heard of without failing the
+        whole sync over it.
+        """
+        applied = {"inserted": 0, "updated": 0, "skipped": 0}
+        with self._connect() as connection:
+            for table, primary_key in self._SYNC_TABLES.items():
+                known = {
+                    str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")
+                }
+                for record in payload.get(table) or []:
+                    if not isinstance(record, dict):
+                        applied["skipped"] += 1
+                        continue
+                    uid = record.get("sync_uid")
+                    if not uid:
+                        applied["skipped"] += 1
+                        continue
+                    columns = {
+                        key: value
+                        for key, value in record.items()
+                        if key in known and key != primary_key
+                    }
+                    existing = connection.execute(
+                        f"SELECT {primary_key}, updated_at FROM {table} WHERE sync_uid = ?",
+                        (uid,),
+                    ).fetchone()
+                    if existing is None:
+                        names = ", ".join(columns)
+                        placeholders = ", ".join("?" for _ in columns)
+                        cursor = connection.execute(
+                            f"INSERT INTO {table} ({names}) VALUES ({placeholders})",
+                            tuple(columns.values()),
+                        )
+                        row_id = int(cursor.lastrowid)
+                        applied["inserted"] += 1
+                    elif _is_newer(record.get("updated_at"), existing["updated_at"]):
+                        assignments = ", ".join(f"{name} = ?" for name in columns)
+                        connection.execute(
+                            f"UPDATE {table} SET {assignments} WHERE sync_uid = ?",
+                            (*columns.values(), uid),
+                        )
+                        row_id = int(existing[primary_key])
+                        applied["updated"] += 1
+                    else:
+                        applied["skipped"] += 1
+                        continue
+                    if table == "tracked_trades":
+                        self._replace_fills(connection, row_id, record)
+        return applied
+
+    def _replace_fills(
+        self, connection: sqlite3.Connection, position_id: int, record: dict
+    ) -> None:
+        for fill_table, fill_columns in self._FILL_TABLES.items():
+            incoming = record.get(fill_table)
+            if incoming is None:
+                continue
+            connection.execute(f"DELETE FROM {fill_table} WHERE position_id = ?", (position_id,))
+            names = ", ".join(("position_id", *fill_columns))
+            placeholders = ", ".join("?" for _ in range(len(fill_columns) + 1))
+            connection.executemany(
+                f"INSERT INTO {fill_table} ({names}) VALUES ({placeholders})",
+                [
+                    (position_id, *(fill.get(column) for column in fill_columns))
+                    for fill in incoming
+                    if isinstance(fill, dict)
+                ],
+            )
+
+    def _install_touch_triggers(self, connection: sqlite3.Connection) -> None:
+        """Make the database stamp ``updated_at`` on every edit it is not already told about.
+
+        Every other path that changes one of these rows -- recording a fill, reviewing a
+        suggestion, listing a price -- has to move the stamp too, or the edit never travels.
+        Doing that at each call site works right up until somebody adds the next one, so the
+        database does it instead.
+
+        The guard keeps a merge from clobbering the stamp it was handed: ``sync_apply`` writes
+        the other side's ``updated_at`` deliberately, which is an update that did change the
+        column, so this does not fire for it. It is also what stops the trigger re-entering
+        its own UPDATE.
+
+        Installed last, after every migration above has finished, because those rewrite rows
+        without a person having touched anything.
+        """
+        for table, primary_key in self._SYNC_TABLES.items():
+            connection.execute(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {table}_touch_updated_at
+                AFTER UPDATE ON {table}
+                FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at
+                BEGIN
+                    UPDATE {table}
+                    SET updated_at = strftime('%Y-%m-%dT%H:%M:%f000+00:00', 'now')
+                    WHERE {primary_key} = NEW.{primary_key};
+                END
+                """
+            )
+
     def _migrate_sync_columns(
         self, connection: sqlite3.Connection, table: str, primary_key: str, stamp_from: str
     ) -> None:
@@ -468,6 +685,7 @@ class JournalRepository:
             f"CREATE UNIQUE INDEX IF NOT EXISTS {table}_sync_uid ON {table}(sync_uid)"
             " WHERE sync_uid IS NOT NULL"
         )
+        connection.execute(f"CREATE INDEX IF NOT EXISTS {table}_updated_at ON {table}(updated_at)")
         connection.execute(f"UPDATE {table} SET updated_at = {stamp_from} WHERE updated_at IS NULL")
         unnamed = connection.execute(
             f"SELECT {primary_key} FROM {table} WHERE sync_uid IS NULL"
@@ -491,6 +709,13 @@ class JournalRepository:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
+            # Schema maintenance below rewrites rows wholesale -- backfilling a suggestion,
+            # stamping a completion, giving an old row its sync_uid. None of that is a person
+            # editing a trade, and none of it should look like one to the other side of a
+            # sync. Taking the triggers down for the duration is what guarantees that, rather
+            # than every maintenance statement having to remember to preserve the stamp.
+            for table in self._SYNC_TABLES:
+                connection.execute(f"DROP TRIGGER IF EXISTS {table}_touch_updated_at")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS trades (
@@ -689,6 +914,7 @@ class JournalRepository:
                   )
                 """
             )
+            self._install_touch_triggers(connection)
 
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
@@ -708,7 +934,7 @@ class JournalRepository:
                     buy_price,
                     sell_price,
                     uuid.uuid4().hex,
-                    recorded_at,
+                    _now(),
                 ),
             )
             return int(cursor.lastrowid)
@@ -716,7 +942,8 @@ class JournalRepository:
     def list_all(self) -> list[TradeRecord]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT * FROM trades ORDER BY recorded_at DESC, trade_id DESC"
+                "SELECT * FROM trades WHERE deleted_at IS NULL"
+                " ORDER BY recorded_at DESC, trade_id DESC"
             ).fetchall()
         return [
             TradeRecord(
@@ -731,8 +958,18 @@ class JournalRepository:
         ]
 
     def delete(self, trade_id: int) -> None:
+        """Mark a trade deleted rather than removing the row.
+
+        A row that is simply gone is indistinguishable, to the other side of a sync, from one
+        that was never there — so a real delete here would be undone by the next pull, forever.
+        The tombstone is what makes the deletion something that can travel. Every read filters
+        it out, so nothing above this notices the difference.
+        """
         with self._connect() as connection:
-            connection.execute("DELETE FROM trades WHERE trade_id = ?", (trade_id,))
+            connection.execute(
+                "UPDATE trades SET deleted_at = ?, updated_at = ? WHERE trade_id = ?",
+                (_now(), _now(), trade_id),
+            )
 
     def track(
         self,
@@ -767,7 +1004,7 @@ class JournalRepository:
                     created_at,
                     account_hash,
                     uuid.uuid4().hex,
-                    created_at,
+                    _now(),
                 ),
             )
             return int(cursor.lastrowid)
@@ -782,13 +1019,14 @@ class JournalRepository:
         with self._connect() as connection:
             if account_hash is None:
                 rows = connection.execute(
-                    "SELECT * FROM tracked_trades ORDER BY created_at DESC, position_id DESC"
+                    "SELECT * FROM tracked_trades WHERE deleted_at IS NULL"
+                    " ORDER BY created_at DESC, position_id DESC"
                 ).fetchall()
             else:
                 rows = connection.execute(
                     """
                     SELECT * FROM tracked_trades
-                    WHERE account_hash = ? OR account_hash IS NULL
+                    WHERE deleted_at IS NULL AND (account_hash = ? OR account_hash IS NULL)
                     ORDER BY created_at DESC, position_id DESC
                     """,
                     (account_hash,),
@@ -1403,8 +1641,13 @@ class JournalRepository:
         return candidate.position_id
 
     def delete_tracked(self, position_id: int) -> None:
+        """Tombstoned, not removed — see ``delete``. Its sale fills are left alone: they are
+        reachable only through the position, which no read returns any more."""
         with self._connect() as connection:
-            connection.execute("DELETE FROM tracked_trades WHERE position_id = ?", (position_id,))
+            connection.execute(
+                "UPDATE tracked_trades SET deleted_at = ?, updated_at = ? WHERE position_id = ?",
+                (_now(), _now(), position_id),
+            )
 
     def record_listed_price(self, position_id: int, sell_price: int) -> None:
         """Record the price a sell offer was actually placed at.

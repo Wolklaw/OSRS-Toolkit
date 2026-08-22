@@ -182,7 +182,9 @@ def test_a_newly_tracked_position_is_named_at_birth(tmp_path):
             "SELECT sync_uid, updated_at, created_at FROM tracked_trades"
         ).fetchone()
     assert uid
-    assert updated_at == created_at
+    # Not equal to created_at: the edit stamp is microsecond-precise so that two changes in
+    # one second can still be ordered against each other. It must not predate the row.
+    assert updated_at > created_at
 
 
 def test_two_rows_cannot_share_an_identity(tmp_path):
@@ -202,3 +204,54 @@ def test_two_rows_cannot_share_an_identity(tmp_path):
         except sqlite3.IntegrityError:
             return
     raise AssertionError("the unique index did not stop two rows sharing an identity")
+
+
+def test_opening_the_app_does_not_make_every_row_look_edited(tmp_path):
+    """Schema maintenance runs on every launch, and some of it rewrites every row -- the
+    suggestion backfill has no WHERE clause at all.
+
+    With the touch trigger live during that, a launch would restamp the whole table, and the
+    next sync would see every position as freshly edited: it would win every conflict against
+    the other side and re-push the entire journal, on every single start.
+    """
+    path = tmp_path / "toolkit.db"
+    repository = JournalRepository(path)
+    repository.track(
+        item_id=4151, item_name="Abyssal whip", quantity=1, target_buy=1, target_sell=2
+    )
+    repository.add("Dragon bones", 500, 2_000, 2_600)
+
+    def stamps() -> list[tuple]:
+        with sqlite3.connect(path) as connection:
+            return [
+                *connection.execute("SELECT sync_uid, updated_at FROM trades"),
+                *connection.execute("SELECT sync_uid, updated_at FROM tracked_trades"),
+            ]
+
+    before = stamps()
+    for _ in range(3):
+        JournalRepository(path)
+
+    assert stamps() == before
+
+
+def test_an_ordinary_edit_still_moves_the_stamp(tmp_path):
+    """The other half of it: maintenance must not stamp, but a real edit must."""
+    path = tmp_path / "toolkit.db"
+    repository = JournalRepository(path)
+    position_id = repository.track(
+        item_id=4151, item_name="Abyssal whip", quantity=1, target_buy=1, target_sell=2
+    )
+
+    with sqlite3.connect(path) as connection:
+        before = connection.execute(
+            "SELECT updated_at FROM tracked_trades WHERE position_id = ?", (position_id,)
+        ).fetchone()[0]
+
+    repository.record_listed_price(position_id, 1_700_000)
+
+    with sqlite3.connect(path) as connection:
+        after = connection.execute(
+            "SELECT updated_at FROM tracked_trades WHERE position_id = ?", (position_id,)
+        ).fetchone()[0]
+    assert after > before
