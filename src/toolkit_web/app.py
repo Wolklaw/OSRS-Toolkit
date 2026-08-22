@@ -17,7 +17,9 @@ from pathlib import Path
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from osrs_toolkit.account import AccountLookupError, fetch_player
 from osrs_toolkit.buy_limits import buy_limit_status
+from osrs_toolkit.calculators import ALCH_POLICIES, alch_candidates, skill_results
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS
@@ -350,6 +352,82 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # already picked the offers actually worth using this cash stack on, and a
                 # browsable list past a couple dozen rows stops being something anyone reads.
                 "candidates": [serialize(candidate) for candidate in candidates[:30]],
+            },
+        )
+
+    @app.get("/alch", response_class=HTMLResponse)
+    def alch_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        cash_stack: int = 10_000_000,
+        policy: str = "Safer",
+        magic_level: int | None = None,
+    ) -> HTMLResponse:
+        if policy not in ALCH_POLICIES:
+            policy = "Safer"
+        context = {
+            "account": account,
+            "cash_stack": cash_stack,
+            "policy": policy,
+            "policies": list(ALCH_POLICIES),
+            "magic_level": magic_level,
+            **character_switcher_context(account, active),
+        }
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            return templates.TemplateResponse(
+                request, "alch.html", {**context, "market_unavailable": True}
+            )
+        candidates = alch_candidates(
+            mappings, points, cash_stack=cash_stack, policy=policy, magic_level=magic_level
+        )
+        return templates.TemplateResponse(
+            request,
+            "alch.html",
+            {
+                **context,
+                "market_unavailable": False,
+                # Same cap and reasoning as the flip candidates list — a browsable table stops
+                # being something anyone reads well past a couple dozen rows.
+                "candidates": [serialize(candidate) for candidate in candidates[:40]],
+            },
+        )
+
+    @app.get("/skilling", response_class=HTMLResponse)
+    def skilling_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        character: str = "",
+    ) -> HTMLResponse:
+        context = {
+            "account": account,
+            "character": character,
+            **character_switcher_context(account, active),
+        }
+        skills: dict[str, int] = {}
+        if character.strip():
+            try:
+                skills = fetch_player(character.strip()).skills
+            except AccountLookupError as error:
+                context["lookup_error"] = str(error)
+        context["has_skills"] = bool(skills)
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            return templates.TemplateResponse(
+                request, "skilling.html", {**context, "market_unavailable": True}
+            )
+        results = skill_results(mappings, points, skills)
+        return templates.TemplateResponse(
+            request,
+            "skilling.html",
+            {
+                **context,
+                "market_unavailable": False,
+                "results": [serialize(result) for result in results],
             },
         )
 

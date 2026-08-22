@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Skilling profit</h2>
+  <p class="hint">Profit per action across a fixed set of common training methods, ranked by hourly profit.</p>
+  <form method="get" class="row">
+    <input type="text" name="character" value="{{ character }}" placeholder="Character name (for eligibility, optional)">
+    <button class="button secondary" type="submit">Look up</button>
+  </form>
+  {% if lookup_error %}
+  <div class="status-msg error">{{ lookup_error }}</div>
+  {% elif has_skills %}
+  <div class="status-msg ok">Found — methods you don't yet have the level for are marked below.</div>
+  {% endif %}
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">Live prices couldn't be reached just now — try again shortly.</div>
+</div>
+{% else %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Methods</h2>
+  {% if results %}
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Skill</th>
+        <th>Level</th>
+        <th>Profit/action</th>
+        <th>Actions/hr</th>
+        <th>Profit/hr</th>
+        <th>Eligible</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in results %}
+      <tr>
+        <td><a href="{{ result.guide_url }}" target="_blank" rel="noopener">{{ result.name }}</a></td>
+        <td>{{ result.skill }}</td>
+        <td>{{ result.level }}</td>
+        <td class="{{ 'positive' if result.profit_action >= 0 else 'negative' }}">{{ "{:+,}".format(result.profit_action) }}</td>
+        <td>{{ "{:,}".format(result.actions_hour) }}</td>
+        <td class="{{ 'positive' if result.profit_hour >= 0 else 'negative' }}">{{ "{:+,}".format(result.profit_hour) }}</td>
+        <td>
+          {% if result.eligible is none %}—
+          {% elif result.eligible %}<span class="positive">Yes</span>
+          {% else %}<span class="negative">No</span>{% endif %}
+        </td>
+        <td class="hint" style="margin-top:0">{{ result.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">No method currently prices out — check back once the market refreshes.</div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
