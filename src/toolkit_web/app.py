@@ -28,18 +28,22 @@ from osrs_toolkit.savings_goal import (
     estimate_days_remaining,
     realized_profit_since,
 )
-from osrs_toolkit.sync_source import HttpSyncSource
 
 from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.config import Settings
-from toolkit_web.importing import journal_for
+from toolkit_web.importing import journal_for, known_characters
 from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
 from toolkit_web.token_probe import mint_pairing_token, probe_token
 
 STATE_COOKIE = "oauth_state"
+#: Which synced character's data to show. Plain, not signed: it names nothing but an
+#: account_hash the caller's own pairing token already has full read access to, so there is
+#: nothing here worth protecting from the browser that couldn't already be read straight from
+#: the API. "" means "every character" and is written back by the switcher itself.
+ACTIVE_CHARACTER_COOKIE = "active_character"
 
 #: Only the recent activity feed shows on the dashboard, so nothing has a reason to read
 #: further back than this in one request — and unlike positions, synced-trade rows are never
@@ -95,15 +99,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     CurrentAccount = Depends(current_account)
 
+    def active_character(
+        active_character: str | None = Cookie(default=None, alias=ACTIVE_CHARACTER_COOKIE),
+    ) -> str | None:
+        return active_character or None
+
+    ActiveCharacter = Depends(active_character)
+
+    def character_switcher_context(account: Account, active: str | None) -> dict:
+        """What every page's header needs to draw the character switcher, and what a route
+        filtering its own journal reads by should use as the filter.
+
+        Not validated against the sync service's own list of known characters: a hash it no
+        longer recognises (the account was renamed, or the token was reset) still filters
+        correctly on its own — nothing tagged with a hash nobody reports anymore simply reads
+        as empty, the same as it would for any other character with nothing recorded yet —
+        without spending a second network round trip on every request just to confirm a cookie.
+        """
+        return {
+            "synced_characters": known_characters(settings, account),
+            "active_character": active,
+        }
+
     # -- pages -----------------------------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
-    def index(request: Request, account: Account | None = OptionalAccount) -> HTMLResponse:
+    def index(
+        request: Request,
+        account: Account | None = OptionalAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
         if account is None:
             return templates.TemplateResponse(request, "landing.html")
+        switcher = character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
         repository = journal_for(settings, account)
-        positions = repository.list_tracked()
-        net_worth_history = repository.list_net_worth_history()
+        positions = repository.list_tracked(filter_hash)
+        net_worth_history = repository.list_net_worth_history(filter_hash)
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -113,11 +145,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "total_invested": sum(position.invested for position in positions),
                 "total_estimated_profit": sum(position.estimated_profit for position in positions),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
+                **switcher,
             },
         )
 
     @app.get("/trades", response_class=HTMLResponse)
-    def trades_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+    def trades_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        # Manually entered trades only — synced activity has its own page and its own, real
+        # account_hash to filter by. These are attributed by the separate character-naming
+        # table instead (see accounts_db.py), which this switcher does not touch.
+        switcher = character_switcher_context(account, active)
         repository = journal_for(settings, account)
         characters = accounts.list_characters(account.discord_user_id)
         names_by_id = {character.character_id: character.name for character in characters}
@@ -135,15 +176,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "account": account,
                 "trades": trades,
                 "characters": [serialize(character) for character in characters],
+                **switcher,
             },
         )
 
     @app.get("/activity", response_class=HTMLResponse)
-    def activity_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+    def activity_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
         repository = journal_for(settings, account)
         since = datetime.now(UTC) - timedelta(days=ACTIVITY_WINDOW_DAYS)
         rows = []
-        for event in repository.list_synced_trades(since=since):
+        for event in repository.list_synced_trades(
+            since=since, account_hash=switcher["active_character"]
+        ):
             row = serialize(event)
             row["label"] = synced_trade_label(event)
             row["given_summary"] = compact_items(event.given)
@@ -152,13 +201,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "activity.html",
-            {"account": account, "activity": rows, "window_days": ACTIVITY_WINDOW_DAYS},
+            {
+                "account": account,
+                "activity": rows,
+                "window_days": ACTIVITY_WINDOW_DAYS,
+                **switcher,
+            },
         )
 
     @app.get("/flips", response_class=HTMLResponse)
     def flips_page(
         request: Request,
         account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
         cash_stack: int = 10_000_000,
         strategy: str = "Balanced (1–4h)",
         slots: int = 8,
@@ -173,6 +228,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "strategy": strategy,
             "cash_stack": cash_stack,
             "slots": slots,
+            **character_switcher_context(account, active),
         }
         try:
             mappings, points = market.snapshot()
@@ -199,18 +255,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/buy-limits", response_class=HTMLResponse)
-    def buy_limits_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+    def buy_limits_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
         try:
             mappings, _points = market.snapshot()
         except MarketDataError:
             return templates.TemplateResponse(
-                request, "buy_limits.html", {"account": account, "market_unavailable": True}
+                request,
+                "buy_limits.html",
+                {"account": account, "market_unavailable": True, **switcher},
             )
         limits = {item.item_id: item.buy_limit for item in mappings.values() if item.buy_limit}
         repository = journal_for(settings, account)
         now = datetime.now(UTC)
         recent_fills = repository.list_synced_trades(
-            event_type="ge_fill", since=now - timedelta(hours=4)
+            event_type="ge_fill",
+            since=now - timedelta(hours=4),
+            account_hash=switcher["active_character"],
         )
         statuses = buy_limit_status(recent_fills, limits, now)
         return templates.TemplateResponse(
@@ -220,13 +285,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "account": account,
                 "market_unavailable": False,
                 "statuses": [serialize(status) for status in statuses],
+                **switcher,
             },
         )
 
     @app.get("/pvm", response_class=HTMLResponse)
-    def pvm_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+    def pvm_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
         repository = journal_for(settings, account)
-        snapshot = repository.get_latest_loadout_snapshot()
+        snapshot = (
+            repository.get_loadout_snapshot(filter_hash)
+            if filter_hash
+            else repository.get_latest_loadout_snapshot()
+        )
         readiness = assess_all(snapshot)
         try:
             mappings, points = market.snapshot()
@@ -244,12 +320,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "pvm.html",
-            {"account": account, "readiness": rows, "has_snapshot": snapshot is not None},
+            {
+                "account": account,
+                "readiness": rows,
+                "has_snapshot": snapshot is not None,
+                **switcher,
+            },
         )
 
     @app.get("/savings-goal", response_class=HTMLResponse)
-    def savings_goal_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
-        context = {"account": account}
+    def savings_goal_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        # Deliberately not filtered by character: a savings goal is a target for the account as
+        # a whole, and scoping it to whichever character happens to be selected would make the
+        # same goal read as further away just for switching who the switcher is pointed at.
+        context = {"account": account, **character_switcher_context(account, active)}
         if not account.has_goal:
             return templates.TemplateResponse(request, "savings_goal.html", context)
         repository = journal_for(settings, account)
@@ -477,17 +565,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/accounts")
     def characters(account: Account = CurrentAccount) -> dict:
         """Every RuneLite character seen under this pairing, for a character switcher."""
-        if not account.pairing_token:
-            return {"accounts": []}
-        source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
-        return {"accounts": source.known_accounts()}
+        return {"accounts": known_characters(settings, account)}
 
     # -- journal ---------------------------------------------------------------------------
 
     @app.get("/api/positions")
-    def positions(account: Account = CurrentAccount) -> dict:
+    def positions(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
-        return {"positions": [serialize(trade) for trade in repository.list_tracked()]}
+        filter_hash = character_switcher_context(account, active)["active_character"]
+        return {"positions": [serialize(trade) for trade in repository.list_tracked(filter_hash)]}
 
     @app.get("/api/trades")
     def trades(account: Account = CurrentAccount) -> dict:
@@ -560,22 +646,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.get("/api/activity")
-    def activity(account: Account = CurrentAccount) -> dict:
+    def activity(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
+        filter_hash = character_switcher_context(account, active)["active_character"]
         since = datetime.now(UTC) - timedelta(days=ACTIVITY_WINDOW_DAYS)
         return {
-            "activity": [serialize(event) for event in repository.list_synced_trades(since=since)]
+            "activity": [
+                serialize(event)
+                for event in repository.list_synced_trades(since=since, account_hash=filter_hash)
+            ]
         }
 
     @app.get("/api/net-worth")
-    def net_worth(account: Account = CurrentAccount) -> dict:
+    def net_worth(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
-        return {"points": [serialize(point) for point in repository.list_net_worth_history()]}
+        filter_hash = character_switcher_context(account, active)["active_character"]
+        return {
+            "points": [
+                serialize(point) for point in repository.list_net_worth_history(filter_hash)
+            ]
+        }
 
     @app.get("/api/loadout")
-    def loadout(account: Account = CurrentAccount) -> dict:
+    def loadout(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
-        snapshot = repository.get_latest_loadout_snapshot()
+        filter_hash = character_switcher_context(account, active)["active_character"]
+        snapshot = (
+            repository.get_loadout_snapshot(filter_hash)
+            if filter_hash
+            else repository.get_latest_loadout_snapshot()
+        )
         return {"loadout": serialize(snapshot) if snapshot else None}
 
     app.state.settings = settings

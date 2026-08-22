@@ -28,3 +28,13 @@ def journal_for(settings: Settings, account: Account) -> JournalRepository:
         source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
         RuneLiteSyncImporter(source=source).import_pending(repository)
     return repository
+
+
+def known_characters(settings: Settings, account: Account) -> list[dict]:
+    """Every RuneLite character the sync service has seen play through this account's token,
+    for a character switcher. Empty for an account with no pairing token — there is nothing to
+    ask the sync service about."""
+    if not account.pairing_token:
+        return []
+    source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
+    return source.known_accounts()

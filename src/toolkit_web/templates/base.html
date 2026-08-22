@@ -94,7 +94,7 @@
     .button:hover { background: var(--accent-dim); text-decoration: none; }
     .button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .button.secondary:hover { background: var(--border); }
-    input[type=text] {
+    input[type=text], select {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
@@ -103,6 +103,12 @@
       font-size: 0.9rem;
       width: 100%;
       max-width: 360px;
+    }
+    select.character-switcher {
+      width: auto;
+      max-width: 180px;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.6rem;
     }
     .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
     .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
@@ -136,6 +142,16 @@
     </div>
     {% if account %}
     <div class="account">
+      {% if synced_characters and synced_characters|length > 1 %}
+      <select class="character-switcher" onchange="switchCharacter(this.value)">
+        <option value="" {% if not active_character %}selected{% endif %}>All characters</option>
+        {% for character in synced_characters %}
+        <option value="{{ character.account_hash }}" {% if character.account_hash == active_character %}selected{% endif %}>
+          {{ character.account_name or (character.account_hash[:8] + '…') }}
+        </option>
+        {% endfor %}
+      </select>
+      {% endif %}
       {% if account.avatar %}<img src="{{ account.avatar }}" alt="">{% endif %}
       <span>{{ account.username }}</span>
       <button class="button secondary" onclick="signOut()">Sign out</button>
@@ -149,6 +165,14 @@
     async function signOut() {
       await fetch('/auth/logout', { method: 'POST' });
       location.href = '/';
+    }
+
+    // Not signed — it names nothing but an account_hash the caller's own pairing token can
+    // already read in full, so there is no session-forging concern in letting the browser set
+    // this one directly instead of round-tripping through a server endpoint just to write it.
+    function switchCharacter(accountHash) {
+      document.cookie = `active_character=${accountHash}; path=/; max-age=31536000; samesite=lax`;
+      location.reload();
     }
 
     // Swaps a copy button's own label for "Copied!" for a moment rather than relying on a

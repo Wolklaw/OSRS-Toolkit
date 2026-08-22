@@ -195,6 +195,25 @@ def test_a_tracked_position_appears_with_its_computed_fields(
     assert "estimated_profit" in position
 
 
+def test_positions_can_be_filtered_to_one_synced_character(
+    signed_in: TestClient, settings: Settings
+):
+    """Two characters sharing one pairing token must not merge into one undifferentiated list
+    once a character is actually selected — the bug the switcher exists to fix. An untagged
+    position (no account_hash at all) is kept in every filtered view rather than hidden by it,
+    since nothing about it says which character it does or doesn't belong to."""
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.track(1, "Item A", 1, target_buy=100, target_sell=200, account_hash="hash-a")
+    repository.track(2, "Item B", 1, target_buy=100, target_sell=200, account_hash="hash-b")
+    repository.track(3, "Item C", 1, target_buy=100, target_sell=200)
+
+    signed_in.cookies.set("active_character", "hash-a")
+    response = signed_in.get("/api/positions")
+
+    names = {position["item_name"] for position in response.json()["positions"]}
+    assert names == {"Item A", "Item C"}
+
+
 def test_two_different_accounts_see_two_different_journals(client: TestClient):
     client.post("/auth/dev-login", json={"discord_user_id": "aaa", "username": "First"})
     settings = client.app.state.settings
@@ -271,7 +290,7 @@ def test_characters_delegates_to_the_sync_service_once_paired(signed_in: TestCli
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     known = [{"account_hash": "abc", "account_name": "Wolklaw", "last_seen": "..."}]
-    with patch("toolkit_web.app.HttpSyncSource.known_accounts", return_value=known):
+    with patch("toolkit_web.importing.HttpSyncSource.known_accounts", return_value=known):
         response = signed_in.get("/api/accounts")
 
     assert response.json() == {"accounts": known}
