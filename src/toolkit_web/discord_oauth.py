@@ -23,6 +23,11 @@ TOKEN_URL = "https://discord.com/api/oauth2/token"
 USER_URL = "https://discord.com/api/users/@me"
 TIMEOUT_SECONDS = 15
 
+# Discord's API sits behind Cloudflare, which turns away the standard library's default
+# User-Agent outright — the same "error code: 1010" block the sync service applies to its own
+# callers. Every request here needs a real one or Discord never sees it at all.
+USER_AGENT = "OSRS-Toolkit-Web/1.0 (+https://runescope.app)"
+
 
 @dataclass(frozen=True, slots=True)
 class DiscordUser:
@@ -66,6 +71,7 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
     ).encode("utf-8")
     request = urllib.request.Request(TOKEN_URL, data=body, method="POST")
     request.add_header("Content-Type", "application/x-www-form-urlencoded")
+    request.add_header("User-Agent", USER_AGENT)
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())
@@ -91,6 +97,7 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
 def fetch_user(access_token: str) -> DiscordUser | None:
     request = urllib.request.Request(USER_URL, method="GET")
     request.add_header("Authorization", f"Bearer {access_token}")
+    request.add_header("User-Agent", USER_AGENT)
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())

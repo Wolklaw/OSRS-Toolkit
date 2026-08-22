@@ -14,6 +14,25 @@ def _response(body: bytes) -> MagicMock:
     return response
 
 
+def test_every_discord_request_carries_a_real_user_agent():
+    """Discord's API sits behind Cloudflare, which turns away the standard library's default
+    User-Agent outright — the same block sync.runescope.app applies to its own callers, hit
+    from the other direction here. A request with no identifying header never reaches Discord
+    at all; this is the regression that shipped once already."""
+    from toolkit_web.discord_oauth import USER_AGENT
+
+    with patch(
+        "urllib.request.urlopen", return_value=_response(b'{"access_token": "t"}')
+    ) as urlopen:
+        exchange_code("id", "secret", "https://x/cb", "code")
+    assert urlopen.call_args[0][0].get_header("User-agent") == USER_AGENT
+
+    body = b'{"id": "1", "username": "u", "avatar": null}'
+    with patch("urllib.request.urlopen", return_value=_response(body)) as urlopen:
+        fetch_user("token")
+    assert urlopen.call_args[0][0].get_header("User-agent") == USER_AGENT
+
+
 def test_authorize_url_carries_the_essentials():
     url = authorize_url("client-123", "https://runescope.app/auth/discord/callback", "state-xyz")
 
