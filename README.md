@@ -44,8 +44,8 @@ Listens on `127.0.0.1:8100` by default and speaks plain HTTP — put a tunnel or
 front of it for anything reachable from outside the machine, the same as the sync service.
 
 For a real deployment beside the sync service, see **[docs/deploying.md](docs/deploying.md)**:
-systemd unit, the second hostname on the existing Cloudflare tunnel, and the two settings
-(`TOOLKIT_SESSION_SECRET`, and pulling *both* repositories) that quietly break it if missed.
+how the laptop is actually set up, how to update it, and the settings
+that quietly break it if missed — `TOOLKIT_SESSION_SECRET`, and pulling *both* repositories.
 
 ### Settings
 
