@@ -133,21 +133,14 @@ extensions, so this is safe as it stands — but a page rule or cache rule that 
 here that cannot be recreated. `accounts.db` beside it costs a re-login and a re-pasted pairing
 token. `market-cache/` is disposable.
 
-## Known gaps
+## Operational notes
 
-- **The laptop can still suspend, and closing the lid will do it.** `sleep.target`,
-  `suspend.target`, `hibernate.target` and `hybrid-sleep.target` are all `static` rather than
-  `masked`, and every `HandleLidSwitch*` line in `/etc/systemd/logind.conf` is commented out,
-  so the defaults apply — which suspend on lid close *even on mains power*. This is the outage
-  cause the sync service's notes call out as most likely. Needs a root password, so it has to
-  be done at the machine:
-
-  ```bash
-  sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
-  ```
-
-  and, for the lid, `HandleLidSwitch=ignore` plus `HandleLidSwitchExternalPower=ignore` in
-  `/etc/systemd/logind.conf`, then `sudo systemctl restart systemd-logind`.
+- **Sleep is disabled, deliberately.** `sleep.target`, `suspend.target`, `hibernate.target`
+  and `hybrid-sleep.target` are masked, and `/etc/systemd/logind.conf` sets
+  `HandleLidSwitch=ignore` and `HandleLidSwitchExternalPower=ignore`. Before that was done the
+  machine really did suspend — twice on 2026-08-22, for 7 seconds and 2m46s — and a suspend
+  freezes cloudflared's outbound connection, so both hostnames go dark until it wakes. If a
+  future reinstall loses this, that is the outage to suspect first.
 
 - **Secrets sit in the unit file.** Mode 600 and owned by `wolklaw`, so this is acceptable —
   but it is the reason not to paste that file anywhere, and the reason a rotation means editing
