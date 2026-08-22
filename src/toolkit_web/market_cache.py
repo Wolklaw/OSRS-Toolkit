@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from osrs_toolkit.market import MarketDataError, WikiMarketClient
-from osrs_toolkit.models import ItemMapping, MarketPoint
+from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 
 #: How long a snapshot is trusted before the next request pays to refresh it. The wiki's own
 #: volume windows are 5 and 60 minutes, so refreshing more often than the shorter of those
@@ -48,3 +48,12 @@ class MarketCache:
                     if not self._mappings:
                         raise
             return self._mappings, self._points
+
+    def timeseries(self, item_id: int) -> list[TimeseriesPoint]:
+        """One item's price history. Not held behind the snapshot's own refresh window — the
+        wiki client already caches each item's series to disk on its own, and a request for an
+        item nobody has looked at yet should not wait on somebody else's unrelated refresh."""
+        try:
+            return self._client.fetch_timeseries(item_id)
+        except MarketDataError:
+            return []

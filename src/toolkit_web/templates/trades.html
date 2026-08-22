@@ -43,7 +43,10 @@
 </div>
 
 <div class="panel">
-  <h2 style="margin-top:0">Trade log</h2>
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin-top:0; margin-bottom:0">Trade log</h2>
+    <a class="button secondary" href="/api/export.csv">Export CSV</a>
+  </div>
   {% if trades %}
   <table>
     <thead>

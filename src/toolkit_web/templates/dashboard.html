@@ -66,6 +66,13 @@
   {% endif %}
 </div>
 
+{% if net_worth_chart %}
+<div class="panel">
+  <h2 style="margin-top:0">Net worth over time</h2>
+  <div style="overflow-x:auto">{{ net_worth_chart | safe }}</div>
+</div>
+{% endif %}
+
 {% if account.paired %}
 <div class="panel">
   <h2 style="margin-top:0">Grand Exchange — live</h2>
@@ -134,7 +141,13 @@
     <tbody>
       {% for position in positions %}
       <tr>
-        <td>{{ position.item_name }}</td>
+        <td>
+          {% if position.item_id %}
+          <a href="/item/{{ position.item_id }}">{{ position.item_name }}</a>
+          {% else %}
+          {{ position.item_name }}
+          {% endif %}
+        </td>
         <td>{{ position.quantity }}</td>
         <td>{{ position.status }}</td>
         <td>{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>

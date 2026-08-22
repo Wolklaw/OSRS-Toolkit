@@ -65,14 +65,70 @@ def test_a_tracked_position_appears_on_the_dashboard_with_its_numbers(
 def test_net_worth_shows_the_most_recent_reading_not_an_older_one(
     signed_in: TestClient, settings: Settings
 ):
+    """The headline stat is the latest reading. An older one is allowed to reappear as a
+    history-chart axis label now — that is the chart doing its job — so this checks the
+    specific stat tile rather than the page as a whole."""
     repository = JournalRepository(settings.journal_path("111"))
     for value in (1_000_000, 5_000_000):
         repository.save_loadout_snapshot(_bare_snapshot(total_value=value))
 
     response = signed_in.get("/")
 
-    assert "5,000,000" in response.text
-    assert "1,000,000" not in response.text
+    assert '<div class="value">5,000,000 gp</div>' in response.text
+    assert '<div class="value">1,000,000 gp</div>' not in response.text
+
+
+def test_the_item_history_page_degrades_cleanly_when_the_wiki_is_unreachable(
+    signed_in: TestClient,
+):
+    from unittest.mock import patch
+
+    from osrs_toolkit.market import MarketDataError
+
+    with patch(
+        "toolkit_web.market_cache.WikiMarketClient.fetch_timeseries",
+        side_effect=MarketDataError("offline"),
+    ):
+        response = signed_in.get("/item/4151")
+
+    assert response.status_code == 200
+    assert "No price history available" in response.text
+
+
+def test_the_item_history_page_renders_a_chart_when_prices_are_available(
+    signed_in: TestClient,
+):
+    from unittest.mock import patch
+
+    from osrs_toolkit.models import TimeseriesPoint
+
+    points = [
+        TimeseriesPoint(timestamp=1_000, average_high=100, average_low=90),
+        TimeseriesPoint(timestamp=2_000, average_high=110, average_low=95),
+    ]
+    with patch(
+        "toolkit_web.market_cache.WikiMarketClient.fetch_timeseries", return_value=points
+    ):
+        response = signed_in.get("/item/4151")
+
+    assert response.status_code == 200
+    assert "<svg" in response.text
+    assert "No price history available" not in response.text
+
+
+def test_csv_export_includes_tracked_and_manual_trades(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.track(4151, "Abyssal whip", 1, target_buy=1_000_000, target_sell=1_100_000)
+    repository.add("Dragon bones", quantity=10, buy_price=2_000, sell_price=2_200)
+
+    response = signed_in.get("/api/export.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "Abyssal whip" in response.text
+    assert "Dragon bones" in response.text
 
 
 def _bare_snapshot(total_value: int):

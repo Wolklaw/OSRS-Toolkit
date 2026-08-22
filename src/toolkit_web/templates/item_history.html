@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p><a href="/">&larr; Back to dashboard</a></p>
+
+<div class="panel">
+  <h2 style="margin-top:0">{{ item_name }}</h2>
+  {% if has_history %}
+  <div class="row" style="gap:1.2rem; margin-bottom:0.8rem; font-size:0.85rem; color:var(--muted)">
+    <span><svg width="12" height="12"><rect width="12" height="12" fill="#d5ad52"/></svg> Average high</span>
+    <span><svg width="12" height="12"><rect width="12" height="12" fill="#5fb0e2"/></svg> Average low</span>
+  </div>
+  <div style="overflow-x:auto">{{ chart | safe }}</div>
+  {% else %}
+  <div class="empty">No price history available for this item yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

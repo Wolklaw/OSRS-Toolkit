@@ -18,6 +18,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from osrs_toolkit.buy_limits import buy_limit_status
+from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
@@ -32,6 +33,7 @@ from osrs_toolkit.savings_goal import (
 
 from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
+from toolkit_web.charting import net_worth_history_svg, price_history_svg
 from toolkit_web.config import Settings
 from toolkit_web.importing import journal_for, known_characters, live_offer_state
 from toolkit_web.market_cache import MarketCache
@@ -150,6 +152,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {**serialize(slot), "status_label": ge_offer_status_label(slot.state)}
             for slot in sorted(offer_slots.values(), key=lambda entry: entry.slot)
         ]
+        net_worth_chart = net_worth_history_svg(
+            [(point.captured_at, point.total_value) for point in net_worth_history]
+        )
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -159,11 +164,55 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "total_invested": sum(position.invested for position in positions),
                 "total_estimated_profit": sum(position.estimated_profit for position in positions),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
+                "net_worth_chart": net_worth_chart,
                 "live_character_selected": live_hash is not None,
                 "offer_rows": offer_rows,
                 "offer_screen": serialize(offer_screen) if offer_screen else None,
                 **switcher,
             },
+        )
+
+    @app.get("/item/{item_id}", response_class=HTMLResponse)
+    def item_history_page(
+        request: Request,
+        item_id: int,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        item_name = f"Item #{item_id}"
+        try:
+            mappings, _points = market.snapshot()
+            if item_id in mappings:
+                item_name = mappings[item_id].name
+        except MarketDataError:
+            pass
+        points = market.timeseries(item_id)
+        return templates.TemplateResponse(
+            request,
+            "item_history.html",
+            {
+                "account": account,
+                "item_id": item_id,
+                "item_name": item_name,
+                "chart": price_history_svg(points),
+                "has_history": bool(points),
+                **character_switcher_context(account, active),
+            },
+        )
+
+    @app.get("/api/export.csv")
+    def export_csv(
+        account: Account = CurrentAccount, active: str | None = ActiveCharacter
+    ) -> Response:
+        """A full backup of the Journal, not a view of whatever table or filter is on screen —
+        manual trades have no character to filter by at all, and are always included."""
+        filter_hash = character_switcher_context(account, active)["active_character"]
+        repository = journal_for(settings, account)
+        content = journal_csv(repository.list_tracked(filter_hash), repository.list_all())
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="runescope-journal.csv"'},
         )
 
     @app.get("/trades", response_class=HTMLResponse)
