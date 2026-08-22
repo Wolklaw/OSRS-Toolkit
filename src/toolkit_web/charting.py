@@ -32,10 +32,7 @@ def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: i
         return ""
 
     all_prices = [
-        price
-        for _timestamp, high, low in plotted
-        for price in (high, low)
-        if price is not None
+        price for _timestamp, high, low in plotted for price in (high, low) if price is not None
     ]
     min_price, max_price = min(all_prices), max(all_prices)
     price_span = max(max_price - min_price, 1)
@@ -67,19 +64,32 @@ def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: i
     end_label = datetime.fromtimestamp(max_time, tz=UTC).strftime("%b %d")
 
     lines = [
-        f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
-        f'font-family="Segoe UI, system-ui, sans-serif" font-size="12">',
-        f'<line x1="{padding_left}" y1="{padding_top}" x2="{padding_left}" '
-        f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>',
-        f'<line x1="{padding_left}" y1="{height - padding_bottom}" x2="{width - padding_right}" '
-        f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>',
-        f'<text x="{padding_left - 10}" y="{padding_top + 4}" fill="{_TEXT_COLOR}" '
-        f'text-anchor="end">{max_price:,}</text>',
-        f'<text x="{padding_left - 10}" y="{height - padding_bottom}" fill="{_TEXT_COLOR}" '
-        f'text-anchor="end">{min_price:,}</text>',
+        (
+            f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
+            f'font-family="Segoe UI, system-ui, sans-serif" font-size="12">'
+        ),
+        (
+            f'<line x1="{padding_left}" y1="{padding_top}" x2="{padding_left}" '
+            f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>'
+        ),
+        (
+            f'<line x1="{padding_left}" y1="{height - padding_bottom}" '
+            f'x2="{width - padding_right}" '
+            f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>'
+        ),
+        (
+            f'<text x="{padding_left - 10}" y="{padding_top + 4}" fill="{_TEXT_COLOR}" '
+            f'text-anchor="end">{max_price:,}</text>'
+        ),
+        (
+            f'<text x="{padding_left - 10}" y="{height - padding_bottom}" fill="{_TEXT_COLOR}" '
+            f'text-anchor="end">{min_price:,}</text>'
+        ),
         f'<text x="{padding_left}" y="{height - 8}" fill="{_TEXT_COLOR}">{start_label}</text>',
-        f'<text x="{width - padding_right}" y="{height - 8}" fill="{_TEXT_COLOR}" '
-        f'text-anchor="end">{end_label}</text>',
+        (
+            f'<text x="{width - padding_right}" y="{height - 8}" fill="{_TEXT_COLOR}" '
+            f'text-anchor="end">{end_label}</text>'
+        ),
     ]
     if high_points:
         lines.append(
@@ -88,8 +98,7 @@ def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: i
         )
     if low_points:
         lines.append(
-            f'<polyline points="{low_points}" fill="none" stroke="{_LOW_COLOR}" '
-            f'stroke-width="2"/>'
+            f'<polyline points="{low_points}" fill="none" stroke="{_LOW_COLOR}" stroke-width="2"/>'
         )
     lines.append("</svg>")
     return "\n".join(lines)
@@ -118,26 +127,41 @@ def net_worth_history_svg(
         return padding_top + (1 - (value - min_value) / value_span) * plot_height
 
     coords = " ".join(
-        f"{x_for(index):.1f},{y_for(value):.1f}" for index, (_captured_at, value) in enumerate(points)
+        f"{x_for(index):.1f},{y_for(value):.1f}"
+        for index, (_captured_at, value) in enumerate(points)
     )
     start_label = points[0][0][:10]
     end_label = points[-1][0][:10]
 
     return "\n".join(
         [
-            f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
-            f'font-family="Segoe UI, system-ui, sans-serif" font-size="12">',
-            f'<line x1="{padding_left}" y1="{padding_top}" x2="{padding_left}" '
-            f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>',
-            f'<line x1="{padding_left}" y1="{height - padding_bottom}" '
-            f'x2="{width - padding_right}" y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>',
-            f'<text x="{padding_left - 10}" y="{padding_top + 4}" fill="{_TEXT_COLOR}" '
-            f'text-anchor="end">{max_value:,}</text>',
-            f'<text x="{padding_left - 10}" y="{height - padding_bottom}" fill="{_TEXT_COLOR}" '
-            f'text-anchor="end">{min_value:,}</text>',
+            (
+                f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
+                f'font-family="Segoe UI, system-ui, sans-serif" font-size="12">'
+            ),
+            (
+                f'<line x1="{padding_left}" y1="{padding_top}" x2="{padding_left}" '
+                f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>'
+            ),
+            (
+                f'<line x1="{padding_left}" y1="{height - padding_bottom}" '
+                f'x2="{width - padding_right}" '
+                f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>'
+            ),
+            (
+                f'<text x="{padding_left - 10}" y="{padding_top + 4}" fill="{_TEXT_COLOR}" '
+                f'text-anchor="end">{max_value:,}</text>'
+            ),
+            (
+                f'<text x="{padding_left - 10}" y="{height - padding_bottom}" '
+                f'fill="{_TEXT_COLOR}" '
+                f'text-anchor="end">{min_value:,}</text>'
+            ),
             f'<text x="{padding_left}" y="{height - 8}" fill="{_TEXT_COLOR}">{start_label}</text>',
-            f'<text x="{width - padding_right}" y="{height - 8}" fill="{_TEXT_COLOR}" '
-            f'text-anchor="end">{end_label}</text>',
+            (
+                f'<text x="{width - padding_right}" y="{height - 8}" fill="{_TEXT_COLOR}" '
+                f'text-anchor="end">{end_label}</text>'
+            ),
             f'<polyline points="{coords}" fill="none" stroke="{_HIGH_COLOR}" stroke-width="2"/>',
             "</svg>",
         ]

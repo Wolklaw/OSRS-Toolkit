@@ -17,19 +17,32 @@ def _alch_snapshot():
 
     def point(item_id: int, price: int, volume: int) -> MarketPoint:
         return MarketPoint(
-            item_id=item_id, high=price, low=price, high_time=now, low_time=now,
-            volume_5m=volume, volume_1h=volume,
-            average_5m=price, average_1h=price,
-            average_high_5m=price, average_low_5m=price,
-            average_high_1h=price, average_low_1h=price,
-            high_volume_5m=volume, low_volume_5m=volume,
-            high_volume_1h=volume, low_volume_1h=volume,
+            item_id=item_id,
+            high=price,
+            low=price,
+            high_time=now,
+            low_time=now,
+            volume_5m=volume,
+            volume_1h=volume,
+            average_5m=price,
+            average_1h=price,
+            average_high_5m=price,
+            average_low_5m=price,
+            average_high_1h=price,
+            average_low_1h=price,
+            high_volume_5m=volume,
+            low_volume_5m=volume,
+            high_volume_1h=volume,
+            low_volume_1h=volume,
         )
 
     mappings = {
         _CHEAP_ALCHABLE_ID: ItemMapping(
-            item_id=_CHEAP_ALCHABLE_ID, name="Cheap alchable", members=False,
-            buy_limit=100, high_alch=1_000,
+            item_id=_CHEAP_ALCHABLE_ID,
+            name="Cheap alchable",
+            members=False,
+            buy_limit=100,
+            high_alch=1_000,
         ),
     }
     points = [point(_NATURE_RUNE_ID, 180, 1_000), point(_CHEAP_ALCHABLE_ID, 50, 1_000)]

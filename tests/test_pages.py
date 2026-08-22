@@ -162,9 +162,7 @@ def test_the_item_history_page_renders_a_chart_when_prices_are_available(
         TimeseriesPoint(timestamp=1_000, average_high=100, average_low=90),
         TimeseriesPoint(timestamp=2_000, average_high=110, average_low=95),
     ]
-    with patch(
-        "toolkit_web.market_cache.WikiMarketClient.fetch_timeseries", return_value=points
-    ):
+    with patch("toolkit_web.market_cache.WikiMarketClient.fetch_timeseries", return_value=points):
         response = signed_in.get("/item/4151")
 
     assert response.status_code == 200
@@ -172,9 +170,7 @@ def test_the_item_history_page_renders_a_chart_when_prices_are_available(
     assert "No price history available" not in response.text
 
 
-def test_csv_export_includes_tracked_and_manual_trades(
-    signed_in: TestClient, settings: Settings
-):
+def test_csv_export_includes_tracked_and_manual_trades(signed_in: TestClient, settings: Settings):
     repository = JournalRepository(settings.journal_path("111"))
     repository.track(4151, "Abyssal whip", 1, target_buy=1_000_000, target_sell=1_100_000)
     repository.add("Dragon bones", quantity=10, buy_price=2_000, sell_price=2_200)
