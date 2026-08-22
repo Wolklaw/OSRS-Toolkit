@@ -46,6 +46,7 @@ from toolkit_web.importing import (
     known_characters,
     live_offer_state,
     raw_sync_state,
+    stored_journal,
 )
 from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
@@ -462,7 +463,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         trades = []
         for trade in repository.list_all():
             row = serialize(trade)
-            character_id = trade_characters.get(trade.trade_id)
+            character_id = trade_characters.get(trade.sync_uid)
             row["character_name"] = names_by_id.get(character_id)
             trades.append(row)
         return templates.TemplateResponse(
@@ -1110,6 +1111,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="No such desktop credential.")
         return {"ok": True}
 
+    # -- journal mirror --------------------------------------------------------------------
+
+    @app.get("/api/journal/version")
+    def journal_version(account: Account = CurrentAccount) -> dict:
+        """Has anything changed? Two indexed scalars per table and nothing serialized.
+
+        The desktop polls this on a timer and pulls only when the answer moves, so this route
+        is the one that has to stay cheap -- it reads the journal straight off disk rather
+        than importing from the sync service the way a page render does.
+        """
+        return stored_journal(settings, account).sync_version()
+
+    @app.get("/api/journal/pull")
+    def journal_pull(account: Account = CurrentAccount, since: str | None = None) -> dict:
+        """Rows changed after ``since``, or everything when it is omitted.
+
+        Everything is what the first sync asks for, and on an account that has been running a
+        while that is the whole journal in one response. It is a few hundred rows of small
+        integers; paginating it would add a cursor to get wrong in exchange for nothing.
+        """
+        return stored_journal(settings, account).sync_export(since=since or None)
+
+    @app.post("/api/journal/push")
+    def journal_push(payload: dict, account: Account = CurrentAccount) -> dict:
+        """Merge rows the desktop is holding, newest edit winning.
+
+        Nothing here decides what a conflict means -- that lives in the journal itself, so
+        that both sides of the mirror resolve one the same way rather than each having their
+        own opinion about it.
+        """
+        applied = stored_journal(settings, account).sync_apply(payload)
+        return {"ok": True, **applied}
+
     @app.get("/api/sync-state")
     def sync_state(account: Account = CurrentAccount, account_hash: str | None = None) -> dict:
         """Live plugin state, relayed to the desktop window.
@@ -1183,9 +1217,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="character_id must be a whole number")
         repository = journal_for(settings, account)
         trade_id = repository.add(item_name.strip(), quantity, buy_price, sell_price)
-        if character_id is not None:
-            accounts.set_trade_character(account.discord_user_id, trade_id, character_id)
-        return {"ok": True, "trade_id": trade_id}
+        sync_uid = repository.trade_sync_uid(trade_id)
+        if character_id is not None and sync_uid:
+            accounts.set_trade_character(account.discord_user_id, sync_uid, character_id)
+        return {"ok": True, "trade_id": trade_id, "sync_uid": sync_uid}
 
     @app.delete("/api/trades/{trade_id}")
     def remove_trade(trade_id: int, account: Account = CurrentAccount) -> dict:

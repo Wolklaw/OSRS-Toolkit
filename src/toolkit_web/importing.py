@@ -30,6 +30,17 @@ def journal_for(settings: Settings, account: Account) -> JournalRepository:
     return repository
 
 
+def stored_journal(settings: Settings, account: Account) -> JournalRepository:
+    """This account's journal exactly as it is on disk, with no sync import first.
+
+    ``journal_for`` calls the sync service before handing the journal back, which is right for
+    a page render and wrong for anything on a timer: the desktop polls for a version number
+    every minute, and making that reach out to another service -- on the same small machine
+    hosting this one -- would turn the cheapest question here into the most expensive.
+    """
+    return JournalRepository(settings.journal_path(account.discord_user_id))
+
+
 def known_characters(settings: Settings, account: Account) -> list[dict]:
     """Every RuneLite character the sync service has seen play through this account's token,
     for a character switcher. Empty for an account with no pairing token — there is nothing to

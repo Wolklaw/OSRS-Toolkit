@@ -46,12 +46,17 @@ CREATE TABLE IF NOT EXISTS character (
 -- Which character a manual trade belongs to. Kept here rather than as a column on the trade
 -- itself: a trade lives in that account's own journal.db, a file this app shares unchanged
 -- with the desktop window, and a character is a concept the desktop window has never needed
--- to know about. trade_id is only unique within one account's journal, hence the pairing.
+-- to know about.
+--
+-- Keyed by the trade's sync_uid rather than its trade_id. An autoincrement id names a
+-- different trade on every machine, so once a trade recorded on the desktop can arrive here,
+-- an attribution stored against a local id would follow whichever trade happened to land on
+-- that number -- attributing somebody's flip to the wrong character rather than to none.
 CREATE TABLE IF NOT EXISTS trade_character (
     discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
-    trade_id        INTEGER NOT NULL,
+    trade_sync_uid  TEXT NOT NULL,
     character_id    INTEGER NOT NULL REFERENCES character(character_id) ON DELETE CASCADE,
-    PRIMARY KEY (discord_user_id, trade_id)
+    PRIMARY KEY (discord_user_id, trade_sync_uid)
 );
 
 -- A credential the desktop window signs in with, since it has no browser to hold a session
@@ -144,6 +149,38 @@ class AccountsDB:
             for column, sql_type in _MIGRATION_COLUMNS.items():
                 if column not in existing:
                     connection.execute(f"ALTER TABLE account ADD COLUMN {column} {sql_type}")
+            self._rekey_trade_characters(connection)
+
+    def _rekey_trade_characters(self, connection: sqlite3.Connection) -> None:
+        """Move trade attributions off local trade ids and onto the trade's own name.
+
+        The old rows cannot be translated from here: the mapping from trade_id to sync_uid
+        lives in that account's journal, a different database this class knows nothing about.
+        So rather than guess or drop them, any that exist are set aside under their own table
+        name where they can still be read. In practice there are none -- no trade was ever
+        recorded here before this changed -- and an empty table is simply replaced.
+        """
+        columns = {
+            str(row["name"]) for row in connection.execute("PRAGMA table_info(trade_character)")
+        }
+        if not columns or "trade_sync_uid" in columns:
+            return
+        stranded = connection.execute("SELECT COUNT(*) FROM trade_character").fetchone()[0]
+        if stranded:
+            connection.execute("ALTER TABLE trade_character RENAME TO trade_character_by_local_id")
+        else:
+            connection.execute("DROP TABLE trade_character")
+        connection.execute(
+            """
+            CREATE TABLE trade_character (
+                discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
+                trade_sync_uid  TEXT NOT NULL,
+                character_id    INTEGER NOT NULL REFERENCES character(character_id)
+                    ON DELETE CASCADE,
+                PRIMARY KEY (discord_user_id, trade_sync_uid)
+            )
+            """
+        )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
@@ -288,32 +325,33 @@ class AccountsDB:
             )
 
     def set_trade_character(
-        self, discord_user_id: str, trade_id: int, character_id: int | None
+        self, discord_user_id: str, trade_sync_uid: str, character_id: int | None
     ) -> None:
         with self._transaction() as connection:
             if character_id is None:
                 connection.execute(
-                    "DELETE FROM trade_character WHERE discord_user_id = ? AND trade_id = ?",
-                    (discord_user_id, trade_id),
+                    "DELETE FROM trade_character WHERE discord_user_id = ? AND trade_sync_uid = ?",
+                    (discord_user_id, trade_sync_uid),
                 )
                 return
             connection.execute(
-                "INSERT INTO trade_character (discord_user_id, trade_id, character_id)"
+                "INSERT INTO trade_character (discord_user_id, trade_sync_uid, character_id)"
                 " VALUES (?, ?, ?)"
-                " ON CONFLICT(discord_user_id, trade_id)"
+                " ON CONFLICT(discord_user_id, trade_sync_uid)"
                 " DO UPDATE SET character_id = excluded.character_id",
-                (discord_user_id, trade_id, character_id),
+                (discord_user_id, trade_sync_uid, character_id),
             )
 
-    def get_trade_characters(self, discord_user_id: str) -> dict[int, int]:
-        """Every trade this account has attributed to a character, as trade_id -> character_id
+    def get_trade_characters(self, discord_user_id: str) -> dict[str, int]:
+        """Every trade this account has attributed to a character, as sync_uid -> character_id
         — read once per page render rather than once per row."""
         with self._transaction() as connection:
             rows = connection.execute(
-                "SELECT trade_id, character_id FROM trade_character WHERE discord_user_id = ?",
+                "SELECT trade_sync_uid, character_id FROM trade_character"
+                " WHERE discord_user_id = ?",
                 (discord_user_id,),
             ).fetchall()
-        return {row["trade_id"]: row["character_id"] for row in rows}
+        return {row["trade_sync_uid"]: row["character_id"] for row in rows}
 
     # -- watchlist -----------------------------------------------------------------------
 
