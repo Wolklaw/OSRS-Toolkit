@@ -135,6 +135,22 @@ app wants all three to draw one page.
 The stamps sit beside the payloads rather than inside them: the offers payload is keyed by slot
 number, so an `updated_at` key within it would be one more thing every reader has to skip.
 
+### `GET /v1/accounts`
+
+Desktop app → service. Every character this pairing has been seen playing, newest first —
+what a "switch character" control has to offer before it can name any one of them by hash.
+
+```json
+{
+  "accounts": [
+    { "account_hash": "...", "account_name": "Wolklaw", "last_seen": "2026-08-22T06:27:52Z" }
+  ]
+}
+```
+
+`account_name` is `null` for a character seen only through an event, before its first
+heartbeat landed — a name-less entry beats one silently missing from the list.
+
 ### `GET /v1/health`
 
 No token required. `{ "status": "ok", "time": "..." }`.
