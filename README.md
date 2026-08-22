@@ -15,9 +15,18 @@ boss gear checklists.
 
 ### [Download the latest Windows release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 
-**Nothing plays the game for you. Your journal stays on your PC.**
+**Nothing plays the game for you.**
 
-Sign-in is optional and only needed for RuneLite data. The RuneLite plugin sends to [runescope.app](https://runescope.app) and this app reads from there, so nothing on your machine is fed by the plugin directly. Without a token it still runs entirely offline: your journal, GE Flipper, High Alchemy and skilling all work against live market prices.
+No token entered, and this is a fully offline app: your journal stays on your PC, and GE
+Flipper, the Trade Journal, High Alchemy and skilling all work against live market prices with
+nothing signed in.
+
+Sign in and two things change. RuneLite data now reaches this app through
+[runescope.app](https://runescope.app) rather than a folder the plugin writes to directly — the
+RuneLite Plugin Hub does not accept a plugin that feeds an app on the same machine, so the
+plugin posts to a web service and this app reads from there instead. And your journal — manual
+trades and tracked positions — mirrors the same account's journal on the website: record a
+trade in either place and it reaches the other within a minute.
 
 </div>
 
@@ -212,20 +221,30 @@ plugin is there so you don't have to type in what you just did in-game.
 - PvM Readiness verdicts. Without gear sync every boss reads **Unknown** — you still get the
   checklists, the requirements, and the GP/hr estimates, just not whether *you* can do it.
 
-**What the plugin never does:** log into anything, click anything, change your offers, or send
-your trades anywhere.
+**What the plugin never does:** log into anything, click anything, or change your offers. It
+does send trade events — that is its entire purpose — but only to the account you paired it
+with, over a connection it authenticates itself, and never anywhere else.
 
 ## RuneLite activity
 
 Install and enable the separate
-[OSRS Toolkit Sync companion plugin](https://github.com/Wolklaw/osrs-toolkit-runelite), then hit
-**Connect RuneLite**. Your GE fills — partial and complete — get saved on your PC while RuneLite is
-running, even if the desktop app is shut, and come across next time you open the toolkit.
+[OSRS Toolkit Sync companion plugin](https://github.com/Wolklaw/osrs-toolkit-runelite), sign in
+to [runescope.app](https://runescope.app), and generate a **pairing token** on your profile
+there for the plugin, and a separate **desktop access token** for this app under
+**Settings → Website**. Your GE fills — partial and complete — arrive at the website while
+RuneLite is running, even if this app is shut, and come across next time you open the toolkit.
+
+The plugin no longer writes to a folder on this PC. The RuneLite Plugin Hub does not accept a
+plugin that feeds an application on the same machine it runs on, so the plugin posts to a small
+sync service instead, the website collects from that, and this app reads from the website —
+plugin, then service, then website, then here. If you are still on an older version of the
+plugin that writes to `~/.runelite/osrs-toolkit`, this app still reads that folder too, so
+nothing you already had stops working; it just isn't how a new install talks to a new plugin.
 
 [![RuneLite GE fills and player trade activity in the journal](docs/images/runelite-activity.png)](docs/images/runelite-activity.png)
 
-- Fills wait in a file on your PC and each one carries its own ID, so nothing gets imported twice
-  if something has to retry.
+- Fills are acknowledged by ID once imported, so nothing gets imported twice if something has to
+  retry.
 - You get the character, whether it was a buy or a sell, the item, quantity, coins, which slot, the
   price you set, and where the offer had got to.
 - All the fills from one GE offer collapse into a single row that updates itself, rather than a new
@@ -240,19 +259,20 @@ running, even if the desktop app is shut, and come across next time you open the
   order — so the rest of that order keeps landing on the same row instead of appearing out of
   nowhere once everything has filled.
 - The plugin also reports where you're standing in the Grand Exchange, which is how the journal
-  knows which row the game is currently asking you about. It's part of GE tracking, stops when that
-  stops, and goes nowhere off your PC.
+  knows which row the game is currently asking you about. It's part of GE tracking and stops when
+  that stops.
 - PvM gear sync is **off unless you turn it on**. With it on, opening your bank in-game records
-  your worn gear, inventory, bank, and levels for the PvM Readiness page. Again, nothing leaves
-  your PC.
+  your worn gear, inventory, bank, and levels for the PvM Readiness page.
 - The app knows whether you're online, and looks your character up on the public hiscores.
 
 [![Local RuneLite connection and privacy controls](docs/images/runelite-connection.png)](docs/images/runelite-connection.png)
 
-The connection is just files on your computer. It doesn't click anything, doesn't touch your
-offers, doesn't talk to game worlds, never asks for your Jagex login, and doesn't upload your trade
-history anywhere. It also can't tell you about trades you made before installing it, while it was
-switched off, or on mobile and other clients.
+None of it clicks anything, touches your offers, talks to game worlds, or asks for your Jagex
+login. What it does send, once signed in, is trade and position data — to the account you signed
+into, nowhere else — which is the trade this makes for reaching your journal from a phone or
+another PC. Stay signed out and everything is exactly as before: local files, nothing sent
+anywhere. It also can't tell you about trades you made before installing it, while it was
+switched off, or on mobile and other clients that don't run the plugin.
 
 ## Alch Finder
 
@@ -363,10 +383,13 @@ After an update, a **What's new** window shows that version's changes once, stra
 bundled [changelog](CHANGELOG.md). It's still there in **Settings → About** afterwards.
 
 Your journal, imported trades, settings, watchlists, and cached prices all live in local folders on
-your PC. Prices come from the OSRS Wiki API, update checks from GitHub Releases, and character
-lookups from the public hiscores. OSRS Toolkit never asks for or stores a Jagex password, bank PIN,
-authenticator code, or anything else that gets you into the game. If you find a security problem,
-the [security policy](SECURITY.md) says how to report it.
+your PC. Nothing signed in, and that is the whole story. Sign in under **Settings → Website**
+with a token from your [runescope.app](https://runescope.app) profile and your journal — manual
+trades and tracked positions — also mirrors to that account, which is what lets a phone or
+another PC see the same one. Prices come from the OSRS Wiki API, update checks from GitHub
+Releases, and character lookups from the public hiscores. OSRS Toolkit never asks for or stores
+a Jagex password, bank PIN, authenticator code, or anything else that gets you into the game. If
+you find a security problem, the [security policy](SECURITY.md) says how to report it.
 
 ## Quick start
 

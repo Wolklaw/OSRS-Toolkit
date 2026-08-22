@@ -1042,22 +1042,18 @@ class RuneLiteConnectionDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("<h2>Connect RuneLite</h2>"))
         explanation = QLabel(
-            "Install and enable the OSRS Toolkit plugin in RuneLite. It records Grand Exchange "
-            "fills locally while this app is closed and imports them automatically when the app "
-            "opens. Player-to-player trade tracking is optional in the RuneLite plugin settings."
+            "Install and enable the OSRS Toolkit plugin in RuneLite, and give it a pairing "
+            "token from your runescope.app profile. Player-to-player trade tracking is "
+            "optional in the RuneLite plugin settings."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
         self.status = QLabel(objectName="recommendation")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
-        privacy = QLabel(
-            "The bridge uses local files only. No Jagex credentials or trade history are sent "
-            "to OSRS Toolkit servers.",
-            objectName="muted",
-        )
-        privacy.setWordWrap(True)
-        layout.addWidget(privacy)
+        self.privacy = QLabel(objectName="muted")
+        self.privacy.setWordWrap(True)
+        layout.addWidget(self.privacy)
         actions = QHBoxLayout()
         plugin_button = QPushButton("View RuneLite plugin")
         plugin_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.PLUGIN_URL)))
@@ -1076,12 +1072,18 @@ class RuneLiteConnectionDialog(QDialog):
 
     def refresh_status(self) -> None:
         connection = self.importer.connection_status()
+        reading_website = self.importer.sync_root is None
         if connection.active:
             character = f" as {connection.account_name}" if connection.account_name else ""
             player_trades = "on" if connection.player_trade_tracking else "off"
             self.status.setText(
                 f"Connected{character} — new trades will sync automatically. "
                 f"Player-trade tracking is {player_trades}."
+            )
+        elif connection.detected and reading_website and not connection.source_reachable:
+            self.status.setText(
+                "Cannot reach the website right now — this is not the plugin's fault. Your "
+                "journal is safe on this PC and will catch up once it is reachable again."
             )
         elif connection.detected:
             self.status.setText(
@@ -1093,10 +1095,23 @@ class RuneLiteConnectionDialog(QDialog):
                 "Not connected yet. Install and enable the RuneLite plugin, then choose Check "
                 "connection."
             )
+        # What actually leaves this PC depends on which source is configured. A signed-in
+        # install reads through runescope.app, which is a claim this label has to make
+        # honestly rather than the blanket "local files only" that was true before that
+        # existed — a false privacy claim is worse than none at all.
+        self.privacy.setText(
+            "Trade and position data reaches your runescope.app account, and nowhere else. "
+            "Jagex credentials are never involved."
+            if reading_website
+            else "The bridge uses local files only. No Jagex credentials or trade history are "
+            "sent anywhere."
+        )
+        self.folder_button.setVisible(not reading_website)
         self.folder_button.setEnabled(connection.detected)
 
     def _open_folder(self) -> None:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.importer.sync_root)))
+        if self.importer.sync_root is not None:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.importer.sync_root)))
 
 
 class SyncedTradeDetailsDialog(QDialog):
