@@ -10,6 +10,11 @@
       <option value="{{ option }}" {% if option == strategy %}selected{% endif %}>{{ option }}</option>
       {% endfor %}
     </select>
+    <select name="slots" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.7rem;">
+      {% for count in range(1, 9) %}
+      <option value="{{ count }}" {% if count == slots %}selected{% endif %}>{{ count }} slot{{ 's' if count != 1 else '' }}</option>
+      {% endfor %}
+    </select>
     <button class="button" type="submit">Update</button>
   </form>
 </div>

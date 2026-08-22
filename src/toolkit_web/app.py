@@ -9,6 +9,7 @@ background worker.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -44,6 +45,27 @@ STATE_COOKIE = "oauth_state"
 #: further back than this in one request — and unlike positions, synced-trade rows are never
 #: revisited once shown, so there is no correctness reason to load more.
 ACTIVITY_WINDOW_DAYS = 90
+
+#: Excludes 0/O and 1/I/L — characters easy to mistype or misread on a phone screen or a
+#: scrap of paper, which is where a code with no Discord app or email behind it has to
+#: survive. 32 characters ^ 16 positions is comfortably beyond brute-forcing regardless.
+_RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def _generate_recovery_code() -> str:
+    raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(16))
+    return "-".join(raw[i : i + 4] for i in range(0, 16, 4))
+
+
+def _recovery_account_id(code: str) -> str:
+    """The account id a recovery code maps to — never the code itself.
+
+    Prefixed so it can never collide with a real Discord id, which is always a bare numeric
+    snowflake. Normalized before hashing so a code pasted back without its dashes, in the
+    wrong case, or with stray whitespace still finds the same account it was issued for.
+    """
+    normalized = "".join(ch for ch in code.upper() if ch.isalnum())
+    return "local:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -129,12 +151,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         account: Account = CurrentAccount,
         cash_stack: int = 10_000_000,
         strategy: str = "Balanced (1–4h)",
+        slots: int = 8,
     ) -> HTMLResponse:
+        # The Grand Exchange has exactly 8 slots, so anything outside that range describes a
+        # game state that cannot exist — clamped rather than rejected, since a stray query
+        # string should degrade to the nearest real answer instead of a 422 on a GET page.
+        slots = max(1, min(8, slots))
         context = {
             "account": account,
             "strategies": list(STRATEGIES),
             "strategy": strategy,
             "cash_stack": cash_stack,
+            "slots": slots,
         }
         try:
             mappings, points = market.snapshot()
@@ -142,8 +170,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return templates.TemplateResponse(
                 request, "flips.html", {**context, "market_unavailable": True}
             )
-        candidates = rank_flips(mappings, points, cash_stack=cash_stack, strategy=strategy)
-        portfolio = plan_flip_portfolio(candidates, cash_stack)
+        candidates = rank_flips(
+            mappings, points, cash_stack=cash_stack, strategy=strategy, slot_count=slots
+        )
+        portfolio = plan_flip_portfolio(candidates, cash_stack, slot_count=slots)
         return templates.TemplateResponse(
             request,
             "flips.html",
@@ -318,9 +348,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def dev_login(payload: dict) -> Response:
             discord_user_id = payload.get("discord_user_id")
             username = payload.get("username", "Dev User")
+            avatar = payload.get("avatar")
             if not isinstance(discord_user_id, str) or not discord_user_id:
                 raise HTTPException(status_code=422, detail="discord_user_id is required")
-            accounts.upsert_login(discord_user_id, username, None)
+            accounts.upsert_login(discord_user_id, username, avatar)
             response = JSONResponse({"ok": True})
             response.set_cookie(
                 COOKIE_NAME,
@@ -330,6 +361,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 samesite="lax",
             )
             return response
+
+    @app.post("/auth/recovery/create")
+    def create_recovery_account(payload: dict | None = None) -> dict:
+        """Sign in without Discord at all: a random code stands in for a whole identity.
+
+        The code itself is never stored, the same way a sync pairing token never is — only
+        its hash becomes the account's id, reusing ``get``/``upsert_login`` unchanged rather
+        than adding a parallel login mechanism for this one path. It is returned exactly
+        once, here, because there is nowhere on the server that could ever show it again: a
+        lost code has no recovery of its own, which is the whole reason it works with no
+        email address behind it.
+        """
+        display_name = (payload or {}).get("display_name")
+        display_name = display_name.strip() if isinstance(display_name, str) else ""
+        code = _generate_recovery_code()
+        account_id = _recovery_account_id(code)
+        accounts.upsert_login(account_id, display_name or "Player", None)
+        response = JSONResponse({"ok": True, "code": code})
+        response.set_cookie(
+            COOKIE_NAME,
+            signer.issue(account_id),
+            max_age=MAX_AGE_SECONDS,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+        )
+        return response
+
+    @app.post("/auth/recovery/login")
+    def recovery_login(payload: dict) -> Response:
+        code = payload.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise HTTPException(status_code=422, detail="Enter your recovery code.")
+        account = accounts.get(_recovery_account_id(code))
+        if account is None:
+            raise HTTPException(status_code=401, detail="That code was not recognized.")
+        accounts.upsert_login(account.discord_user_id, account.username, account.avatar)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(
+            COOKIE_NAME,
+            signer.issue(account.discord_user_id),
+            max_age=MAX_AGE_SECONDS,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+        )
+        return response
 
     @app.post("/auth/logout")
     def logout() -> Response:

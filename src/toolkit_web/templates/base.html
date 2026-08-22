@@ -136,7 +136,7 @@
     </div>
     {% if account %}
     <div class="account">
-      {% if account.avatar_url %}<img src="{{ account.avatar_url }}" alt="">{% endif %}
+      {% if account.avatar %}<img src="{{ account.avatar }}" alt="">{% endif %}
       <span>{{ account.username }}</span>
       <button class="button secondary" onclick="signOut()">Sign out</button>
     </div>

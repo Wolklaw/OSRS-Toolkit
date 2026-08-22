@@ -275,3 +275,22 @@ def test_characters_delegates_to_the_sync_service_once_paired(signed_in: TestCli
         response = signed_in.get("/api/accounts")
 
     assert response.json() == {"accounts": known}
+
+
+def test_a_signed_in_account_with_a_real_avatar_renders_it(client: TestClient):
+    """Pins the field name the header reads. It previously read account.avatar_url, which
+    does not exist on the Account dataclass (the field is named avatar) — every existing
+    test happened to use no avatar at all, so a broken attribute access and a correctly
+    empty one were indistinguishable until one was checked with a real value."""
+    client.post(
+        "/auth/dev-login",
+        json={
+            "discord_user_id": "111",
+            "username": "Wolklaw",
+            "avatar": "https://cdn.discordapp.com/avatars/111/abc.png",
+        },
+    )
+
+    response = client.get("/")
+
+    assert 'src="https://cdn.discordapp.com/avatars/111/abc.png"' in response.text

@@ -153,3 +153,27 @@ def _ge_fill(quantity: int) -> SyncedTrade:
             ),
         ),
     )
+
+
+def test_the_slots_selector_is_passed_through_to_ranking(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips", params={"slots": 3})
+
+    assert response.status_code == 200
+    assert '<option value="3" selected>' in response.text
+
+
+def test_a_slot_count_outside_the_real_ge_range_is_clamped(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips", params={"slots": 99})
+
+    assert response.status_code == 200
+    assert '<option value="8" selected>' in response.text
+
+
+def test_a_zero_slot_count_is_clamped_up_rather_than_producing_no_offers(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips", params={"slots": 0})
+
+    assert response.status_code == 200
+    assert '<option value="1" selected>' in response.text

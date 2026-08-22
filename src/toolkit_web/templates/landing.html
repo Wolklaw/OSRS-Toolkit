@@ -4,5 +4,90 @@
   <h1>RuneScope</h1>
   <p>Your OSRS trade journal, wherever you are.</p>
   <a class="button" href="/auth/discord/login">Sign in with Discord</a>
+
+  <div style="margin:2rem auto 0; max-width:420px; text-align:left;">
+    <p class="hint" style="text-align:center">or, with no Discord account at all</p>
+
+    <div class="panel" style="margin-top:1rem">
+      <div class="row" style="justify-content:space-between">
+        <strong>Already have a code?</strong>
+      </div>
+      <div class="row" style="margin-top:0.6rem">
+        <input type="text" id="recovery-code" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="max-width:220px">
+        <button class="button secondary" onclick="signInWithCode()">Sign in</button>
+      </div>
+      <div class="status-msg" id="recovery-login-status"></div>
+    </div>
+
+    <div class="panel" id="create-panel">
+      <strong>New here?</strong>
+      <p class="hint">Get a recovery code instead. No email, no password — just don't lose it,
+        there is no way to recover a lost one.</p>
+      <div class="row">
+        <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off">
+        <button class="button secondary" onclick="createAccount()">Create account</button>
+      </div>
+      <div class="status-msg" id="create-status"></div>
+    </div>
+
+    <div class="panel" id="code-reveal-panel" style="display:none">
+      <strong>Your recovery code — save it now</strong>
+      <p class="hint">This is the only time it will ever be shown. Anyone with this code can
+        sign in as you.</p>
+      <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
+        <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
+        <button class="button secondary" onclick="copyCode()">Copy</button>
+      </div>
+      <div class="row" style="margin-top:0.8rem">
+        <button class="button" onclick="location.href='/'">I've saved it — continue</button>
+      </div>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function signInWithCode() {
+    const status = document.getElementById('recovery-login-status');
+    const code = document.getElementById('recovery-code').value.trim();
+    if (!code) { return; }
+    const response = await fetch('/auth/recovery/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (!response.ok) {
+      const body = await response.json();
+      status.textContent = body.detail || 'That code was not recognized.';
+      status.className = 'status-msg error';
+      return;
+    }
+    location.href = '/';
+  }
+
+  async function createAccount() {
+    const status = document.getElementById('create-status');
+    const displayName = document.getElementById('display-name').value.trim();
+    const response = await fetch('/auth/recovery/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: displayName }),
+    });
+    if (!response.ok) {
+      status.textContent = 'Could not create an account just now — try again in a moment.';
+      status.className = 'status-msg error';
+      return;
+    }
+    const body = await response.json();
+    document.getElementById('revealed-code').textContent = body.code;
+    document.getElementById('create-panel').style.display = 'none';
+    document.getElementById('code-reveal-panel').style.display = 'block';
+  }
+
+  function copyCode() {
+    const code = document.getElementById('revealed-code').textContent;
+    navigator.clipboard.writeText(code);
+  }
+</script>
 {% endblock %}
