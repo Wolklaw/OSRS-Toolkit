@@ -46,6 +46,18 @@ STRATEGIES = {
 }
 
 
+def confidence_standing(confidence: int, floor: int) -> float:
+    """Where a score sits between the strategy's own minimum and a perfect 100.
+
+    Every row on screen already cleared ``floor`` — that is what the filter did — so the
+    raw number cannot say much on its own: 58% is a poor showing under Overnight's 65 and a
+    comfortable one under Quick's 45. Scored against the floor it was actually judged by, 0
+    means "scraped in" and 1 means "as good as this gets".
+    """
+    span = max(1, 100 - floor)
+    return max(0.0, min(1.0, (confidence - floor) / span))
+
+
 def ge_tax(sell_price: int) -> int:
     """Return per-item GE tax: 2%, rounded down, capped at 5m."""
     return min(math.floor(max(0, sell_price) * GE_TAX_RATE), GE_TAX_CAP)

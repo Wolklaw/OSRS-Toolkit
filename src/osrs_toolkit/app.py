@@ -85,6 +85,51 @@ from osrs_toolkit.calculators import (
     skill_results,
 )
 from osrs_toolkit.csv_export import journal_csv
+from osrs_toolkit.formatting import (
+    attention_tooltip as _attention_tooltip,
+)
+from osrs_toolkit.formatting import (
+    availability as _availability,
+)
+from osrs_toolkit.formatting import (
+    compact_items as _compact_items,
+)
+from osrs_toolkit.formatting import (
+    display_timestamp as _display_timestamp,
+)
+from osrs_toolkit.formatting import (
+    format_countdown as _format_countdown,
+)
+from osrs_toolkit.formatting import (
+    format_eta as _format_eta,
+)
+from osrs_toolkit.formatting import (
+    format_goal_percent as _format_goal_percent,
+)
+from osrs_toolkit.formatting import (
+    gp as _gp,
+)
+from osrs_toolkit.formatting import (
+    group_row as _group_row,
+)
+from osrs_toolkit.formatting import (
+    hold_time as _hold_time,
+)
+from osrs_toolkit.formatting import (
+    item_detail_lines as _item_detail_lines,
+)
+from osrs_toolkit.formatting import (
+    percent as _percent,
+)
+from osrs_toolkit.formatting import (
+    short_duration as _short_duration,
+)
+from osrs_toolkit.formatting import (
+    signed_gp as _signed_gp,
+)
+from osrs_toolkit.formatting import (
+    synced_trade_label as _synced_trade_label,
+)
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
 from osrs_toolkit.journal_presentation import (
@@ -106,7 +151,6 @@ from osrs_toolkit.market import WikiMarketClient
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 from osrs_toolkit.performance import (
     CalibrationRow,
-    GroupPerformance,
     by_item,
     by_strategy,
     calibration,
@@ -116,6 +160,7 @@ from osrs_toolkit.performance import (
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import (
     STRATEGIES,
+    confidence_standing,
     ge_tax,
     offer_targets,
     plan_flip_portfolio,
@@ -5292,27 +5337,6 @@ def _setting_int(key: str, default: int, *, minimum: int, maximum: int) -> int:
     return min(max(value, minimum), maximum)
 
 
-def _gp(value: int) -> str:
-    return f"{value:,} gp"
-
-
-def _signed_gp(value: int) -> str:
-    sign = "+" if value > 0 else ""
-    return f"{sign}{value:,} gp"
-
-
-def confidence_standing(confidence: int, floor: int) -> float:
-    """Where a score sits between the strategy's own minimum and a perfect 100.
-
-    Every row on screen already cleared ``floor`` — that is what the filter did — so the
-    raw number cannot say much on its own: 58% is a poor showing under Overnight's 65 and a
-    comfortable one under Quick's 45. Scored against the floor it was actually judged by, 0
-    means "scraped in" and 1 means "as good as this gets".
-    """
-    span = max(1, 100 - floor)
-    return max(0.0, min(1.0, (confidence - floor) / span))
-
-
 def _ask_price(trade: TrackedTrade, live_sell_price: int | None) -> tuple[int, bool]:
     """What a "Bought" row should tell the player to ask, and whether that number is sound.
 
@@ -5335,55 +5359,6 @@ def _ask_price(trade: TrackedTrade, live_sell_price: int | None) -> tuple[int, b
     return price, price - ge_tax(price) > trade.actual_buy
 
 
-def _attention_tooltip(asking: int, live_sell_price: int) -> str:
-    """Why a journal row is flagged, in lines short enough to read at a glance.
-
-    Broken across three of them deliberately. Qt renders a plain-text tooltip on a single
-    line however long it is, and the one sentence this used to be stretched most of the
-    window — laid over the rows underneath it, which is exactly where the eye was looking.
-    """
-    drop_pct = (asking - live_sell_price) / asking * 100
-    return (
-        "This ask looks stale.\n"
-        f"Asking {_gp(asking)} · market now suggests {_gp(live_sell_price)}"
-        f" ({drop_pct:.1f}% lower).\n"
-        "Unlikely to fill here — relist nearer the suggestion."
-    )
-
-
-def _percent(value: float | None, *, signed: bool = False) -> str:
-    """A percentage that never rounds a real result away to a bare "-0.0%"."""
-    if value is None:
-        return "—"
-    places = 2 if value and abs(value) < 0.05 else 1
-    return f"{value:+.{places}f}%" if signed else f"{value:.{places}f}%"
-
-
-def _hold_time(hours: float | None) -> str:
-    """A duration at a readable scale: minutes for quick flips, days for overnight ones."""
-    if hours is None:
-        return "—"
-    if hours < 1:
-        return f"{round(hours * 60):,} min"
-    if hours < 48:
-        return f"{hours:.1f} h"
-    return f"{hours / 24:.1f} d"
-
-
-def _group_row(group: GroupPerformance, *, hold: bool) -> list[str]:
-    row = [
-        group.label,
-        f"{group.positions:,}",
-        _percent(group.win_rate),
-        _signed_gp(group.realized_profit),
-        _percent(group.return_on_capital),
-        _gp(group.capital_traded),
-    ]
-    if hold:
-        row.append(_hold_time(group.median_hold_hours))
-    return row
-
-
 def _leading_number(value: str) -> float:
     """Extract a formatted result's leading number for sign-aware coloring."""
     token = value.strip().removeprefix("Est. ").split(" ", 1)[0].replace(",", "")
@@ -5392,87 +5367,6 @@ def _leading_number(value: str) -> float:
         return float(token)
     except ValueError:
         return 0.0
-
-
-def _availability(value: bool | None) -> str:
-    if value is None:
-        return "—"
-    return "Yes" if value else "No"
-
-
-def _short_duration(seconds: int) -> str:
-    if seconds < 60:
-        return f"{seconds} sec"
-    if seconds < 3_600:
-        return f"{seconds // 60} min"
-    return f"{seconds // 3_600} hr"
-
-
-def _format_countdown(seconds: int) -> str:
-    """Hours-and-minutes countdown for the buy-limit "resets in" column, precise enough to
-    be useful against a 4-hour window without needing seconds."""
-    if seconds <= 0:
-        return "any moment"
-    hours, minutes = divmod(seconds // 60, 60)
-    if hours:
-        return f"{hours}h {minutes}m"
-    return f"{minutes}m"
-
-
-def _format_goal_percent(percent: float) -> str:
-    """Rounding a real but tiny sliver of progress straight to "0%" reads as no progress
-    at all against a large target — distinct from an actual 0%."""
-    if 0 < percent < 1:
-        return "<1%"
-    return f"{percent:.0f}%"
-
-
-def _format_eta(days: float) -> str:
-    """A savings goal's ETA is only ever a rough projection, so it's shown in whatever
-    unit keeps it readable — "~19,671 days" doesn't parse at a glance the way "~54 years"
-    does, and small values stay in days where that's still the natural unit."""
-    if days < 1:
-        return "less than a day"
-    if days < 365:
-        return f"~{days:.0f} days"
-    years = days / 365
-    return f"~{years:.0f} years" if years >= 10 else f"~{years:.1f} years"
-
-
-def _item_detail_lines(items: tuple[SyncedItem, ...]) -> list[str]:
-    if not items:
-        return ["  Nothing"]
-    lines: list[str] = []
-    for item in items:
-        if item.item_id == 995:
-            lines.append(f"  {_gp(item.quantity)}")
-        else:
-            lines.append(
-                f"  {item.quantity:,} × {item.item_name} "
-                f"(estimated {_gp(item.total_value)})"
-            )
-    return lines
-
-
-def _compact_items(items: tuple[SyncedItem, ...]) -> str:
-    labels = [
-        _gp(item.quantity)
-        if item.item_id == 995
-        else f"{item.quantity:,} × {item.item_name}"
-        for item in items
-    ]
-    if len(labels) <= 2:
-        return ", ".join(labels) if labels else "Nothing"
-    return f"{', '.join(labels[:2])} +{len(labels) - 2} more"
-
-
-def _synced_trade_label(trade: SyncedTrade) -> str:
-    if trade.event_type == "player_trade":
-        return f"With {trade.counterparty}" if trade.counterparty else "Player trade"
-    items = trade.received if trade.direction == "buy" else trade.given
-    item = next((entry for entry in items if entry.item_id != 995), None)
-    action = "Bought" if trade.direction == "buy" else "Sold"
-    return f"{action} {item.item_name}" if item else action
 
 
 def _merge_synced_trades(recent: SyncedTrade, older: SyncedTrade) -> SyncedTrade:
@@ -5506,16 +5400,6 @@ def _merge_synced_trades(recent: SyncedTrade, older: SyncedTrade) -> SyncedTrade
         metadata=recent.metadata,
         items=tuple(combined.values()),
     )
-
-
-def _display_timestamp(value: str) -> str:
-    try:
-        parsed = datetime.fromisoformat(value)
-        if parsed.tzinfo is not None:
-            parsed = parsed.astimezone()
-        return parsed.strftime("%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return value
 
 
 def _table_sort_value(value: str) -> tuple[int, float | str]:

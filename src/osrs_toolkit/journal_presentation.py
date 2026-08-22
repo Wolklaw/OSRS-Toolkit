@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from osrs_toolkit.formatting import signed_gp
+
 JOURNAL_STATUS_FILTERS = (
     "All statuses",
     "Active trades",
@@ -59,11 +61,6 @@ class JournalPLPresentation:
         if self.tone == "negative":
             return "Realized loss from recorded sale fills."
         return "Realized break-even result."
-
-
-def _signed_gp(value: int) -> str:
-    sign = "+" if value > 0 else ""
-    return f"{sign}{value:,} gp"
 
 
 def trade_within_period(timestamp: str | None, period: str, now: datetime) -> bool:
@@ -289,7 +286,7 @@ def journal_pl_presentation(
 ) -> JournalPLPresentation:
     """Describe journal P/L without depending on the desktop UI toolkit."""
     if realized_profit is not None:
-        text = _signed_gp(realized_profit)
+        text = signed_gp(realized_profit)
         if remaining_quantity > 0:
             text += f" • {remaining_quantity:,} left"
         tone: MoneyTone = (
@@ -316,4 +313,4 @@ def journal_pl_presentation(
     estimated_tone: MoneyTone = (
         "negative" if estimated_profit < 0 else "muted" if estimated_profit > 0 else "neutral"
     )
-    return JournalPLPresentation(f"Est. {_signed_gp(estimated_profit)}", estimated_tone)
+    return JournalPLPresentation(f"Est. {signed_gp(estimated_profit)}", estimated_tone)
