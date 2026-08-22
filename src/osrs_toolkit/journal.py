@@ -35,6 +35,9 @@ class TradeRecord:
     quantity: int
     buy_price: int
     sell_price: int
+    #: The name this trade goes by everywhere outside its own database. Optional only so that
+    #: a TradeRecord built by hand in a test does not have to invent one.
+    sync_uid: str | None = None
 
     @property
     def tax_each(self) -> int:
@@ -939,6 +942,19 @@ class JournalRepository:
             )
             return int(cursor.lastrowid)
 
+    def trade_sync_uid(self, trade_id: int) -> str | None:
+        """What a trade is called outside this database, given its local id.
+
+        For a caller that has just created one and needs to record something against it
+        somewhere else -- the website attributes trades to characters in its own database, and
+        an autoincrement id means a different trade on every machine.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT sync_uid FROM trades WHERE trade_id = ?", (trade_id,)
+            ).fetchone()
+        return str(row["sync_uid"]) if row and row["sync_uid"] else None
+
     def list_all(self) -> list[TradeRecord]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -953,6 +969,7 @@ class JournalRepository:
                 quantity=int(row["quantity"]),
                 buy_price=int(row["buy_price"]),
                 sell_price=int(row["sell_price"]),
+                sync_uid=row["sync_uid"],
             )
             for row in rows
         ]

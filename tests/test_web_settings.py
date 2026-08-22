@@ -128,3 +128,84 @@ def test_the_settings_dialog_shows_what_is_saved(qt_app, tmp_path, settings):
         assert dialog.web_token_field.echoMode() == dialog.web_token_field.EchoMode.Password
     finally:
         dialog.deleteLater()
+
+
+# -- the journal mirror, as the window drives it -------------------------------------------
+
+
+def test_no_token_means_the_mirror_never_reaches_out(window):
+    """Signed out, the app is still a working offline journal — it must not be quietly
+    talking to a website nobody pointed it at."""
+    calls = []
+    window._journal_mirror.client.get = lambda path, **params: calls.append(path)
+
+    window._mirror_journal()
+
+    assert calls == []
+
+
+def test_saving_a_token_starts_the_mirror_over(window):
+    """A new credential may be a different account. Carrying watermarks across would skip
+    everything below them, on a journal this one has never seen."""
+    before = window._journal_mirror
+    window._journal_mirror.remote_version = "2026-08-22T00:00:00+00:00"
+
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+
+    assert window._journal_mirror is not before
+    assert window._journal_mirror.remote_version is None
+    assert window._journal_mirror.client.token == "a-desktop-token"
+
+
+def test_a_failing_sync_does_not_break_the_ui_loop(window):
+    """This runs on a timer. An exception escaping it would take the window with it."""
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("the website fell over")
+
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+    window._journal_mirror.sync = explode
+
+    window._mirror_journal()
+
+    assert "journal sync paused" in window._last_mirror_message
+
+
+def test_the_interval_backs_off_when_the_window_is_not_in_front(window):
+    from osrs_toolkit.app import MIRROR_BACKGROUND_INTERVAL_MS, MIRROR_INTERVAL_MS
+
+    window._apply_mirror_interval(True)
+    assert window._mirror_timer.interval() == MIRROR_INTERVAL_MS
+
+    window._apply_mirror_interval(False)
+    assert window._mirror_timer.interval() == MIRROR_BACKGROUND_INTERVAL_MS
+
+
+def test_a_sync_that_changed_something_redraws_the_journal(window):
+    from osrs_toolkit.journal_mirror import MirrorResult
+
+    redrawn = []
+    window._render_journal = lambda: redrawn.append("journal")
+    window._render_performance = lambda: redrawn.append("performance")
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+    window._journal_mirror.sync = lambda: MirrorResult(reached=True, pulled=3)
+
+    window._mirror_journal()
+
+    assert redrawn == ["journal", "performance"]
+
+
+def test_a_quiet_sync_redraws_nothing(window):
+    """Nearly every pass is quiet. Redrawing tables on each one would be a minute-by-minute
+    flicker in exchange for nothing."""
+    from osrs_toolkit.journal_mirror import MirrorResult
+
+    redrawn = []
+    window._render_journal = lambda: redrawn.append("journal")
+    window._render_performance = lambda: redrawn.append("performance")
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+    window._journal_mirror.sync = lambda: MirrorResult(reached=True, checked_only=True)
+
+    window._mirror_journal()
+
+    assert redrawn == []

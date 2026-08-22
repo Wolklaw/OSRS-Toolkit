@@ -132,6 +132,7 @@ from osrs_toolkit.formatting import (
 )
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
+from osrs_toolkit.journal_mirror import JournalMirror
 from osrs_toolkit.journal_presentation import (
     JOURNAL_STATUS_FILTERS,
     PERIOD_FILTERS,
@@ -202,6 +203,17 @@ from osrs_toolkit.web_source import (
     ToolkitWebError,
     WebAppSource,
 )
+
+#: How often the journal is checked against the website. A pass with nothing to do is one
+#: small query answered from disk, so this is cheap to run often -- but the machine answering
+#: it is a laptop that is also serving the site, and a minute is far below the rate at which a
+#: person actually records trades.
+MIRROR_INTERVAL_MS = 60 * 1_000
+
+#: And how often when the window is not the one being looked at. Nothing on screen is waiting
+#: to be refreshed, so the only reason to keep asking is to notice a change made in a browser
+#: before the window is looked at again -- which five minutes does just as well.
+MIRROR_BACKGROUND_INTERVAL_MS = 5 * 60 * 1_000
 
 WEB_BASE_URL_KEY = "web/base_url"
 WEB_TOKEN_KEY = "web/token"
@@ -2033,11 +2045,13 @@ class MainWindow(QMainWindow):
             # back to the default so the app can still start.
             self._journal = JournalRepository()
         self._sync_importer = build_sync_importer()
+        self._journal_mirror = JournalMirror(self._journal, configured_web_client())
         # Dedicated to on-demand item-details lookups (price history), separate from the
         # transient client MarketWorker creates for each periodic snapshot poll.
         self._market_client = WikiMarketClient()
         self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
         self._last_sync_message = ""
+        self._last_mirror_message = ""
         self._profit_color = "#70d6a1"
         self._loss_color = "#ef6b73"
         self._muted_color = "#91a0b4"
@@ -2117,6 +2131,13 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(250, self, self.load_market)
         # Let the window paint before anything modal appears in front of it.
         QTimer.singleShot(600, self, self._run_startup_notices)
+        self._mirror_timer = QTimer(self)
+        self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
+        self._mirror_timer.timeout.connect(self._mirror_journal)
+        self._mirror_timer.start()
+        # Not on the same tick as the first import: a fresh launch has a window to paint and
+        # a market to load, and the journal exchange is the one thing here nobody is waiting on.
+        QTimer.singleShot(4_000, self, self._mirror_journal)
         self._market_timer = QTimer(self)
         self._market_timer.setInterval(5 * 60 * 1_000)
         self._market_timer.timeout.connect(self.load_market)
@@ -3381,7 +3402,12 @@ class MainWindow(QMainWindow):
         QSettings().setValue(WEB_BASE_URL_KEY, base_url)
         QSettings().setValue(WEB_TOKEN_KEY, token)
         self._sync_importer = build_sync_importer()
+        # A new credential may well be a different account, and what the old one had already
+        # exchanged says nothing about what this one holds — so the mirror starts over rather
+        # than carrying watermarks across and skipping everything below them.
+        self._journal_mirror = JournalMirror(self._journal, configured_web_client())
         self._last_sync_message = ""
+        self._last_mirror_message = ""
 
     def _change_database_location(self, new_path: Path) -> None:
         old_path = self._journal.database_path
@@ -4223,6 +4249,43 @@ class MainWindow(QMainWindow):
                 continue
             prices[point.item_id] = sell_price
         return prices
+
+    def _mirror_journal(self) -> None:
+        """One exchange with the website, on a timer.
+
+        Runs on this thread deliberately. A quiet pass is a single small request and returns
+        in the time a click takes; the pass that is not quiet only happens just after
+        something changed, which is exactly when a person is willing to wait a moment. Putting
+        it on a worker would mean a second connection to the journal and a merge racing the
+        window's own writes, which is a great deal of machinery to avoid a pause nobody sees.
+        """
+        if not self._journal_mirror.client.configured:
+            return
+        try:
+            result = self._journal_mirror.sync()
+        except Exception as exc:  # noqa: BLE001 - a sync failure must not break the UI loop.
+            self._last_mirror_message = f" • journal sync paused: {exc}"
+            return
+        self._last_mirror_message = "" if result.checked_only else f" • {result.describe()}"
+        if result.changed:
+            # The journal underneath the window just moved, so what is on screen is stale.
+            self._refresh_journal_views()
+
+    def _refresh_journal_views(self) -> None:
+        """Redraw what reads the journal, after a sync changed it underneath.
+
+        Only these two. The mirror carries trades and tracked positions and nothing else, so
+        the Grand Exchange panels, buy limits and the loadout are all reading state it never
+        touches -- redrawing them would be work with no possible difference on screen.
+        """
+        self._render_journal()
+        self._render_performance()
+
+    def _apply_mirror_interval(self, active: bool) -> None:
+        """Ask less often while nothing on screen is waiting for the answer."""
+        self._mirror_timer.setInterval(
+            MIRROR_INTERVAL_MS if active else MIRROR_BACKGROUND_INTERVAL_MS
+        )
 
     def _import_runelite_events(self) -> None:
         try:
@@ -5428,6 +5491,13 @@ class MainWindow(QMainWindow):
             QEvent.Type.WindowStateChange,
         ):
             self._release_pending_flashes()
+            # Coming back is also the moment a journal changed in a browser is most worth
+            # having, so this both restores the quick cadence and asks once straight away
+            # rather than leaving somebody looking at a stale table for up to a minute.
+            active = self.isActiveWindow()
+            self._apply_mirror_interval(active)
+            if active:
+                self._mirror_journal()
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         QSettings().setValue(WINDOW_GEOMETRY_KEY, self.saveGeometry())
