@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -19,6 +15,14 @@ from osrs_toolkit.journal import (
     SyncedItem,
     SyncedTrade,
 )
+from osrs_toolkit.sync_source import (
+    LocalFileSource,
+    PendingSyncEvent,
+    RuneLiteConnectionStatus,
+    SyncSource,
+)
+
+__all__ = ["RuneLiteConnectionStatus"]  # re-exported: callers imported it from here first
 
 SCHEMA_VERSION = 1
 MAX_EVENT_BYTES = 1_000_000
@@ -68,15 +72,6 @@ class ImportResult:
     rejected: int = 0
     applied_to_tracked: int = 0
     skipped: int = 0
-
-
-@dataclass(frozen=True, slots=True)
-class RuneLiteConnectionStatus:
-    detected: bool = False
-    active: bool = False
-    account_name: str | None = None
-    account_hash: str | None = None
-    player_trade_tracking: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,12 +147,18 @@ def ge_offer_status_label(state: str) -> str:
 
 
 class RuneLiteSyncImporter:
-    def __init__(self, sync_root: Path | None = None) -> None:
-        self.sync_root = sync_root or Path.home() / ".runelite" / "osrs-toolkit"
-        self.events_dir = self.sync_root / "events"
-        self.rejected_dir = self.sync_root / "rejected"
-        self.status_path = self.sync_root / "status.json"
-        self.state_dir = self.sync_root / "state"
+    """Turns whatever a source is holding into journal entries.
+
+    The transport is injected so the same parsing, ordering and de-duplication serve a folder
+    of files written by an older plugin and a queue held by the sync service. Passing a path
+    still means the folder, which is what every existing caller does.
+    """
+
+    def __init__(
+        self, sync_root: Path | None = None, *, source: SyncSource | None = None
+    ) -> None:
+        self.source = source or LocalFileSource(sync_root)
+        self.sync_root = getattr(self.source, "sync_root", None)
 
     @property
     def plugin_detected(self) -> bool:
@@ -168,38 +169,38 @@ class RuneLiteSyncImporter:
         return self.connection_status().active
 
     def connection_status(self) -> RuneLiteConnectionStatus:
-        detected = self.sync_root.exists()
-        if not detected:
-            return RuneLiteConnectionStatus()
-        try:
-            if self.status_path.is_symlink() or self.status_path.stat().st_size > MAX_STATUS_BYTES:
-                return RuneLiteConnectionStatus(detected=True)
-            payload = json.loads(self.status_path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict) or payload.get("schema_version") != SCHEMA_VERSION:
-                return RuneLiteConnectionStatus(detected=True)
-            fresh = time.time() - self.status_path.stat().st_mtime < 30
-            account_name = payload.get("account_name")
-            if (
-                not isinstance(account_name, str)
-                or not account_name.strip()
-                or account_name == "Not logged in"
-                or len(account_name.strip()) > 32
-            ):
-                account_name = None
-            else:
-                account_name = account_name.strip()
-            account_hash = payload.get("account_hash")
-            if not isinstance(account_hash, str) or len(account_hash) > 64:
-                account_hash = None
-            return RuneLiteConnectionStatus(
-                detected=True,
-                active=fresh and payload.get("active") is True,
-                account_name=account_name,
-                account_hash=account_hash,
-                player_trade_tracking=payload.get("player_trade_tracking") is True,
-            )
-        except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        """Whether anything is feeding us, and who it says is logged in.
+
+        "Detected but not active" is a real answer and a different problem from "nothing there
+        at all": a source that exists but has gone quiet means the plugin stopped or the
+        service cannot be reached, which is worth telling the player rather than showing them
+        the same empty state as somebody who never installed it.
+        """
+        detected, payload, fresh = self.source.status_payload()
+        if not detected or not isinstance(payload, dict):
+            return RuneLiteConnectionStatus(detected=detected)
+        if payload.get("schema_version") not in (None, SCHEMA_VERSION):
             return RuneLiteConnectionStatus(detected=True)
+        account_name = payload.get("account_name")
+        if (
+            not isinstance(account_name, str)
+            or not account_name.strip()
+            or account_name == "Not logged in"
+            or len(account_name.strip()) > 32
+        ):
+            account_name = None
+        else:
+            account_name = account_name.strip()
+        account_hash = payload.get("account_hash")
+        if not isinstance(account_hash, str) or len(account_hash) > 64:
+            account_hash = None
+        return RuneLiteConnectionStatus(
+            detected=True,
+            active=fresh and payload.get("active", True) is True,
+            account_name=account_name,
+            account_hash=account_hash,
+            player_trade_tracking=payload.get("player_trade_tracking") is True,
+        )
 
     def read_offer_state(self, account_hash: str) -> dict[int, GEOfferSlot]:
         """The account's 8 Grand Exchange slots right now, straight from the plugin's own
@@ -227,15 +228,8 @@ class RuneLiteSyncImporter:
         means there was nothing to judge against. Everything a slot is read with is
         unchanged — only the failure paths are answered differently.
         """
-        safe_hash = re.sub(r"[^a-f0-9]", "", account_hash) or "unknown"
-        path = self.state_dir / f"{safe_hash}.json"
-        try:
-            if path.is_symlink() or path.stat().st_size > MAX_OFFER_STATE_BYTES:
-                return None
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(payload, dict):
+        payload = self.source.offer_state_payload(account_hash)
+        if payload is None:
             return None
         slots: dict[int, GEOfferSlot] = {}
         for key, value in payload.items():
@@ -254,15 +248,8 @@ class RuneLiteSyncImporter:
         check is what covers the one case deleting the file cannot — see
         ``OFFER_SCREEN_MAX_AGE_SECONDS``.
         """
-        safe_hash = re.sub(r"[^a-f0-9]", "", account_hash) or "unknown"
-        path = self.state_dir / f"{safe_hash}-screen.json"
-        try:
-            if path.is_symlink() or path.stat().st_size > MAX_OFFER_SCREEN_BYTES:
-                return None
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(payload, dict):
+        payload = self.source.offer_screen_payload(account_hash)
+        if payload is None:
             return None
         try:
             written_at = datetime.fromisoformat(_text(payload.get("updated_at"), "updated_at", 64))
@@ -300,60 +287,54 @@ class RuneLiteSyncImporter:
         still created, just without that head start.
         """
         suggested_sell_prices = suggested_sell_prices or {}
-        if not self.events_dir.exists():
-            return ImportResult()
-        rejected = skipped = scanned = 0
-        parsed: list[tuple[Path, ParsedEvent]] = []
-        for path in sorted(self.events_dir.glob("*.json")):
-            if len(parsed) + rejected >= MAX_EVENTS_PER_IMPORT or scanned >= MAX_EVENT_SCAN:
+        rejected = skipped = 0
+        parsed: list[tuple[PendingSyncEvent, ParsedEvent]] = []
+        for pending in self.source.pending(MAX_EVENT_SCAN):
+            if len(parsed) + rejected >= MAX_EVENTS_PER_IMPORT:
                 break
-            scanned += 1
+            if pending.payload is None:
+                # The source reached it and could make nothing of it. Reading it again would
+                # fail identically, so it goes rather than blocking what is queued behind it.
+                rejected += 1
+                self.source.quarantine(pending)
+                continue
             try:
-                if path.is_symlink() or path.stat().st_size > MAX_EVENT_BYTES:
-                    raise SyncEventError("Unsafe event file")
-                payload = json.loads(path.read_text(encoding="utf-8"))
-                parsed_event = parse_sync_event(payload)
+                parsed_event = parse_sync_event(pending.payload)
             except UnsupportedEventError:
-                # The plugin updates itself through the Plugin Hub while this app is updated by
-                # hand, so a plugin queuing event types this build has never heard of is the
-                # normal direction for the two to drift apart — not corruption. Leave the file
-                # queued and a later version imports it; the plugin's own 30-day prune clears it
-                # if that version never arrives. Skipping does not spend the per-pass budget, so
-                # a backlog of them cannot starve the events this build does understand.
+                # The plugin updates through the Plugin Hub while this app is updated on its
+                # own schedule, so a plugin sending event types this build has never heard of
+                # is the normal direction for the two to drift apart — not corruption. It stays
+                # unacknowledged and a later version imports it. Skipping does not spend the
+                # per-pass budget, so a backlog of them cannot starve what this build can read.
                 skipped += 1
                 continue
-            except (json.JSONDecodeError, SyncEventError, TypeError, KeyError, ValueError):
+            except (SyncEventError, TypeError, KeyError, ValueError):
                 rejected += 1
-                self.rejected_dir.mkdir(parents=True, exist_ok=True)
-                destination = self.rejected_dir / f"{path.stem}-{uuid.uuid4().hex[:8]}.invalid"
-                try:
-                    shutil.move(str(path), str(destination))
-                except OSError:
-                    pass
+                self.source.quarantine(pending)
                 continue
-            except OSError:
-                # A partially written or temporarily locked file is not invalid. Leave it in
-                # the queue so the next import pass can retry it.
-                continue
-            parsed.append((path, parsed_event))
+            parsed.append((pending, parsed_event))
 
         # An offer's events only make sense replayed in the order they happened: the offer has
         # to open before its fills land on it, and be cancelled only after. Queue file names are
         # random UUIDs, so sort by event time, and break ties by lifecycle order for events the
         # plugin wrote in the same instant (a final fill and the cancellation that followed it).
-        parsed.sort(key=lambda pair: (_event_instant(pair[1]), _lifecycle_rank(pair[1]), pair[0].name))
+        parsed.sort(
+            key=lambda pair: (_event_instant(pair[1]), _lifecycle_rank(pair[1]), pair[0].handle)
+        )
 
         # One connection for the whole batch instead of one per event.
-        trades = [(path, event) for path, event in parsed if isinstance(event, SyncedTrade)]
+        trades = [(pending, event) for pending, event in parsed if isinstance(event, SyncedTrade)]
         results = repository.add_synced_trades([trade for _path, trade in trades])
         was_imported = {
-            path: imported for (path, _trade), imported in zip(trades, results, strict=True)
+            pending.handle: imported
+            for (pending, _trade), imported in zip(trades, results, strict=True)
         }
 
         imported = duplicates = applied_to_tracked = 0
-        for path, event in parsed:
+        collected: list[str] = []
+        for pending, event in parsed:
             if isinstance(event, SyncedTrade):
-                if was_imported[path]:
+                if was_imported[pending.handle]:
                     imported += 1
                     if event.event_type == "ge_fill" and self._apply_ge_fill(
                         repository, event, suggested_sell_prices
@@ -373,14 +354,13 @@ class RuneLiteSyncImporter:
                 imported += 1
                 if self._apply_offer_lifecycle(repository, event, suggested_sell_prices):
                     applied_to_tracked += 1
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                # Every event this pass applied is recorded under its own ID, so keeping the
-                # queue file costs a second look at it rather than a second application.
-                pass
+            collected.append(pending.handle)
 
-        self._prune_rejected()
+        # Acknowledged together, and only after every one of them has been applied. Every event
+        # is recorded under its own id either way, so a batch that is never acknowledged costs
+        # a second look at it rather than a second application.
+        self.source.collected(collected)
+        self.source.housekeeping()
         return ImportResult(
             imported=imported,
             duplicates=duplicates,
@@ -388,22 +368,6 @@ class RuneLiteSyncImporter:
             applied_to_tracked=applied_to_tracked,
             skipped=skipped,
         )
-
-    def _prune_rejected(self) -> None:
-        """Rejected events are kept so a malformed one can be looked at, not replayed. Cap the
-        directory so an event the plugin keeps producing and this app keeps refusing — an
-        oversized bank snapshot, say — cannot fill the disk one copy at a time."""
-        try:
-            files = sorted(
-                self.rejected_dir.glob("*.invalid"), key=lambda path: path.stat().st_mtime
-            )
-        except OSError:
-            return
-        for path in files[: max(0, len(files) - MAX_REJECTED_FILES)]:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
 
     @staticmethod
     def _apply_offer_lifecycle(
