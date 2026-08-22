@@ -15,7 +15,9 @@ boss gear checklists.
 
 ### [Download the latest Windows release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 
-**No login. Nothing plays the game for you. Your journal stays on your PC.**
+**Nothing plays the game for you. Your journal stays on your PC.**
+
+Sign-in is optional and only needed for RuneLite data. The RuneLite plugin sends to [runescope.app](https://runescope.app) and this app reads from there, so nothing on your machine is fed by the plugin directly. Without a token it still runs entirely offline: your journal, GE Flipper, High Alchemy and skilling all work against live market prices.
 
 </div>
 

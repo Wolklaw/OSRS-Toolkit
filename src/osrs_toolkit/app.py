@@ -195,6 +195,43 @@ from osrs_toolkit.updater import (
     is_newer_version,
     start_installer,
 )
+from osrs_toolkit.web_source import (
+    DEFAULT_BASE_URL,
+    INTERACTIVE_TIMEOUT_SECONDS,
+    ToolkitWebClient,
+    ToolkitWebError,
+    WebAppSource,
+)
+
+WEB_BASE_URL_KEY = "web/base_url"
+WEB_TOKEN_KEY = "web/token"
+
+
+def configured_web_client(timeout: float | None = None) -> ToolkitWebClient:
+    """A client for whatever website this app has been pointed at.
+
+    The token is kept in ``QSettings`` -- the Windows registry, in plain text. That is worth
+    being honest about rather than hiding: there is no system keychain reachable from here
+    without taking on a dependency this app deliberately does not have. What limits the damage
+    is that the token is not a password and grants nothing but this one account's journal, and
+    that revoking it on the website's Profile page takes effect immediately.
+    """
+    base_url = str(QSettings().value(WEB_BASE_URL_KEY, DEFAULT_BASE_URL) or "")
+    token = str(QSettings().value(WEB_TOKEN_KEY, "") or "")
+    return ToolkitWebClient(base_url, token, timeout)
+
+
+def build_sync_importer() -> RuneLiteSyncImporter:
+    """Where this app reads live plugin state from.
+
+    The website when a credential has been entered for it, and the old ``.runelite`` folder
+    when not. The folder is the arrangement the Plugin Hub refused -- a plugin feeding an app
+    on the same machine -- so it is no longer what a new install does. It stays reachable
+    because somebody running last year's plugin still has events sitting in it, and silently
+    reading nothing would look exactly like the app breaking.
+    """
+    client = configured_web_client()
+    return RuneLiteSyncImporter(source=WebAppSource(client) if client.configured else None)
 
 
 class MarketWorker(QObject):
@@ -686,6 +723,8 @@ class SettingsDialog(QDialog):
         self,
         current_theme: str,
         database_path: Path,
+        web_base_url: str = "",
+        web_token: str = "",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -737,6 +776,37 @@ class SettingsDialog(QDialog):
         data_layout.addStretch()
         tabs.addTab(data, "Data")
 
+        website = QWidget()
+        website_layout = QVBoxLayout(website)
+        website_layout.addWidget(QLabel("Website address"))
+        self.web_base_url_field = QLineEdit(web_base_url or DEFAULT_BASE_URL)
+        website_layout.addWidget(self.web_base_url_field)
+        website_layout.addWidget(QLabel("Desktop access token"))
+        self.web_token_field = QLineEdit(web_token)
+        self.web_token_field.setEchoMode(QLineEdit.EchoMode.Password)
+        website_layout.addWidget(self.web_token_field)
+        website_note = QLabel(
+            "Your RuneLite plugin sends to the website, and this app reads from it. Generate a "
+            "desktop access token on the website's <b>Profile</b> page and paste it here.<br><br>"
+            "Leave the token empty to keep reading the old RuneLite folder on this computer "
+            "instead. That still works for an older plugin, but new plugin versions no longer "
+            "write to it.",
+            objectName="muted",
+        )
+        website_note.setWordWrap(True)
+        website_layout.addWidget(website_note)
+        self.web_status = QLabel("", objectName="muted")
+        self.web_status.setWordWrap(True)
+        website_layout.addWidget(self.web_status)
+        website_actions = QHBoxLayout()
+        self.check_website_button = QPushButton("Check connection", objectName="secondary")
+        self.check_website_button.clicked.connect(self._check_website)
+        website_actions.addWidget(self.check_website_button)
+        website_actions.addStretch()
+        website_layout.addLayout(website_actions)
+        website_layout.addStretch()
+        tabs.addTab(website, "Website")
+
         about = QWidget()
         about_layout = QVBoxLayout(about)
         about_text = QLabel(
@@ -746,7 +816,8 @@ class SettingsDialog(QDialog):
             "profit calculators, and a local trade journal.</p>"
             "<p><b>Game interaction</b><br>This toolkit does not play Old School RuneScape, "
             "generate game input, communicate with game worlds, alter network traffic, or "
-            "modify the game client. Optional RuneLite sync only imports local trade events.</p>"
+            "modify the game client. Optional RuneLite sync reads trade events from your account on "
+            "runescope.app, which the RuneLite plugin sends them to.</p>"
             "<p><b>Data and privacy</b><br>Prices come from the OSRS Wiki real-time price API. "
             "Character lookup reads public hiscores. Never enter a Jagex password, bank PIN, "
             "or authenticator code. Journal data stays on this computer in a version-independent "
@@ -831,6 +902,31 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _check_website(self) -> None:
+        """Say plainly whether what has been typed works, before it is saved.
+
+        Runs on the interactive timeout rather than the background one: somebody is watching
+        this window, and a wrong address should come back as an answer rather than freeze the
+        app for twenty seconds looking like a crash.
+        """
+        self.web_status.setText("Checking…")
+        self.check_website_button.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            client = ToolkitWebClient(
+                self.web_base_url_field.text().strip(),
+                self.web_token_field.text().strip(),
+                INTERACTIVE_TIMEOUT_SECONDS,
+            )
+            name = client.check()
+        except ToolkitWebError as error:
+            self.web_status.setText(str(error))
+        else:
+            self.web_status.setText(f"Connected as {name}.")
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.check_website_button.setEnabled(True)
 
     def _choose_database_location(self) -> None:
         chosen, _filter = QFileDialog.getSaveFileName(
@@ -1936,7 +2032,7 @@ class MainWindow(QMainWindow):
             # The configured location may be unavailable (e.g. a removed drive). Fall
             # back to the default so the app can still start.
             self._journal = JournalRepository()
-        self._sync_importer = RuneLiteSyncImporter()
+        self._sync_importer = build_sync_importer()
         # Dedicated to on-demand item-details lookups (price history), separate from the
         # transient client MarketWorker creates for each periodic snapshot poll.
         self._market_client = WikiMarketClient()
@@ -3250,14 +3346,42 @@ class MainWindow(QMainWindow):
             self._release_pending_flashes()
 
     def open_settings(self) -> None:
-        dialog = SettingsDialog(self._theme, self._journal.database_path, self)
+        client = configured_web_client()
+        dialog = SettingsDialog(
+            self._theme,
+            self._journal.database_path,
+            client.base_url,
+            client.token,
+            self,
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self._theme = dialog.theme.currentText()
         QSettings().setValue("appearance/theme", self._theme)
         self._apply_theme(self._theme)
+        self._save_website_settings(
+            dialog.web_base_url_field.text().strip(),
+            dialog.web_token_field.text().strip(),
+        )
         if dialog.requested_database_path is not None:
             self._change_database_location(dialog.requested_database_path)
+
+    def _save_website_settings(self, base_url: str, token: str) -> None:
+        """Persist where this app reads from, and start reading from there.
+
+        Rebuilding the importer is the point: leaving the old one in place would keep the app
+        pointed at whatever it was reading when the window opened, so a token pasted in would
+        appear to do nothing until the next restart.
+        """
+        if (base_url, token) == (
+            str(QSettings().value(WEB_BASE_URL_KEY, DEFAULT_BASE_URL) or ""),
+            str(QSettings().value(WEB_TOKEN_KEY, "") or ""),
+        ):
+            return
+        QSettings().setValue(WEB_BASE_URL_KEY, base_url)
+        QSettings().setValue(WEB_TOKEN_KEY, token)
+        self._sync_importer = build_sync_importer()
+        self._last_sync_message = ""
 
     def _change_database_location(self, new_path: Path) -> None:
         old_path = self._journal.database_path
