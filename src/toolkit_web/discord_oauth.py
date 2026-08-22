@@ -10,10 +10,13 @@ and nothing to refresh.
 from __future__ import annotations
 
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+
+log = logging.getLogger(__name__)
 
 AUTHORIZE_URL = "https://discord.com/api/oauth2/authorize"
 TOKEN_URL = "https://discord.com/api/oauth2/token"
@@ -66,7 +69,20 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+    except urllib.error.HTTPError as error:
+        # Discord's error body says exactly what was wrong with the request — a bad secret, a
+        # redirect_uri that does not match what is registered, a reused code — and that reason
+        # is worth a line in the log even though the caller only ever sees "sign in again".
+        log.warning("Discord token exchange failed (%s): %s", error.code, error.read())
+        return None
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        json.JSONDecodeError,
+        ValueError,
+        OSError,
+    ) as error:
+        log.warning("Discord token exchange failed: %r", error)
         return None
     token = payload.get("access_token") if isinstance(payload, dict) else None
     return token if isinstance(token, str) and token else None
@@ -78,7 +94,17 @@ def fetch_user(access_token: str) -> DiscordUser | None:
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+    except urllib.error.HTTPError as error:
+        log.warning("Discord profile fetch failed (%s): %s", error.code, error.read())
+        return None
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        json.JSONDecodeError,
+        ValueError,
+        OSError,
+    ) as error:
+        log.warning("Discord profile fetch failed: %r", error)
         return None
     if not isinstance(payload, dict):
         return None
