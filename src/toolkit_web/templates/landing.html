@@ -36,7 +36,7 @@
         sign in as you.</p>
       <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
         <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
-        <button class="button secondary" onclick="copyCode()">Copy</button>
+        <button class="button secondary" onclick="copyCode(this)">Copy</button>
       </div>
       <div class="row" style="margin-top:0.8rem">
         <button class="button" onclick="location.href='/'">I've saved it — continue</button>
@@ -85,9 +85,10 @@
     document.getElementById('code-reveal-panel').style.display = 'block';
   }
 
-  function copyCode() {
+  function copyCode(button) {
     const code = document.getElementById('revealed-code').textContent;
     navigator.clipboard.writeText(code);
+    flashCopied(button);
   }
 </script>
 {% endblock %}

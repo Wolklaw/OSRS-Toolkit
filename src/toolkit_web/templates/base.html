@@ -150,6 +150,19 @@
       await fetch('/auth/logout', { method: 'POST' });
       location.href = '/';
     }
+
+    // Swaps a copy button's own label for "Copied!" for a moment rather than relying on a
+    // separate status line, so the confirmation sits right where the click happened instead of
+    // needing your eyes to jump somewhere else to notice it changed at all.
+    function flashCopied(button) {
+      const original = button.textContent;
+      button.textContent = 'Copied!';
+      button.disabled = true;
+      setTimeout(() => {
+        button.textContent = original;
+        button.disabled = false;
+      }, 1200);
+    }
   </script>
   {% block scripts %}{% endblock %}
 </body>

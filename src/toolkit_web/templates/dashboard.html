@@ -13,7 +13,7 @@
   <div id="generated-token-box" style="display:none; margin-top:0.8rem;">
     <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
       <code id="generated-token" style="font-size:0.95rem; word-break:break-all;"></code>
-      <button class="button secondary" onclick="copyGeneratedToken()">Copy</button>
+      <button class="button secondary" onclick="copyGeneratedToken(this)">Copy</button>
     </div>
   </div>
   <div class="status-msg" id="generate-status"></div>
@@ -36,7 +36,7 @@
   <div id="generated-token-box" style="display:none; margin-top:0.8rem;">
     <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
       <code id="generated-token" style="font-size:0.95rem; word-break:break-all;"></code>
-      <button class="button secondary" onclick="copyGeneratedToken()">Copy</button>
+      <button class="button secondary" onclick="copyGeneratedToken(this)">Copy</button>
     </div>
   </div>
   <div class="status-msg" id="generate-status"></div>
@@ -134,9 +134,10 @@
     }
   }
 
-  function copyGeneratedToken() {
+  function copyGeneratedToken(button) {
     const token = document.getElementById('generated-token').textContent;
     navigator.clipboard.writeText(token);
+    flashCopied(button);
   }
 
   async function savePairingToken() {
