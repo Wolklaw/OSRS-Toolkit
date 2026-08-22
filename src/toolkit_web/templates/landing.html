@@ -8,7 +8,18 @@
   <div style="margin:2rem auto 0; max-width:420px; text-align:left;">
     <p class="hint" style="text-align:center">or, with no Discord account at all</p>
 
-    <div class="panel" style="margin-top:1rem">
+    <div class="panel" style="margin-top:1rem" id="create-panel">
+      <strong>New here?</strong>
+      <p class="hint">Create an account with a recovery code instead of Discord — no email, no
+        password. Just don't lose the code: there is no way to recover a lost one.</p>
+      <div class="row">
+        <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off">
+        <button class="button secondary" onclick="createAccount()">Create account</button>
+      </div>
+      <div class="status-msg" id="create-status"></div>
+    </div>
+
+    <div class="panel">
       <div class="row" style="justify-content:space-between">
         <strong>Already have a code?</strong>
       </div>
@@ -17,17 +28,6 @@
         <button class="button secondary" onclick="signInWithCode()">Sign in</button>
       </div>
       <div class="status-msg" id="recovery-login-status"></div>
-    </div>
-
-    <div class="panel" id="create-panel">
-      <strong>New here?</strong>
-      <p class="hint">Get a recovery code instead. No email, no password — just don't lose it,
-        there is no way to recover a lost one.</p>
-      <div class="row">
-        <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off">
-        <button class="button secondary" onclick="createAccount()">Create account</button>
-      </div>
-      <div class="status-msg" id="create-status"></div>
     </div>
 
     <div class="panel" id="code-reveal-panel" style="display:none">

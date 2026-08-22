@@ -4,11 +4,24 @@
 {% if not account.paired %}
 <div class="panel">
   <h2 style="margin-top:0">Connect your RuneLite plugin</h2>
-  <p class="hint">Paste the pairing token the OSRS Toolkit Sync plugin gave you. Your Journal
-    starts filling in as soon as it's saved.</p>
+  <p class="hint">Get a token, paste it into the plugin's settings under "Pairing token", and
+    switch on "Send to OSRS Toolkit Sync". Your Journal starts filling in from there.</p>
+
+  <div class="row">
+    <button class="button" onclick="generatePairingToken()">Get a token</button>
+  </div>
+  <div id="generated-token-box" style="display:none; margin-top:0.8rem;">
+    <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
+      <code id="generated-token" style="font-size:0.95rem; word-break:break-all;"></code>
+      <button class="button secondary" onclick="copyGeneratedToken()">Copy</button>
+    </div>
+  </div>
+  <div class="status-msg" id="generate-status"></div>
+
+  <p class="hint" style="margin-top:1.2rem">Already have a token from somewhere else?</p>
   <div class="row">
     <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off">
-    <button class="button" onclick="savePairingToken()">Connect</button>
+    <button class="button secondary" onclick="savePairingToken()">Connect</button>
   </div>
   <div class="status-msg" id="pairing-status"></div>
 </div>
@@ -81,6 +94,33 @@
     if (!confirm('Remove this position? This does not undo anything in game.')) { return; }
     await fetch(`/api/positions/${positionId}`, { method: 'DELETE' });
     location.reload();
+  }
+
+  async function generatePairingToken() {
+    const status = document.getElementById('generate-status');
+    status.textContent = 'Generating...';
+    status.className = 'status-msg';
+    try {
+      const response = await fetch('/api/pairing-token/generate', { method: 'POST' });
+      const body = await response.json();
+      if (!response.ok) {
+        status.textContent = body.detail || 'Could not generate a token just now.';
+        status.className = 'status-msg error';
+        return;
+      }
+      document.getElementById('generated-token').textContent = body.token;
+      document.getElementById('generated-token-box').style.display = 'block';
+      status.textContent = 'Paste this into the plugin\'s settings.';
+      status.className = 'status-msg ok';
+    } catch (error) {
+      status.textContent = 'Could not reach the server — try again in a moment.';
+      status.className = 'status-msg error';
+    }
+  }
+
+  function copyGeneratedToken() {
+    const token = document.getElementById('generated-token').textContent;
+    navigator.clipboard.writeText(token);
   }
 
   async function savePairingToken() {

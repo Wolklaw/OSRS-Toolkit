@@ -37,7 +37,7 @@ from toolkit_web.importing import journal_for
 from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
-from toolkit_web.token_probe import probe_token
+from toolkit_web.token_probe import mint_pairing_token, probe_token
 
 STATE_COOKIE = "oauth_state"
 
@@ -455,6 +455,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def clear_pairing_token(account: Account = CurrentAccount) -> dict:
         accounts.set_pairing_token(account.discord_user_id, None)
         return {"ok": True}
+
+    @app.post("/api/pairing-token/generate")
+    def generate_pairing_token(account: Account = CurrentAccount) -> dict:
+        """A fresh token this account can paste straight into the plugin.
+
+        Nothing else in the system ever mints one for a person — the plugin only accepts a
+        token, and the sync service's own pairing endpoint is invite-gated while it is closed
+        to the public. This is the one caller trusted to hold that invite code, so signing in
+        here is what stands in for it: an account that reached this page already proved it,
+        the same way it already proved enough to read its own journal.
+        """
+        token = mint_pairing_token(settings.sync_base_url, settings.sync_invite_code)
+        if token is None:
+            raise HTTPException(
+                status_code=502, detail="Could not reach the sync service — try again shortly."
+            )
+        accounts.set_pairing_token(account.discord_user_id, token)
+        return {"ok": True, "token": token}
 
     @app.get("/api/accounts")
     def characters(account: Account = CurrentAccount) -> dict:

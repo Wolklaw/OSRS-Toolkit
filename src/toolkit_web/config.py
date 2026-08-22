@@ -29,6 +29,10 @@ class Settings:
     data_dir: Path
     accounts_db_path: Path
     sync_base_url: str
+    #: Lets this app mint a pairing token on a signed-in visitor's behalf while the sync
+    #: service is closed to the public — see ``token_probe.mint_pairing_token``. None while
+    #: the sync service is open, since nothing needs to be supplied at that point.
+    sync_invite_code: str | None
     #: Issues a session for any Discord id the caller names, with no Discord involved at all.
     #: Exists so the app can be built, tested and demonstrated before a real Discord
     #: application exists to authenticate against. Must never be true where the service is
@@ -52,6 +56,7 @@ class Settings:
             data_dir=data_dir,
             accounts_db_path=data_dir / "accounts.db",
             sync_base_url=os.environ.get("TOOLKIT_SYNC_BASE_URL", "https://sync.runescope.app"),
+            sync_invite_code=os.environ.get("TOOLKIT_SYNC_INVITE_CODE") or None,
             dev_login_enabled=_bool("TOOLKIT_DEV_LOGIN", False),
         )
 
