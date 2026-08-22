@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set page_title = "About RuneScope" %}
+{% set page_sub = "What this is, what it does with your data, and what it deliberately does not do." %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="prose">
+    <p><strong>RuneScope is an independent, fan-made market companion for Old School
+      RuneScape.</strong> Grand Exchange research, profit calculators, and a trade journal that
+      remembers what you actually did — so that later it can tell you which of your plans were
+      worth following.</p>
+    <p>It is the web version of <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">OSRS
+      Toolkit</a>, the Windows desktop app, and shares the same calculations. There is nothing
+      to install and nothing to keep updated.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2>Game interaction</h2>
+    <p>RuneScope does not play the game. It generates no game input, communicates with no game
+      world, alters no network traffic, and modifies no game client. The optional RuneLite
+      plugin only reports trade events that already happened on your screen — it never acts.</p>
+    <p>Nothing here asks for, wants, or has any use for a Jagex password, bank PIN, or
+      authenticator code. Never enter one anywhere that asks on RuneScope's behalf.</p>
+
+    <h2>Your data</h2>
+    <p>This is a hosted service, so being straight about this matters: <strong>your journal
+      lives on the server that runs RuneScope</strong>, not on your own machine. That is the
+      trade you make for reaching it from any device, and it is the one real difference from
+      the desktop app, where everything stayed on your PC.</p>
+    <ul>
+      <li><strong>What is stored:</strong> your trade journal, tracked positions, imported
+        RuneLite events, watchlist, savings goal, and the names you have given your characters
+        — one database file per account, shared with nobody.</li>
+      <li><strong>Sign-in:</strong> a Discord user id, username and avatar, or nothing but the
+        hash of a recovery code. No password is ever held. No email address is ever asked for.</li>
+      <li><strong>Prices</strong> come from the OSRS Wiki real-time price API. Character lookup
+        reads the public hiscores. Neither knows who asked.</li>
+      <li><strong>Taking it with you:</strong> the CSV export on your
+        <a href="/profile">profile</a> is your whole journal, any time you want it.</li>
+    </ul>
+
+    <h2>Estimates, not promises</h2>
+    <p>Every price shown is a completed transaction, not an outstanding offer — an item can
+      fail to fill at a price it traded at moments ago. Margins, GP/hour figures and boss
+      requirements are estimates drawn from market data and community sources. They are worth
+      reading and they are not guarantees.</p>
+
+    <h2>Unofficial fan project</h2>
+    <p>RuneScope is not affiliated with, sponsored by, or endorsed by Jagex. Jagex, RuneScape,
+      and Old School RuneScape are trademarks of Jagex Limited. All game-related intellectual
+      property belongs to Jagex and its licensors.</p>
+    <p><strong>Created using intellectual property belonging to Jagex Limited under the terms
+      of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with
+      Jagex.</strong></p>
+    <p>
+      <a href="https://legal.jagex.com/docs/policies/fan-content-policy" target="_blank" rel="noopener">Fan Content Policy</a> ·
+      <a href="https://legal.jagex.com/docs/rules/rules-of-old-school-runescape" target="_blank" rel="noopener">Rules of Old School RuneScape</a> ·
+      <a href="https://legal.jagex.com/docs/terms/terms-and-conditions/current" target="_blank" rel="noopener">Terms</a>
+    </p>
+
+    <h2>Credits</h2>
+    <p>Built by Wolklaw. Prices by the <a href="https://prices.runescape.wiki/" target="_blank" rel="noopener">OSRS
+      Wiki real-time prices</a> project. Boss and skilling references from the
+      <a href="https://oldschool.runescape.wiki/" target="_blank" rel="noopener">OSRS Wiki</a>.
+      Source under the GPLv3 on
+      <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">GitHub</a>.</p>
+    <p>Something wrong, missing, or just annoying? <a href="/help">Here is how to reach me</a>.</p>
+  </div>
+</div>
+
+{% endblock %}

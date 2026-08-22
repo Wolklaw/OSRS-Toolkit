@@ -1,121 +1,147 @@
 {% extends "base.html" %}
+{% set page_title = "Dashboard" %}
+{% set page_sub = "Where your money is right now: what is open, what it cost, and what the plugin is seeing in game." %}
+
+{% block page_actions %}
+<a class="button secondary small" href="/flips">Find a flip</a>
+{% endblock %}
+
 {% block content %}
 
 {% if not account.paired %}
 <div class="panel">
-  <h2 style="margin-top:0">Connect your RuneLite plugin</h2>
+  <h2>Connect your RuneLite plugin</h2>
   <p class="hint">Get a token, paste it into the plugin's settings under "Pairing token", and
-    switch on "Send to OSRS Toolkit Sync". Your Journal starts filling in from there.</p>
+    switch on "Send to OSRS Toolkit Sync". Your Journal starts filling in from there.
+    <a href="/help">Step-by-step instructions</a>.</p>
 
-  <div class="row">
+  <div class="row" style="margin-top:0.9rem">
     <button class="button" onclick="generatePairingToken()">Get a token</button>
   </div>
-  <div id="generated-token-box" style="display:none; margin-top:0.8rem;">
-    <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
-      <code id="generated-token" style="font-size:0.95rem; word-break:break-all;"></code>
-      <button class="button secondary" onclick="copyGeneratedToken(this)">Copy</button>
+  <div id="generated-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
     </div>
   </div>
   <div class="status-msg" id="generate-status"></div>
 
-  <p class="hint" style="margin-top:1.2rem">Already have a token from somewhere else?</p>
+  <p class="hint">Already have a token from somewhere else?</p>
   <div class="row">
-    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off">
+    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off" style="max-width:280px">
     <button class="button secondary" onclick="savePairingToken()">Connect</button>
   </div>
   <div class="status-msg" id="pairing-status"></div>
 </div>
 {% else %}
-<div class="panel">
-  <div class="row" style="justify-content:space-between">
-    <strong style="color:var(--good)">Plugin connected</strong>
-    <button class="button secondary" onclick="generatePairingToken()">Get a new token</button>
+{#
+  A one-line reassurance rather than the full pairing panel, which lives on the profile: the
+  question a paired account still asks from this page is "is it actually still on?", and the
+  answer belongs where they would notice it had stopped being true.
+#}
+<div class="panel" style="padding:0.7rem 1.2rem">
+  <div class="panel-head" style="margin-bottom:0">
+    <span class="badge ok">Plugin connected</span>
+    <span class="grow hint tight">Fills, offer slots and gear are arriving on their own.</span>
+    <button class="button ghost small" onclick="generatePairingToken()">Get a new token</button>
+    <a class="button ghost small" href="/profile">Manage</a>
   </div>
-  <p class="hint">Getting a new token replaces the old one — the plugin will need it re-pasted
-    wherever it's currently connected.</p>
-  <div id="generated-token-box" style="display:none; margin-top:0.8rem;">
-    <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
-      <code id="generated-token" style="font-size:0.95rem; word-break:break-all;"></code>
-      <button class="button secondary" onclick="copyGeneratedToken(this)">Copy</button>
+  <div id="generated-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
     </div>
+    <p class="hint">Replacing the old one — the plugin needs this re-pasted wherever it is connected.</p>
   </div>
-  <div class="status-msg" id="generate-status"></div>
+  <div class="status-msg" id="generate-status" style="min-height:0"></div>
 </div>
 {% endif %}
 
 <div class="stats">
   <div class="stat">
     <div class="label">Open positions</div>
-    <div class="value">{{ positions | length }}</div>
+    <div class="value">{{ open_count }}</div>
+    <div class="foot">{{ positions | length }} tracked in total</div>
   </div>
   <div class="stat">
-    <div class="label">Invested</div>
+    <div class="label">Capital committed</div>
     <div class="value">{{ "{:,}".format(total_invested) }} gp</div>
+    <div class="foot">Spent on positions still working</div>
   </div>
   <div class="stat">
     <div class="label">Estimated profit</div>
     <div class="value {{ 'positive' if total_estimated_profit >= 0 else 'negative' }}">
       {{ "{:+,}".format(total_estimated_profit) }} gp
     </div>
+    <div class="foot">If unsold stock sells at target</div>
+  </div>
+  <div class="stat">
+    <div class="label">Needs attention</div>
+    <div class="value {{ 'negative' if attention_count else '' }}">{{ attention_count }}</div>
+    <div class="foot">Asks the market has moved past</div>
   </div>
   {% if net_worth %}
   <div class="stat">
     <div class="label">Net worth</div>
     <div class="value">{{ "{:,}".format(net_worth.total_value) }} gp</div>
+    <div class="foot">Last bank and gear snapshot</div>
   </div>
   {% endif %}
 </div>
 
-{% if net_worth_chart %}
-<div class="panel">
-  <h2 style="margin-top:0">Net worth over time</h2>
-  <div style="overflow-x:auto">{{ net_worth_chart | safe }}</div>
-</div>
-{% endif %}
-
 {% if account.paired %}
 <div class="panel">
-  <h2 style="margin-top:0">Grand Exchange — live</h2>
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Grand Exchange — live</h2>
+      <p class="hint tight">The eight slots as the plugin last saw them.</p>
+    </div>
+    <a class="button ghost small" href="/buy-limits">Buy limits</a>
+  </div>
   {% if not live_character_selected %}
   <div class="empty">
     {% if synced_characters|length > 1 %}
-    Pick a character above to see its live Grand Exchange slots.
+    <strong>Pick a character</strong>
+    Live slots belong to one account at a time — choose one in the header to see them.
     {% else %}
-    Nothing live yet — this fills in once the plugin reports a session.
+    <strong>Nothing live yet</strong>
+    This fills in once the plugin reports a session.
     {% endif %}
   </div>
   {% else %}
     {% if offer_screen and offer_screen.focused %}
-    <p class="hint">
-      Setting up a {{ offer_screen.side or 'an' }} offer on <strong>{{ offer_screen.item_name }}</strong>.
-    </p>
+    <div class="callout info" style="margin-bottom:0.9rem">
+      Setting up {{ offer_screen.side or 'an' }} offer on <strong>{{ offer_screen.item_name }}</strong>.
+    </div>
     {% endif %}
     {% if offer_rows %}
-    <table>
-      <thead>
-        <tr>
-          <th>Slot</th>
-          <th>Item</th>
-          <th>Side</th>
-          <th>Price</th>
-          <th>Filled</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for slot in offer_rows %}
-        <tr>
-          <td>{{ slot.slot + 1 }}</td>
-          <td>{{ slot.item_name }}</td>
-          <td>{{ slot.side or "—" }}</td>
-          <td>{{ "{:,}".format(slot.offer_price) }}</td>
-          <td>{{ "{:,}".format(slot.quantity_filled) }} / {{ "{:,}".format(slot.total_quantity) }}
-            ({{ "%.0f"|format(slot.percent_filled) }}%)</td>
-          <td>{{ slot.status_label }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Slot</th>
+            <th>Item</th>
+            <th>Side</th>
+            <th class="num">Price</th>
+            <th class="num">Filled</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for slot in offer_rows %}
+          <tr>
+            <td>{{ slot.slot + 1 }}</td>
+            <td class="name">{{ slot.item_name }}</td>
+            <td>{{ slot.side or "—" }}</td>
+            <td class="num">{{ "{:,}".format(slot.offer_price) }}</td>
+            <td class="num">{{ "{:,}".format(slot.quantity_filled) }} / {{ "{:,}".format(slot.total_quantity) }}
+              <span class="table-note">({{ "%.0f"|format(slot.percent_filled) }}%)</span></td>
+            <td>{{ slot.status_label }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
     <div class="empty">No Grand Exchange offers open right now.</div>
     {% endif %}
@@ -123,52 +149,212 @@
 </div>
 {% endif %}
 
-<div class="panel">
-  <h2 style="margin-top:0">Positions</h2>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Positions</h2>
+      <p class="hint tight">Every flip you are part-way through. Update one to record what it
+        actually filled at — that is what Performance grades later.</p>
+    </div>
+    {% if positions %}
+    <input type="search" class="filter-input" placeholder="Filter positions…"
+           oninput="filterTable(this, 'positions-table')" aria-label="Filter positions">
+    <span class="table-note" id="positions-table-note"></span>
+    {% endif %}
+  </div>
   {% if positions %}
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th>Qty</th>
-        <th>Status</th>
-        <th>Buy</th>
-        <th>Sell target</th>
-        <th>Est. profit</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for position in positions %}
-      <tr>
-        <td>
-          {% if position.item_id %}
-          <a href="/item/{{ position.item_id }}">{{ position.item_name }}</a>
-          {% else %}
-          {{ position.item_name }}
-          {% endif %}
-        </td>
-        <td>{{ position.quantity }}</td>
-        <td>{{ position.status }}</td>
-        <td>{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>
-        <td>{{ "{:,}".format(position.sell_suggestion) }}</td>
-        <td class="{{ 'positive' if position.estimated_profit >= 0 else 'negative' }}">
-          {{ "{:+,}".format(position.estimated_profit) }}
-        </td>
-        <td><a href="#" onclick="deletePosition({{ position.position_id }}); return false;">Remove</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table id="positions-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Qty</th>
+          <th>Status</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell target</th>
+          <th class="num">Est. profit</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for position in positions %}
+        <tr>
+          <td class="name">
+            {% if position.item_id %}
+            <a href="/item/{{ position.item_id }}">{{ position.item_name }}</a>
+            {% else %}
+            {{ position.item_name }}
+            {% endif %}
+            <div class="table-note">{{ position.strategy }}</div>
+          </td>
+          <td class="num">{{ "{:,}".format(position.quantity) }}</td>
+          <td>
+            <span class="badge {{ 'ok' if position.status == 'Completed' else ('bad' if position.status == 'Cancelled' else 'accent') }}">{{ position.status }}</span>
+            {% if position.needs_attention %}
+            <span class="badge bad" title="Your ask is at least 2% above what the market now suggests, so it is unlikely to fill. Relisting nearer the suggestion clears this.">Stale ask</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>
+          <td class="num">{{ "{:,}".format(position.sell_suggestion) }}</td>
+          <td class="num {{ 'positive' if position.estimated_profit >= 0 else 'negative' }}">
+            {{ "{:+,}".format(position.estimated_profit) }}
+          </td>
+          <td class="row-actions">
+            <button class="button ghost small"
+                    onclick='openPositionEditor({{ position | tojson }})'>Update</button>
+            <a href="#" class="link-danger" onclick="deletePosition({{ position.position_id }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <div class="empty">Nothing tracked yet. Fills recorded by the plugin will show up here.</div>
+  <div class="empty">
+    <strong>Nothing tracked yet</strong>
+    Fills recorded by the plugin land here automatically, or
+    <a href="/flips">track a suggested flip</a> to plan one by hand.
+  </div>
   {% endif %}
 </div>
+
+{% if net_worth_chart %}
+<div class="panel">
+  <h2>Net worth over time</h2>
+  <p class="hint tight">Every bank and gear snapshot the plugin has sent.</p>
+  <div style="overflow-x:auto; margin-top:0.8rem">{{ net_worth_chart | safe }}</div>
+</div>
+{% endif %}
+
+{#
+  No <form> around any of this on purpose: every control here is driven by its own click
+  handler, and a form would only add a default submit for Enter and for each button to fight
+  with. Escape still closes the dialog — that is the element's own behaviour, not a form's.
+#}
+<dialog class="modal" id="position-modal">
+  <div>
+    <div class="modal-head">
+      <h2 id="position-modal-title">Update position</h2>
+      <span class="sub" id="position-modal-sub"></span>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="field w-md">
+          <label for="position-status">Status</label>
+          <select id="position-status">
+            {% for status in statuses %}<option value="{{ status }}">{{ status }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field w-sm">
+          <label for="position-quantity">Quantity acquired</label>
+          <input type="number" id="position-quantity" min="1" step="1">
+        </div>
+      </div>
+      <p class="hint">Reduce the quantity if a buy order was cancelled part-filled — the position
+        becomes the amount you actually hold, so it can still be listed and sold.</p>
+
+      <div class="section-label">Buy fills</div>
+      <div class="fill-list" id="buy-fills"></div>
+      <button class="button secondary small" onclick="addFill('buy-fills')">Add buy fill</button>
+
+      <div class="section-label">Sale fills</div>
+      <div class="fill-list" id="sale-fills"></div>
+      <button class="button secondary small" onclick="addFill('sale-fills')">Add sale fill</button>
+
+      <p class="hint">A completed position has to account for its whole quantity in both lists.</p>
+      <div class="status-msg" id="position-modal-status"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="grow table-note" id="position-modal-plan"></span>
+      <button class="button secondary" onclick="document.getElementById('position-modal').close()">Cancel</button>
+      <button class="button" onclick="savePosition()">Save</button>
+    </div>
+  </div>
+</dialog>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+  let editingPosition = null;
+
+  function openPositionEditor(position) {
+    editingPosition = position;
+    document.getElementById('position-modal-title').textContent = position.item_name;
+    document.getElementById('position-modal-sub').textContent =
+      'Position #' + position.position_id + ' · opened ' + position.created_at.slice(0, 10);
+    document.getElementById('position-modal-plan').textContent =
+      'Planned: buy ' + position.target_buy.toLocaleString() + ', sell '
+      + position.target_sell.toLocaleString() + ', qty ' + position.quantity.toLocaleString();
+    document.getElementById('position-status').value = position.status;
+    document.getElementById('position-quantity').value = position.quantity;
+    renderFills('buy-fills', position.buy_fills, 'buy_price');
+    renderFills('sale-fills', position.sale_fills, 'sell_price');
+    setStatus('position-modal-status', '');
+    document.getElementById('position-modal').showModal();
+  }
+
+  function renderFills(hostId, fills, priceKey) {
+    const host = document.getElementById(hostId);
+    host.innerHTML = '';
+    for (const fill of fills || []) { addFill(hostId, fill.quantity, fill[priceKey]); }
+  }
+
+  function addFill(hostId, quantity, price) {
+    const host = document.getElementById(hostId);
+    const row = document.createElement('div');
+    row.className = 'fill-row';
+    const quantityInput = document.createElement('input');
+    quantityInput.type = 'number';
+    quantityInput.min = '1';
+    quantityInput.placeholder = 'Quantity';
+    quantityInput.value = quantity === undefined ? '' : quantity;
+    const priceInput = document.createElement('input');
+    priceInput.type = 'number';
+    priceInput.min = '0';
+    priceInput.placeholder = 'Price each';
+    priceInput.value = price === undefined ? '' : price;
+    const remove = document.createElement('button');
+    remove.className = 'button ghost small';
+    remove.textContent = '✕';
+    remove.setAttribute('aria-label', 'Remove this fill');
+    remove.onclick = () => row.remove();
+    row.append(quantityInput, priceInput, remove);
+    host.appendChild(row);
+  }
+
+  function readFills(hostId) {
+    const rows = [...document.getElementById(hostId).querySelectorAll('.fill-row')];
+    const fills = [];
+    for (const row of rows) {
+      const [quantity, price] = [...row.querySelectorAll('input')].map((input) => input.value.trim());
+      if (!quantity && !price) { continue; }
+      if (!quantity || !price) { return null; }
+      fills.push([Number(quantity), Number(price)]);
+    }
+    return fills;
+  }
+
+  async function savePosition() {
+    const buyFills = readFills('buy-fills');
+    const saleFills = readFills('sale-fills');
+    if (buyFills === null || saleFills === null) {
+      setStatus('position-modal-status', 'Every fill needs both a quantity and a price.', 'error');
+      return;
+    }
+    const result = await api('PATCH', `/api/positions/${editingPosition.position_id}`, {
+      status: document.getElementById('position-status').value,
+      quantity: Number(document.getElementById('position-quantity').value) || null,
+      buy_fills: buyFills,
+      sale_fills: saleFills,
+    });
+    if (!result.ok) {
+      setStatus('position-modal-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
   async function deletePosition(positionId) {
     if (!confirm('Remove this position? This does not undo anything in game.')) { return; }
     await fetch(`/api/positions/${positionId}`, { method: 'DELETE' });
@@ -176,59 +362,28 @@
   }
 
   async function generatePairingToken() {
-    const status = document.getElementById('generate-status');
-    status.textContent = 'Generating...';
-    status.className = 'status-msg';
-    try {
-      const response = await fetch('/api/pairing-token/generate', { method: 'POST' });
-      const body = await response.json();
-      if (!response.ok) {
-        status.textContent = body.detail || 'Could not generate a token just now.';
-        status.className = 'status-msg error';
-        return;
-      }
-      document.getElementById('generated-token').textContent = body.token;
-      document.getElementById('generated-token-box').style.display = 'block';
-      status.textContent = 'Paste this into the plugin\'s settings.';
-      status.className = 'status-msg ok';
-    } catch (error) {
-      status.textContent = 'Could not reach the server — try again in a moment.';
-      status.className = 'status-msg error';
+    setStatus('generate-status', 'Generating…');
+    const result = await api('POST', '/api/pairing-token/generate');
+    if (!result.ok) {
+      setStatus('generate-status', result.error, 'error');
+      return;
     }
-  }
-
-  function copyGeneratedToken(button) {
-    const token = document.getElementById('generated-token').textContent;
-    navigator.clipboard.writeText(token);
-    flashCopied(button);
+    document.getElementById('generated-token').textContent = result.data.token;
+    document.getElementById('generated-token-box').style.display = 'block';
+    setStatus('generate-status', "Paste this into the plugin's settings.", 'ok');
   }
 
   async function savePairingToken() {
-    const input = document.getElementById('pairing-token');
-    const status = document.getElementById('pairing-status');
-    const token = input.value.trim();
+    const token = document.getElementById('pairing-token').value.trim();
     if (!token) { return; }
-    status.textContent = 'Checking...';
-    status.className = 'status-msg';
-    try {
-      const response = await fetch('/api/pairing-token', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        status.textContent = body.detail || 'That token was not accepted.';
-        status.className = 'status-msg error';
-        return;
-      }
-      status.textContent = 'Connected.';
-      status.className = 'status-msg ok';
-      setTimeout(() => location.reload(), 600);
-    } catch (error) {
-      status.textContent = 'Could not reach the server — try again in a moment.';
-      status.className = 'status-msg error';
+    setStatus('pairing-status', 'Checking…');
+    const result = await api('PUT', '/api/pairing-token', { token });
+    if (!result.ok) {
+      setStatus('pairing-status', result.error, 'error');
+      return;
     }
+    setStatus('pairing-status', 'Connected.', 'ok');
+    setTimeout(() => location.reload(), 600);
   }
 </script>
 {% endblock %}

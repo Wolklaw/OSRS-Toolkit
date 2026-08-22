@@ -10,6 +10,27 @@ Sits beside [osrs-toolkit-sync-server](https://github.com/Wolklaw/osrs-toolkit-s
 `journal.py`, `ranking.py`, `performance.py` and the rest, none of which know this app exists
 and none of which need PySide6 installed to run headless on a server.
 
+## Pages
+
+| Page | What it's for |
+|---|---|
+| `/` | Dashboard: open positions, live Grand Exchange slots, net worth, and where a position is updated with what it really filled at. |
+| `/flips` | GE Flipper — a portfolio sized to your cash and free slots, plus the ranked field behind it. Track or watch a row from here. |
+| `/watchlist` | Items you are following, priced after tax. |
+| `/alch` `/skilling` | High Alchemy candidates, and skilling methods priced off the live market. |
+| `/trades` | Trade Journal — flips recorded by hand. |
+| `/activity` | The raw feed of what the plugin has sent. |
+| `/buy-limits` | What is left of each item's four-hour limit. |
+| `/performance` | Realized results by strategy and item, and plan versus actual. |
+| `/pvm` `/savings-goal` | Boss checklists against your synced loadout; one savings target. |
+| `/item/{id}` | One item's full market breakdown and price history. |
+| `/profile` | Account, pairing token, characters, data export, theme. |
+| `/about` `/help` | What this is and what it holds; setup, FAQ, and how to get in touch. **Both render signed out** — they answer the questions asked before signing in. |
+
+Every page shares one shell (`templates/base.html`): sidebar navigation, a price-freshness
+pill that also forces a refresh, the character switcher, and a light/dark/system theme toggle
+kept in the browser rather than on the server.
+
 ## Running it
 
 ```bash

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% set page_title = "Profile" %}
+{% set page_sub = "Your account, the plugin it reads from, and everything RuneScope is holding for you." %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="row" style="gap:0.9rem">
+      {% if account.avatar %}
+      <img src="{{ account.avatar }}" alt="" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border)">
+      {% else %}
+      <span class="initial" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:1.3rem;font-weight:700">{{ account.username[:1] | upper }}</span>
+      {% endif %}
+      <div>
+        <h2>{{ account.username }}</h2>
+        <p class="hint tight">
+          {% if is_recovery_account %}Signed in with a recovery code{% else %}Signed in with Discord{% endif %}
+          · joined {{ account.created_at[:10] }}
+        </p>
+      </div>
+    </div>
+    <div class="page-actions">
+      <button class="button secondary small" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+
+  {% if is_recovery_account %}
+  <div class="form-row" style="margin-top:0.6rem">
+    <div class="field" style="min-width:14rem">
+      <label for="display-name">Display name</label>
+      <input type="text" id="display-name" value="{{ account.username }}" maxlength="40" autocomplete="off">
+    </div>
+    <button class="button secondary" onclick="saveDisplayName()">Save name</button>
+  </div>
+  <div class="status-msg" id="name-status"></div>
+  <div class="callout" style="margin-top:0.9rem">
+    <strong>Your recovery code is the only way back in.</strong>
+    <p>It was shown once, when this account was created, and there is no copy of it here —
+      only a hash of it. Lose it and this journal cannot be reached again from another device.
+      Sign in with Discord instead if you would rather not carry that risk.</p>
+  </div>
+  {% else %}
+  <p class="hint">Your name and avatar come from Discord and refresh on every sign-in. RuneScope
+    asks Discord for nothing else — no email address, no servers, no messages.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>RuneLite plugin</h2>
+      <p class="hint tight">The companion plugin is what sends your fills, live offer slots,
+        bank and gear. Everything works without it — you just type more.</p>
+    </div>
+    {% if account.paired %}<span class="badge ok">Connected</span>{% else %}<span class="badge">Not connected</span>{% endif %}
+  </div>
+
+  <div class="row">
+    <button class="button {{ 'secondary' if account.paired else '' }}" onclick="generatePairingToken()">
+      {{ "Get a new token" if account.paired else "Get a token" }}
+    </button>
+    {% if account.paired %}
+    <button class="button danger small" onclick="disconnectPlugin()">Disconnect</button>
+    {% endif %}
+  </div>
+  {% if account.paired %}
+  <p class="hint">A new token replaces the old one — the plugin needs it re-pasted wherever it
+    is currently connected.</p>
+  {% endif %}
+  <div id="generated-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
+    </div>
+  </div>
+  <div class="status-msg" id="generate-status"></div>
+
+  <p class="hint">Already have a token from somewhere else?</p>
+  <div class="row">
+    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off" style="max-width:280px">
+    <button class="button secondary" onclick="savePairingToken()">Connect</button>
+  </div>
+  <div class="status-msg" id="pairing-status"></div>
+  <p class="hint"><a href="/help">Step-by-step plugin setup</a></p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Synced characters</h2>
+    <p class="hint tight">Every RuneLite account the sync service has seen play through your
+      token. Switch between them in the header.</p>
+    {% if synced_characters %}
+    <div class="row" style="margin-top:0.8rem">
+      {% for character in synced_characters %}
+      <span class="chip" style="padding-right:0.75rem">
+        {{ character.account_name or (character.account_hash[:8] + '…') }}
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty" style="padding:1.1rem 0">
+      Nothing yet — log in to the game with the plugin connected and your character appears here.
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Named characters</h2>
+    <p class="hint tight">Labels for attributing a manual trade to one of your accounts. No
+      plugin needed.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="character-name" placeholder="Character name" autocomplete="off" style="max-width:190px"
+             onkeydown="if (event.key === 'Enter') { addCharacter(); }">
+      <button class="button secondary" onclick="addCharacter()">Add</button>
+    </div>
+    <div class="status-msg" id="character-status"></div>
+    {% if characters %}
+    <div class="row" style="margin-top:0.6rem">
+      {% for character in characters %}
+      <span class="chip">
+        {{ character.name }}
+        <a href="#" onclick="deleteCharacter({{ character.character_id }}); return false;" aria-label="Remove {{ character.name }}">&times;</a>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Your data</h2>
+      <p class="hint tight">Everything RuneScope holds for this account, and how to take it with you.</p>
+    </div>
+    <a class="button secondary small" href="/api/export.csv">Export CSV</a>
+  </div>
+  <div class="stats" style="margin-bottom:0.9rem">
+    <div class="stat">
+      <div class="label">Positions</div>
+      <div class="value">{{ position_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Manual trades</div>
+      <div class="value">{{ trade_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Watched items</div>
+      <div class="value">{{ watchlist_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Savings goal</div>
+      <div class="value" style="font-size:1.05rem">{{ account.goal_label if account.has_goal else "None set" }}</div>
+      <div class="foot"><a href="/savings-goal">{{ "Review it" if account.has_goal else "Set one" }}</a></div>
+    </div>
+  </div>
+  <p class="hint">Your journal is a database file on this server, one per account, shared with
+    nobody. The CSV export is the whole thing — positions and manual trades both — in a format
+    a spreadsheet will open. <a href="/about">What is and isn't stored</a>.</p>
+</div>
+
+<div class="panel">
+  <h2>Appearance</h2>
+  <p class="hint tight">The theme button in the header cycles between following your system,
+    dark, and light. Your choice is kept in this browser, not on the server.</p>
+  <div class="row" style="margin-top:0.8rem">
+    <button class="button secondary small" onclick="setTheme('system')">Match system</button>
+    <button class="button secondary small" onclick="setTheme('dark')">Dark</button>
+    <button class="button secondary small" onclick="setTheme('light')">Light</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setTheme(choice) {
+    try {
+      if (choice === 'system') { localStorage.removeItem('runescope-theme'); }
+      else { localStorage.setItem('runescope-theme', choice); }
+    } catch (e) { /* storage denied — the switch still applies to this page */ }
+    if (choice === 'system') { document.documentElement.removeAttribute('data-theme'); }
+    else { document.documentElement.setAttribute('data-theme', choice); }
+    toast(choice === 'system' ? 'Theme follows your system setting.' : 'Theme set to ' + choice + '.', 'ok');
+  }
+
+  async function saveDisplayName() {
+    const username = document.getElementById('display-name').value.trim();
+    if (!username) { return; }
+    const result = await api('PATCH', '/api/me', { username });
+    if (!result.ok) {
+      setStatus('name-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function generatePairingToken() {
+    setStatus('generate-status', 'Generating…');
+    const result = await api('POST', '/api/pairing-token/generate');
+    if (!result.ok) {
+      setStatus('generate-status', result.error, 'error');
+      return;
+    }
+    document.getElementById('generated-token').textContent = result.data.token;
+    document.getElementById('generated-token-box').style.display = 'block';
+    setStatus('generate-status', "Paste this into the plugin's settings.", 'ok');
+  }
+
+  async function savePairingToken() {
+    const token = document.getElementById('pairing-token').value.trim();
+    if (!token) { return; }
+    setStatus('pairing-status', 'Checking…');
+    const result = await api('PUT', '/api/pairing-token', { token });
+    if (!result.ok) {
+      setStatus('pairing-status', result.error, 'error');
+      return;
+    }
+    setStatus('pairing-status', 'Connected.', 'ok');
+    setTimeout(() => location.reload(), 600);
+  }
+
+  async function disconnectPlugin() {
+    if (!confirm('Disconnect the plugin? Nothing already imported is deleted — new events just stop arriving.')) { return; }
+    await api('DELETE', '/api/pairing-token');
+    location.reload();
+  }
+
+  async function addCharacter() {
+    const name = document.getElementById('character-name').value.trim();
+    if (!name) { return; }
+    const result = await api('POST', '/api/characters', { name });
+    if (!result.ok) {
+      setStatus('character-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function deleteCharacter(characterId) {
+    if (!confirm('Remove this character? Trades already logged under it are kept, just unlabeled.')) { return; }
+    await api('DELETE', `/api/characters/${characterId}`);
+    location.reload();
+  }
+</script>
+{% endblock %}

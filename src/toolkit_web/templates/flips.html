@@ -1,81 +1,186 @@
 {% extends "base.html" %}
+{% set page_title = "GE Flipper" %}
+{% set page_sub = "Possible margins from recent trades, volume, Grand Exchange tax and risk checks — sized to the cash and slots you actually have." %}
+
 {% block content %}
 
 <div class="panel">
-  <h2 style="margin-top:0">Flip suggestions</h2>
-  <form method="get" class="row">
-    <input type="text" name="cash_stack" value="{{ cash_stack }}" style="max-width:160px" placeholder="Cash stack">
-    <select name="strategy" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.7rem;">
-      {% for option in strategies %}
-      <option value="{{ option }}" {% if option == strategy %}selected{% endif %}>{{ option }}</option>
-      {% endfor %}
-    </select>
-    <select name="slots" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.7rem;">
-      {% for count in range(1, 9) %}
-      <option value="{{ count }}" {% if count == slots %}selected{% endif %}>{{ count }} slot{{ 's' if count != 1 else '' }}</option>
-      {% endfor %}
-    </select>
+  <form method="get" class="form-row">
+    <div class="field w-md">
+      <label for="cash-stack">Cash stack</label>
+      <input type="number" id="cash-stack" name="cash_stack" value="{{ cash_stack }}" min="10000" step="100000">
+    </div>
+    <div class="field w-md">
+      <label for="strategy">Strategy</label>
+      <select id="strategy" name="strategy">
+        {% for option in strategies %}
+        <option value="{{ option }}" {% if option == strategy %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field w-sm">
+      <label for="slots">Free slots</label>
+      <select id="slots" name="slots">
+        {% for count in range(1, 9) %}
+        <option value="{{ count }}" {% if count == slots %}selected{% endif %}>{{ count }} slot{{ 's' if count != 1 else '' }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <button class="button" type="submit">Update</button>
   </form>
+  <p class="hint">Prices shown are completed transactions, not outstanding offers — a fill is
+    never guaranteed at them.</p>
 </div>
 
 {% if market_unavailable %}
 <div class="panel">
-  <div class="empty">Live prices couldn't be reached just now — try again shortly.</div>
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Try the refresh button in the header again shortly.
+  </div>
 </div>
 {% else %}
 
-<div class="panel">
-  <h2 style="margin-top:0">Suggested portfolio</h2>
-  <p class="hint">One diversified plan for the cash stack above, sized to stay inside safe buy limits.</p>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Suggested portfolio</h2>
+      <p class="hint tight">One diversified plan for that cash stack, sized to stay inside safe
+        buy limits. Track a row to put it in your journal.</p>
+    </div>
+  </div>
   {% if portfolio %}
-  <table>
-    <thead>
-      <tr><th>Item</th><th>Buy</th><th>Sell</th><th>Qty</th><th>Capital</th><th>Est. profit</th><th>ROI</th></tr>
-    </thead>
-    <tbody>
-      {% for candidate in portfolio %}
-      <tr>
-        <td>{{ candidate.name }}</td>
-        <td>{{ "{:,}".format(candidate.buy_price) }}</td>
-        <td>{{ "{:,}".format(candidate.sell_price) }}</td>
-        <td>{{ candidate.suggested_quantity }}</td>
-        <td>{{ "{:,}".format(candidate.capital_required) }}</td>
-        <td class="positive">{{ "{:+,}".format(candidate.potential_profit) }}</td>
-        <td>{{ "%.1f"|format(candidate.roi) }}%</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Qty</th>
+          <th class="num">Capital</th>
+          <th class="num">Est. profit</th>
+          <th class="num">ROI</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for candidate in portfolio %}
+        <tr>
+          <td class="name"><a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a></td>
+          <td class="num">{{ "{:,}".format(candidate.buy_price) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.sell_price) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.suggested_quantity) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.capital_required) }}</td>
+          <td class="num positive">{{ "{:+,}".format(candidate.potential_profit) }}</td>
+          <td class="num">{{ "%.1f"|format(candidate.roi) }}%</td>
+          <td class="row-actions">
+            <button class="button secondary small" onclick='trackFlip({{ candidate | tojson }}, this)'>Track</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <div class="empty">Nothing clears this strategy's bar right now.</div>
+  <div class="empty">
+    <strong>Nothing clears this strategy's bar right now</strong>
+    Try a longer-horizon strategy, or a different cash stack.
+  </div>
   {% endif %}
 </div>
 
-<div class="panel">
-  <h2 style="margin-top:0">All ranked candidates</h2>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>All ranked candidates</h2>
+      <p class="hint tight">The top {{ candidates | length }} by score. Confidence weighs volume
+        and how recently the item traded.</p>
+    </div>
+    {% if candidates %}
+    <input type="search" class="filter-input" placeholder="Search items…"
+           oninput="filterTable(this, 'candidates-table')" aria-label="Search items">
+    <span class="table-note" id="candidates-table-note"></span>
+    {% endif %}
+  </div>
   {% if candidates %}
-  <table>
-    <thead>
-      <tr><th>Item</th><th>Buy</th><th>Sell</th><th>ROI</th><th>Confidence</th><th>1h volume</th></tr>
-    </thead>
-    <tbody>
-      {% for candidate in candidates %}
-      <tr>
-        <td>{{ candidate.name }}</td>
-        <td>{{ "{:,}".format(candidate.buy_price) }}</td>
-        <td>{{ "{:,}".format(candidate.sell_price) }}</td>
-        <td>{{ "%.1f"|format(candidate.roi) }}%</td>
-        <td>{{ candidate.confidence }}%</td>
-        <td>{{ "{:,}".format(candidate.hourly_volume) }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table id="candidates-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Margin</th>
+          <th class="num">ROI</th>
+          <th class="num">Confidence</th>
+          <th class="num">1h volume</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for candidate in candidates %}
+        <tr>
+          <td class="name"><a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a></td>
+          <td class="num">{{ "{:,}".format(candidate.buy_price) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.sell_price) }}</td>
+          <td class="num {{ 'positive' if candidate.profit_each >= 0 else 'negative' }}">{{ "{:+,}".format(candidate.profit_each) }}</td>
+          <td class="num">{{ "%.1f"|format(candidate.roi) }}%</td>
+          <td class="num">{{ candidate.confidence }}%</td>
+          <td class="num">{{ "{:,}".format(candidate.hourly_volume) }}</td>
+          <td class="row-actions">
+            <button class="button ghost small"
+                    onclick="toggleWatch({{ candidate.item_id }}, this)">{{ "Watching" if candidate.item_id in watched_ids else "Watch" }}</button>
+            <button class="button ghost small" onclick='trackFlip({{ candidate | tojson }}, this)'>Track</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <div class="empty">Nothing clears this strategy's bar right now.</div>
   {% endif %}
 </div>
 
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const flipStrategy = {{ strategy | tojson }};
+
+  /** Opens a planned position from a ranked row, with that row's own numbers as the plan —
+   *  the point of tracking a suggestion is to be graded against what it suggested later. */
+  async function trackFlip(candidate, button) {
+    const quantity = Number(candidate.suggested_quantity) || 1;
+    const result = await api('POST', '/api/positions', {
+      item_id: candidate.item_id,
+      item_name: candidate.name,
+      quantity: quantity,
+      target_buy: candidate.buy_price,
+      target_sell: candidate.sell_price,
+      strategy: flipStrategy,
+    });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = 'Tracked';
+    button.disabled = true;
+    toast(`Tracking ${quantity.toLocaleString()} × ${candidate.name} on your Dashboard.`, 'ok');
+  }
+
+  async function toggleWatch(itemId, button) {
+    const watching = button.textContent.trim() === 'Watching';
+    const result = watching
+      ? await api('DELETE', `/api/watchlist/${itemId}`)
+      : await api('POST', '/api/watchlist', { item_id: itemId });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = watching ? 'Watch' : 'Watching';
+  }
+</script>
 {% endblock %}

@@ -1,49 +1,79 @@
 {% extends "base.html" %}
+{% set page_title = "Savings Goal" %}
+{% set page_sub = "One target to trade toward. Progress counts realized profit from the moment the goal is set, across every character on this account." %}
+
 {% block content %}
 
 {% if not account.has_goal %}
 <div class="panel">
-  <h2 style="margin-top:0">Set a savings goal</h2>
+  <h2>Set a savings goal</h2>
   <p class="hint">Progress counts realized profit from this moment forward, from both synced
-    trades and the manual log.</p>
-  <div class="row">
-    <input type="text" id="goal-label" placeholder="What are you saving for?" autocomplete="off">
-    <input type="text" id="goal-target" placeholder="Target (gp)" autocomplete="off" style="max-width:180px">
+    trades and the manual log. Earlier profit is not backdated into it — it was not earned
+    toward this.</p>
+  <div class="form-row" style="margin-top:0.9rem">
+    <div class="field" style="min-width:14rem">
+      <label for="goal-label">What are you saving for?</label>
+      <input type="text" id="goal-label" placeholder="Twisted bow" autocomplete="off">
+    </div>
+    <div class="field w-md">
+      <label for="goal-target">Target</label>
+      <input type="number" id="goal-target" min="1" step="1000000" placeholder="Amount in gp">
+    </div>
     <button class="button" onclick="setGoal()">Set goal</button>
   </div>
   <div class="status-msg" id="goal-status"></div>
 </div>
 {% else %}
 <div class="panel">
-  <div class="row" style="justify-content:space-between">
-    <h2 style="margin:0">{{ progress.label }}</h2>
-    <button class="button secondary" onclick="clearGoal()">Clear goal</button>
+  <div class="panel-head">
+    <div class="grow">
+      <h2>{{ progress.label }}</h2>
+      <p class="hint tight">
+        {#
+          Days are the honest unit only while there are few enough of them to picture. Past
+          a few months "about 17,240 days to go" stops being an estimate anyone reads and
+          starts being a number they scroll past, so the same figure is said in the unit that
+          still means something at that distance.
+        #}
+        {% if progress.is_reached %}
+        <span class="positive">Goal reached.</span>
+        {% elif eta_days is none %}
+        Not enough recent profit to project an ETA yet.
+        {% elif eta_days >= 730 %}
+        Over {{ eta_days // 365 }} years away at the recent rate.
+        {% elif eta_days >= 90 %}
+        About {{ (eta_days / 30.0) | round | int }} months to go at the recent rate.
+        {% else %}
+        At the recent rate, about {{ eta_days }} day{{ 's' if eta_days != 1 else '' }} to go.
+        {% endif %}
+      </p>
+    </div>
+    <button class="button danger small" onclick="clearGoal()">Clear goal</button>
   </div>
-  <div class="stats" style="margin-top:1rem">
+
+  <div class="progress" role="img"
+       aria-label="{{ '%.0f'|format(progress.percent) }} percent of the way there">
+    <span style="width:{{ [progress.percent, 100] | min }}%"></span>
+  </div>
+  <p class="hint tight">{{ "%.1f"|format(progress.percent) }}% of the way there.</p>
+
+  <div class="stats" style="margin-top:1.1rem; margin-bottom:0">
     <div class="stat">
       <div class="label">Saved</div>
       <div class="value {{ 'positive' if progress.saved >= 0 else 'negative' }}">{{ "{:,}".format(progress.saved) }} gp</div>
+      <div class="foot">Realized since the goal was set</div>
     </div>
     <div class="stat">
       <div class="label">Target</div>
       <div class="value">{{ "{:,}".format(progress.target) }} gp</div>
-    </div>
-    <div class="stat">
-      <div class="label">Progress</div>
-      <div class="value">{{ "%.1f"|format(progress.percent) }}%</div>
+      <div class="foot">{{ "{:,}".format(progress.remaining) }} gp still to go</div>
     </div>
     <div class="stat">
       <div class="label">Recent daily rate</div>
       <div class="value {{ 'positive' if daily_rate >= 0 else 'negative' }}">{{ "{:+,}".format(daily_rate) }} gp</div>
+      <div class="foot">What the last stretch has averaged</div>
     </div>
   </div>
-  {% if progress.is_reached %}
-  <p class="hint" style="color:var(--good)">Goal reached.</p>
-  {% elif eta_days is not none %}
-  <p class="hint">At the recent rate, about {{ eta_days }} day{{ 's' if eta_days != 1 else '' }} to go.</p>
-  {% else %}
-  <p class="hint">Not enough recent profit to project an ETA yet.</p>
-  {% endif %}
 </div>
 {% endif %}
 
@@ -52,31 +82,23 @@
 {% block scripts %}
 <script>
   async function setGoal() {
-    const status = document.getElementById('goal-status');
     const label = document.getElementById('goal-label').value.trim();
     const target = document.getElementById('goal-target').value.trim();
     if (!label || !target) {
-      status.textContent = 'Fill in both fields.';
-      status.className = 'status-msg error';
+      setStatus('goal-status', 'Give it a name and a target.', 'error');
       return;
     }
-    const response = await fetch('/api/savings-goal', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label, target: Number(target) }),
-    });
-    if (!response.ok) {
-      const body = await response.json();
-      status.textContent = body.detail || 'Could not set that goal.';
-      status.className = 'status-msg error';
+    const result = await api('POST', '/api/savings-goal', { label, target: Number(target) });
+    if (!result.ok) {
+      setStatus('goal-status', result.error, 'error');
       return;
     }
     location.reload();
   }
 
   async function clearGoal() {
-    if (!confirm('Clear this savings goal?')) { return; }
-    await fetch('/api/savings-goal', { method: 'DELETE' });
+    if (!confirm('Clear this savings goal? Progress toward it is not kept.')) { return; }
+    await api('DELETE', '/api/savings-goal');
     location.reload();
   }
 </script>

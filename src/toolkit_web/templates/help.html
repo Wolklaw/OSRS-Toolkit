@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% set page_title = "Help" %}
+{% set page_sub = "Getting set up, what each page is for, and how to reach a human when something is wrong." %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Getting started</h2>
+    <ol class="steps">
+      <li><strong>Sign in.</strong> Discord, or a recovery code if you would rather not use
+        Discord at all. Either way there is no password and no email address.</li>
+      <li><strong>Use it straight away.</strong> The GE Flipper, Alch Finder, Skilling Profit
+        and Watchlist need nothing from you but a cash stack — they read live market prices.</li>
+      <li><strong>Connect the plugin when you want the journal to fill itself in.</strong>
+        Without it you can still record trades by hand on the Trade Journal page; with it,
+        your real fills arrive on their own.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Connecting the RuneLite plugin</h2>
+    <ol class="steps">
+      <li>Install the <strong>OSRS Toolkit Sync</strong> plugin in RuneLite. Installation
+        instructions live with the plugin itself:
+        <a href="https://github.com/Wolklaw/osrs-toolkit-runelite" target="_blank" rel="noopener">github.com/Wolklaw/osrs-toolkit-runelite</a>.</li>
+      <li>On your <a href="/profile">profile</a>, choose <strong>Get a token</strong> and copy
+        the token it shows you.</li>
+      <li>In RuneLite, open the plugin's settings and paste it into <strong>Pairing
+        token</strong> under <em>Connection</em>.</li>
+      <li>Switch on <strong>Send to OSRS Toolkit Sync</strong>. Leave <em>Service address</em>
+        alone unless you run the sync service yourself.</li>
+      <li>Under <em>What to record</em>, pick what you want sent: <strong>Track Grand Exchange
+        fills</strong>, <strong>Track player trades</strong>, and <strong>Sync gear and bank
+        for PvM readiness</strong>. All three are yours to leave off.</li>
+      <li>Play. Your fills appear under RuneLite Activity, and positions open on the Dashboard,
+        the next time a page loads.</li>
+    </ol>
+    <p>For PvM Readiness specifically, turn on <em>Sync gear and bank for PvM readiness</em> and
+      then <strong>open your bank in game once</strong> — that is the moment the snapshot is
+      taken.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">What each page is for</h2>
+    <ul>
+      <li><strong>Dashboard</strong> — open positions, your live Grand Exchange slots, and net
+        worth over time. This is also where you record what a position actually filled at.</li>
+      <li><strong>GE Flipper</strong> — what to buy right now with the cash and free slots you
+        have. "Track" turns a suggestion into a position in your journal.</li>
+      <li><strong>Watchlist</strong> — items you want to keep an eye on whether or not they
+        clear the flipper's bar.</li>
+      <li><strong>Alch Finder</strong> — what is worth high-alching today, after nature runes
+        and after what it costs to buy.</li>
+      <li><strong>Skilling Profit</strong> — gathering and processing methods priced off the
+        live market, with a hiscores lookup to mark what you can actually do.</li>
+      <li><strong>Trade Journal</strong> — flips completed outside the plugin, recorded by hand.</li>
+      <li><strong>RuneLite Activity</strong> — the raw feed of what the plugin has sent.</li>
+      <li><strong>Buy Limits</strong> — how much of each item you can still buy this window.</li>
+      <li><strong>Performance</strong> — which strategies and items actually made you money,
+        and where your plans and your results parted company.</li>
+      <li><strong>PvM Readiness</strong> — your gear, bank and levels against boss checklists.</li>
+      <li><strong>Savings Goal</strong> — one target, and an honest estimate of how far off it is.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Questions people actually ask</h2>
+
+    <details class="faq">
+      <summary>Do I need the plugin?</summary>
+      <p>No. Everything that reads the market — the GE Flipper, Watchlist, Alch Finder and
+        Skilling Profit — works with nothing connected. The plugin only saves you typing: it is
+        what fills the journal, the live offer slots, the buy-limit counter and PvM Readiness in
+        automatically.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Why do prices look out of date?</summary>
+      <p>Two different clocks. The price pill in the header says when this server last fetched
+        the market — press it to fetch again. "Age" on an item says when that item last actually
+        traded, which for a quiet item can be hours ago no matter how fresh the fetch was.</p>
+    </details>
+
+    <details class="faq">
+      <summary>A suggested flip didn't fill at the suggested price.</summary>
+      <p>Expected, unfortunately. Every price here is a completed transaction, not an offer
+        sitting on the book. Nothing can promise the next offer fills at the last one's price —
+        that is why the flipper weighs volume and recency into a confidence figure instead of
+        pretending otherwise.</p>
+    </details>
+
+    <details class="faq">
+      <summary>How does the GE tax get counted?</summary>
+      <p>Two percent of the sale price, rounded down, capped at 5,000,000 gp — the same rule
+        the game uses. It is taken out of every margin, profit and ROI figure on the site, so
+        what you read is what lands in your coin pouch.</p>
+    </details>
+
+    <details class="faq">
+      <summary>I play several accounts. Do they get mixed together?</summary>
+      <p>No. Each character the plugin reports is kept separate, and the switcher in the header
+        picks which one you are looking at. Manual trades can be attributed to a character you
+        name yourself on your <a href="/profile">profile</a>. A savings goal is deliberately the
+        exception — it counts everything, because it is a target for you, not for one account.</p>
+    </details>
+
+    <details class="faq">
+      <summary>What happens if I lose my recovery code?</summary>
+      <p>The account is gone. The code is never stored — only a hash of it — which is exactly
+        what makes it work with no email address behind it, and exactly why nothing can recover
+        one. If that worries you, sign in with Discord instead.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Can I get my data out?</summary>
+      <p>Yes, any time: <a href="/api/export.csv">export your journal as CSV</a>. It is the
+        whole thing — tracked positions and manual trades both — not just whatever table you
+        happen to be looking at.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Can this get me banned?</summary>
+      <p>It does not play the game, send input, touch the client, or read anything the game
+        does not already show you on screen. The plugin runs inside RuneLite, which Jagex
+        permits, and only reports events after they have happened. See
+        <a href="/about">About</a> for the full statement.</p>
+    </details>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Still stuck?</h2>
+    <p>Found a bug, have a feature request, or something just isn't working right? Any of these
+      reach me:</p>
+    <ul>
+      <li><strong>Project page</strong> —
+        <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">github.com/Wolklaw/OSRS-Toolkit</a>
+        — open an issue, read the changelog, or browse the source.</li>
+      <li><strong>Email</strong> — <a href="mailto:wolklawgaming@gmail.com">wolklawgaming@gmail.com</a></li>
+      <li><strong>In game</strong> — Lord Wolklaw</li>
+    </ul>
+
+    <h3>Supporting it</h3>
+    <p>RuneScope is free and every feature stays available whether or not you ever give
+      anything. If it saves you time and you feel like it, there is an optional tip jar at
+      <a href="https://paypal.me/wolklaw" target="_blank" rel="noopener">paypal.me/wolklaw</a>.</p>
+  </div>
+</div>
+
+{% endblock %}

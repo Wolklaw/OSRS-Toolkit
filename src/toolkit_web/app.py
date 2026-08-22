@@ -22,19 +22,20 @@ from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.calculators import ALCH_POLICIES, alch_candidates, skill_results
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
-from osrs_toolkit.journal_presentation import PERIOD_FILTERS
+from osrs_toolkit.journal_presentation import PERIOD_FILTERS, trade_needs_attention
 from osrs_toolkit.market import MarketDataError
+from osrs_toolkit.models import ItemMapping, MarketPoint
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, plan_flip_portfolio, rank_flips
 from osrs_toolkit.runelite_sync import ge_offer_status_label
-from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 from osrs_toolkit.savings_goal import (
     SavingsProgress,
     daily_profit_rate,
     estimate_days_remaining,
     realized_profit_since,
 )
+from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 
 from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
@@ -63,6 +64,29 @@ ACTIVITY_WINDOW_DAYS = 90
 #: survive. 32 characters ^ 16 positions is comfortably beyond brute-forcing regardless.
 _RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
+#: Marks an account id that came from a recovery code rather than from Discord. The profile
+#: page is the one place that has to tell the two apart — a Discord name is Discord's to
+#: change, so only a code account is offered a rename it would actually keep.
+_RECOVERY_ID_PREFIX = "local:"
+
+#: The statuses a position can be moved between by hand, in the order a flip walks through
+#: them. Kept in step with the desktop window's own Update dialog, which offers exactly these
+#: — anything else would let the web front end write a status the desktop cannot display.
+POSITION_STATUSES = (
+    "Pending buy",
+    "Bought",
+    "Listed for sale",
+    "Partially sold",
+    "Completed",
+    "Cancelled",
+    "Supplies",
+)
+
+#: Statuses that are no longer money working in the market. "Supplies" belongs here with the
+#: two obvious ones: those goods were bought to be used, not resold, so counting them as
+#: capital still committed to a flip would overstate what is actually out there working.
+CLOSED_STATUSES = frozenset({"Completed", "Cancelled", "Supplies"})
+
 
 def _generate_recovery_code() -> str:
     raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(16))
@@ -77,7 +101,79 @@ def _recovery_account_id(code: str) -> str:
     wrong case, or with stray whitespace still finds the same account it was issued for.
     """
     normalized = "".join(ch for ch in code.upper() if ch.isalnum())
-    return "local:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return _RECOVERY_ID_PREFIX + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _optional_int(value: object, field: str) -> int | None:
+    """A whole number, or ``None`` for a field the caller left out or deliberately cleared.
+
+    JSON has no way to say "leave this alone" other than omitting it, and an empty form input
+    arrives as an empty string rather than as nothing at all — both mean the same thing here.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=f"{field} must be a whole number") from error
+
+
+def _fill_list(value: object, field: str) -> list[tuple[int, int]] | None:
+    """A list of (quantity, price) fills, or ``None`` when the caller sent none at all.
+
+    ``None`` and ``[]`` are deliberately different: an absent list leaves whatever fills are
+    already recorded untouched, while an empty one is an explicit "this position has no fills"
+    that clears them. The journal draws the same distinction, so passing it straight through
+    is what keeps a synced position's history from being erased by an unrelated edit.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise HTTPException(status_code=422, detail=f"{field} must be a list of fills")
+    fills: list[tuple[int, int]] = []
+    for entry in value:
+        if not isinstance(entry, list | tuple) or len(entry) != 2:
+            raise HTTPException(
+                status_code=422, detail=f"Each {field} entry must be a quantity and a price."
+            )
+        try:
+            fills.append((int(entry[0]), int(entry[1])))
+        except (TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=422, detail=f"{field} quantities and prices must be whole numbers"
+            ) from error
+    return fills
+
+
+def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
+    """Every number the desktop window's item-details dialog shows, for one item.
+
+    Assembled here rather than in the template so the page stays a list of already-decided
+    values — the arithmetic that turns a raw market point into a margin belongs next to the
+    ranking code that uses the same rules, not inside a Jinja expression.
+    """
+    buy_price, sell_price = offer_targets(point)
+    tax = ge_tax(sell_price)
+    profit = sell_price - buy_price - tax
+    return {
+        "buy_price": buy_price,
+        "sell_price": sell_price,
+        "tax": tax,
+        "profit": profit,
+        "roi": profit / buy_price * 100 if buy_price else 0.0,
+        "latest_low": point.low,
+        "latest_high": point.high,
+        "average_low_5m": point.average_low_5m,
+        "average_high_5m": point.average_high_5m,
+        "average_low_1h": point.average_low_1h,
+        "average_high_1h": point.average_high_1h,
+        "volume_5m": point.volume_5m,
+        "volume_1h": point.volume_1h,
+        "buy_limit": item.buy_limit,
+        "high_alch": item.high_alch,
+        "members": item.members,
+        "age_minutes": max(0, now - min(point.high_time, point.low_time)) // 60,
+    }
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -129,6 +225,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "active_character": active,
         }
 
+    def _optional_switcher(account: Account | None, active: str | None) -> dict:
+        """The same header context for a page that renders signed out as well as signed in.
+
+        A signed-out visitor has no pairing token to ask the sync service about, so there is
+        nothing to look up and no round trip worth spending on one.
+        """
+        if account is None:
+            return {"synced_characters": [], "active_character": None}
+        return character_switcher_context(account, active)
+
     # -- pages -----------------------------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
@@ -160,14 +266,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         net_worth_chart = net_worth_history_svg(
             [(point.captured_at, point.total_value) for point in net_worth_history]
         )
+        # What the market currently suggests asking, per item, so a listing that the market has
+        # since moved away from can be flagged the way the desktop window's "Needs attention"
+        # card flags it. Missing prices simply flag nothing rather than blocking the page.
+        try:
+            _mappings, market_points = market.snapshot()
+            live_sell_targets = {point.item_id: offer_targets(point)[1] for point in market_points}
+        except MarketDataError:
+            live_sell_targets = {}
+        position_rows = []
+        for position in positions:
+            row = serialize(position)
+            row["needs_attention"] = trade_needs_attention(
+                position.status,
+                position.asking_price,
+                live_sell_targets.get(position.item_id),
+            )
+            position_rows.append(row)
+        open_positions = [
+            position for position in positions if position.status not in CLOSED_STATUSES
+        ]
         return templates.TemplateResponse(
             request,
             "dashboard.html",
             {
                 "account": account,
-                "positions": [serialize(position) for position in positions],
-                "total_invested": sum(position.invested for position in positions),
-                "total_estimated_profit": sum(position.estimated_profit for position in positions),
+                "positions": position_rows,
+                "statuses": list(POSITION_STATUSES),
+                "open_count": len(open_positions),
+                "attention_count": sum(1 for row in position_rows if row["needs_attention"]),
+                "total_invested": sum(position.invested for position in open_positions),
+                "total_estimated_profit": sum(
+                    position.estimated_profit for position in open_positions
+                ),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
                 "net_worth_chart": net_worth_chart,
                 "live_character_selected": live_hash is not None,
@@ -185,13 +316,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active: str | None = ActiveCharacter,
     ) -> HTMLResponse:
         item_name = f"Item #{item_id}"
+        breakdown = None
         try:
-            mappings, _points = market.snapshot()
-            if item_id in mappings:
-                item_name = mappings[item_id].name
+            mappings, points = market.snapshot()
+            item = mappings.get(item_id)
+            if item is not None:
+                item_name = item.name
+                point = next((entry for entry in points if entry.item_id == item_id), None)
+                if point is not None:
+                    breakdown = _market_breakdown(item, point, int(datetime.now(UTC).timestamp()))
         except MarketDataError:
             pass
-        points = market.timeseries(item_id)
+        history = market.timeseries(item_id)
         return templates.TemplateResponse(
             request,
             "item_history.html",
@@ -199,10 +335,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "account": account,
                 "item_id": item_id,
                 "item_name": item_name,
-                "chart": price_history_svg(points),
-                "has_history": bool(points),
+                "breakdown": breakdown,
+                "watched": item_id in accounts.list_watchlist_item_ids(account.discord_user_id),
+                "chart": price_history_svg(history),
+                "has_history": bool(history),
                 **character_switcher_context(account, active),
             },
+        )
+
+    @app.get("/profile", response_class=HTMLResponse)
+    def profile_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        repository = journal_for(settings, account)
+        return templates.TemplateResponse(
+            request,
+            "profile.html",
+            {
+                "account": account,
+                "is_recovery_account": account.discord_user_id.startswith(_RECOVERY_ID_PREFIX),
+                "characters": [
+                    serialize(character)
+                    for character in accounts.list_characters(account.discord_user_id)
+                ],
+                "position_count": len(repository.list_tracked()),
+                "trade_count": len(repository.list_all()),
+                "watchlist_count": len(accounts.list_watchlist_item_ids(account.discord_user_id)),
+                **switcher,
+            },
+        )
+
+    @app.get("/about", response_class=HTMLResponse)
+    def about_page(
+        request: Request,
+        account: Account | None = OptionalAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        """Readable signed out on purpose — what this is, who runs it, and what it does with
+        someone's data are the questions asked *before* signing in, not after."""
+        return templates.TemplateResponse(
+            request, "about.html", {"account": account, **_optional_switcher(account, active)}
+        )
+
+    @app.get("/help", response_class=HTMLResponse)
+    def help_page(
+        request: Request,
+        account: Account | None = OptionalAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "help.html", {"account": account, **_optional_switcher(account, active)}
         )
 
     @app.get("/api/export.csv")
@@ -329,6 +514,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "strategy": strategy,
             "cash_stack": cash_stack,
             "slots": slots,
+            "watched_ids": set(accounts.list_watchlist_item_ids(account.discord_user_id)),
             **character_switcher_context(account, active),
         }
         try:
@@ -400,8 +586,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/watchlist", status_code=201)
     def add_watchlist_item(payload: dict, account: Account = CurrentAccount) -> dict:
+        """Watch an item, named either by the name someone typed or by an id a row already
+        knows. The id path is what the watch toggles on the ranked tables use — they are
+        looking at a row the market snapshot produced, so making them round-trip through a
+        name match would only add a way for the exact item on screen to be misidentified."""
+        item_id = payload.get("item_id")
         name = payload.get("name")
-        if not isinstance(name, str) or not name.strip():
+        if item_id is None and (not isinstance(name, str) or not name.strip()):
             raise HTTPException(status_code=422, detail="name is required")
         try:
             mappings, _points = market.snapshot()
@@ -409,6 +600,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=502, detail="Could not reach live prices — try again shortly."
             ) from None
+        if item_id is not None:
+            if not isinstance(item_id, int):
+                raise HTTPException(status_code=422, detail="item_id must be a whole number")
+            match = mappings.get(item_id)
+            if match is None:
+                raise HTTPException(status_code=404, detail="That item is not on the market.")
+            added = accounts.add_watchlist_item(account.discord_user_id, match.item_id)
+            if not added:
+                raise HTTPException(
+                    status_code=409, detail=f"{match.name} is already on your watchlist."
+                )
+            return {"ok": True, "item_id": match.item_id, "name": match.name}
         typed = name.strip().casefold()
         match = next((item for item in mappings.values() if item.name.casefold() == typed), None)
         if match is None:
@@ -442,6 +645,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "policy": policy,
             "policies": list(ALCH_POLICIES),
             "magic_level": magic_level,
+            "watched_ids": set(accounts.list_watchlist_item_ids(account.discord_user_id)),
             **character_switcher_context(account, active),
         }
         try:
@@ -774,6 +978,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "paired": account.paired,
         }
 
+    @app.patch("/api/me")
+    def rename_account(payload: dict, account: Account = CurrentAccount) -> dict:
+        """Rename a recovery-code account.
+
+        Refused for a Discord login rather than quietly allowed and then overwritten: Discord
+        hands back a username on every sign-in, so a name set here would silently revert at
+        the next one, which is worse than being told it is not yours to change.
+        """
+        if not account.discord_user_id.startswith(_RECOVERY_ID_PREFIX):
+            raise HTTPException(
+                status_code=409,
+                detail="Your name comes from Discord — change it there and sign in again.",
+            )
+        username = payload.get("username")
+        if not isinstance(username, str) or not username.strip():
+            raise HTTPException(status_code=422, detail="Enter a display name.")
+        accounts.set_display_name(account.discord_user_id, username.strip()[:40])
+        return {"ok": True}
+
     @app.put("/api/pairing-token")
     def set_pairing_token(payload: dict, account: Account = CurrentAccount) -> dict:
         token = payload.get("token")
@@ -863,11 +1086,115 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository.delete(trade_id)
         return {"ok": True}
 
+    @app.post("/api/positions", status_code=201)
+    def track_position(
+        payload: dict,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> dict:
+        """Open a planned position, the way the desktop window's "Track this flip" does.
+
+        Tagged with whichever character the switcher is pointed at, so a plan opened while
+        looking at one account does not later read as belonging to every one of them. With
+        "All characters" selected there is no answer to tag it with, and an untagged position
+        is already treated as belonging to every character rather than to none.
+        """
+        item_name = payload.get("item_name")
+        try:
+            quantity = int(payload.get("quantity"))
+            target_buy = int(payload.get("target_buy"))
+            target_sell = int(payload.get("target_sell"))
+        except (TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=422,
+                detail="quantity, target_buy and target_sell must all be whole numbers",
+            ) from error
+        if not isinstance(item_name, str) or not item_name.strip():
+            raise HTTPException(status_code=422, detail="item_name is required")
+        if quantity <= 0 or target_buy < 0 or target_sell < 0:
+            raise HTTPException(
+                status_code=422, detail="quantity must be positive, prices cannot be negative"
+            )
+        item_id = payload.get("item_id")
+        if item_id is not None and not isinstance(item_id, int):
+            raise HTTPException(status_code=422, detail="item_id must be a whole number")
+        strategy = payload.get("strategy")
+        strategy = strategy if isinstance(strategy, str) and strategy in STRATEGIES else None
+        repository = journal_for(settings, account)
+        position_id = repository.track(
+            item_id,
+            item_name.strip(),
+            quantity,
+            target_buy,
+            target_sell,
+            account_hash=active or None,
+            **({"strategy": strategy} if strategy else {}),
+        )
+        return {"ok": True, "position_id": position_id}
+
+    @app.patch("/api/positions/{position_id}")
+    def update_position(position_id: int, payload: dict, account: Account = CurrentAccount) -> dict:
+        """Record what actually happened to a position — the desktop window's Update dialog.
+
+        Fill lists are only rewritten when the caller sends them. Leaving one out keeps
+        whatever the plugin has already recorded, which matters because a synced position's
+        partial fills are history nobody typed and nobody should lose to a status change.
+        """
+        status = payload.get("status")
+        if status not in POSITION_STATUSES:
+            raise HTTPException(
+                status_code=422, detail="That is not a status a position can be in."
+            )
+        quantity = _optional_int(payload.get("quantity"), "quantity")
+        actual_buy = _optional_int(payload.get("actual_buy"), "actual_buy")
+        actual_sell = _optional_int(payload.get("actual_sell"), "actual_sell")
+        buy_fills = _fill_list(payload.get("buy_fills"), "buy_fills")
+        sale_fills = _fill_list(payload.get("sale_fills"), "sale_fills")
+        repository = journal_for(settings, account)
+        try:
+            repository.update_tracked(
+                position_id,
+                status,
+                actual_buy,
+                actual_sell,
+                sale_fills=sale_fills,
+                buy_fills=buy_fills,
+                quantity=quantity,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"ok": True}
+
     @app.delete("/api/positions/{position_id}")
     def remove_position(position_id: int, account: Account = CurrentAccount) -> dict:
         repository = journal_for(settings, account)
         repository.delete_tracked(position_id)
         return {"ok": True}
+
+    # -- market ------------------------------------------------------------------------------
+
+    @app.get("/api/market")
+    def market_status() -> dict:
+        """How old the shared price snapshot is, for the header's price pill. No session
+        needed: it says nothing about anyone's account, only about the wiki read every
+        signed-in page already shares."""
+        return {"age_seconds": market.age_seconds()}
+
+    @app.post("/api/market/refresh")
+    def refresh_market(account: Account = CurrentAccount) -> dict:
+        """Fetch prices now instead of waiting out the refresh window.
+
+        Signed-in only — not because the prices are private, but because an unauthenticated
+        endpoint that makes this server call the wiki is a way to make it do that repeatedly.
+        """
+        market.invalidate()
+        try:
+            market.snapshot()
+        except MarketDataError:
+            raise HTTPException(
+                status_code=502, detail="Could not reach live prices — try again shortly."
+            ) from None
+        return {"ok": True, "age_seconds": market.age_seconds()}
 
     @app.get("/api/characters")
     def characters_list(account: Account = CurrentAccount) -> dict:
@@ -907,14 +1234,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ]
         }
 
+    @app.delete("/api/activity/{event_id}")
+    def remove_activity(event_id: str, account: Account = CurrentAccount) -> dict:
+        """Drop one imported event from the journal.
+
+        For an event that should never have been counted — a trade with a friend that was
+        really a gift, say. Imported events are acknowledged to the sync service as they land,
+        so one deleted here is not handed back again by the next read.
+        """
+        journal_for(settings, account).delete_synced_trade(event_id)
+        return {"ok": True}
+
     @app.get("/api/net-worth")
     def net_worth(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
         filter_hash = character_switcher_context(account, active)["active_character"]
         return {
-            "points": [
-                serialize(point) for point in repository.list_net_worth_history(filter_hash)
-            ]
+            "points": [serialize(point) for point in repository.list_net_worth_history(filter_hash)]
         }
 
     @app.get("/api/loadout")

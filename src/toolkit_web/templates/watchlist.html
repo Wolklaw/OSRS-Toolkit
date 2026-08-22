@@ -1,55 +1,82 @@
 {% extends "base.html" %}
+{% set page_title = "Watchlist" %}
+{% set page_sub = "Items you are keeping an eye on, whether or not they clear the GE Flipper's bar. Margin is after tax; age is how long ago the item last traded." %}
+
 {% block content %}
 
 <div class="panel">
-  <h2 style="margin-top:0">Watchlist</h2>
-  <p class="hint">Items you're keeping an eye on, whether or not they clear the flip suggestions bar.</p>
-  <div class="row">
-    <input type="text" id="watchlist-item-name" placeholder="Item name" autocomplete="off">
-    <button class="button secondary" onclick="addWatchlistItem()">Add</button>
+  <div class="form-row">
+    <div class="field" style="min-width:14rem">
+      <label for="watchlist-item-name">Add an item</label>
+      <input type="text" id="watchlist-item-name" placeholder="Exact item name" autocomplete="off"
+             onkeydown="if (event.key === 'Enter') { addWatchlistItem(); }">
+    </div>
+    <button class="button" onclick="addWatchlistItem()">Add</button>
   </div>
   <div class="status-msg" id="watchlist-status"></div>
+  <p class="hint">Spelled as the game spells it — "Rune platebody", not "plate". You can also
+    add items straight from the <a href="/flips">GE Flipper</a>.</p>
 </div>
 
 {% if market_unavailable %}
 <div class="panel">
-  <div class="empty">Live prices couldn't be reached just now — try again shortly.</div>
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Your watchlist is safe — only the prices are missing. Try again shortly.
+  </div>
 </div>
 {% else %}
 
-<div class="panel">
-  <h2 style="margin-top:0">Watched items</h2>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Watched items</h2>
+      <p class="hint tight">{{ rows | length }} item{{ '' if rows | length == 1 else 's' }}, priced from the current snapshot.</p>
+    </div>
+    {% if rows %}
+    <input type="search" class="filter-input" placeholder="Filter…"
+           oninput="filterTable(this, 'watchlist-table')" aria-label="Filter watchlist">
+    <span class="table-note" id="watchlist-table-note"></span>
+    {% endif %}
+  </div>
   {% if rows %}
-  <table>
-    <thead>
-      <tr>
-        <th>Item</th>
-        <th>Buy</th>
-        <th>Sell</th>
-        <th>Profit</th>
-        <th>ROI</th>
-        <th>1h volume</th>
-        <th>Age</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr>
-        <td><a href="/item/{{ row.item_id }}">{{ row.name }}</a></td>
-        <td>{{ "{:,}".format(row.buy_price) }}</td>
-        <td>{{ "{:,}".format(row.sell_price) }}</td>
-        <td class="{{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
-        <td>{{ "%.2f"|format(row.roi) }}%</td>
-        <td>{{ "{:,}".format(row.volume_1h) }}</td>
-        <td>{{ row.age_minutes }} min</td>
-        <td><a href="#" onclick="removeWatchlistItem({{ row.item_id }}); return false;">Remove</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table id="watchlist-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Margin</th>
+          <th class="num">ROI</th>
+          <th class="num">1h volume</th>
+          <th class="num">Age</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name"><a href="/item/{{ row.item_id }}">{{ row.name }}</a></td>
+          <td class="num">{{ "{:,}".format(row.buy_price) }}</td>
+          <td class="num">{{ "{:,}".format(row.sell_price) }}</td>
+          <td class="num {{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
+          <td class="num {{ 'positive' if row.roi >= 0 else 'negative' }}">{{ "%.2f"|format(row.roi) }}%</td>
+          <td class="num">{{ "{:,}".format(row.volume_1h) }}</td>
+          <td class="num">{{ row.age_minutes }} min</td>
+          <td class="row-actions">
+            <a href="#" class="link-danger" onclick="removeWatchlistItem({{ row.item_id }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <div class="empty">Nothing on your watchlist yet.</div>
+  <div class="empty">
+    <strong>Nothing on your watchlist yet</strong>
+    Add an item above, or watch one from the <a href="/flips">GE Flipper</a>.
+  </div>
   {% endif %}
 </div>
 
@@ -59,32 +86,20 @@
 {% block scripts %}
 <script>
   async function addWatchlistItem() {
-    const status = document.getElementById('watchlist-status');
     const input = document.getElementById('watchlist-item-name');
     const name = input.value.trim();
     if (!name) { return; }
-    try {
-      const response = await fetch('/api/watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        status.textContent = body.detail || 'Could not add that item.';
-        status.className = 'status-msg error';
-        return;
-      }
-      input.value = '';
-      location.reload();
-    } catch (error) {
-      status.textContent = 'Could not reach the server — try again in a moment.';
-      status.className = 'status-msg error';
+    const result = await api('POST', '/api/watchlist', { name });
+    if (!result.ok) {
+      setStatus('watchlist-status', result.error, 'error');
+      return;
     }
+    input.value = '';
+    location.reload();
   }
 
   async function removeWatchlistItem(itemId) {
-    await fetch(`/api/watchlist/${itemId}`, { method: 'DELETE' });
+    await api('DELETE', `/api/watchlist/${itemId}`);
     location.reload();
   }
 </script>

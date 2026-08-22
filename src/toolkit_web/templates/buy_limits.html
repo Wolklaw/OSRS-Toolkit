@@ -1,31 +1,56 @@
 {% extends "base.html" %}
+{% set page_title = "Buy Limits" %}
+{% set page_sub = "How much of each item you can still buy in the current rolling four-hour window, counted from Grand Exchange fills the plugin has synced." %}
+
 {% block content %}
 
-<div class="panel">
-  <h2 style="margin-top:0">Buy limits</h2>
-  <p class="hint">Rolling 4-hour window, from Grand Exchange fills the plugin has synced.</p>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Last four hours</h2>
+      <p class="hint tight">Only items you have actually bought appear — anything untouched is
+        at its full limit.</p>
+    </div>
+    {% if statuses %}
+    <input type="search" class="filter-input" placeholder="Filter items…"
+           oninput="filterTable(this, 'limits-table')" aria-label="Filter items">
+    <span class="table-note" id="limits-table-note"></span>
+    {% endif %}
+  </div>
 
   {% if market_unavailable %}
-  <div class="empty">Live buy limits couldn't be reached just now — try again shortly.</div>
+  <div class="empty">
+    <strong>Live buy limits couldn't be reached just now</strong>
+    Limits come from the same market snapshot as prices — try again shortly.
+  </div>
   {% elif statuses %}
-  <table>
-    <thead>
-      <tr><th>Item</th><th>Bought</th><th>Limit</th><th>Remaining</th><th>Resets at</th></tr>
-    </thead>
-    <tbody>
-      {% for status in statuses %}
-      <tr>
-        <td>{{ status.item_name }}</td>
-        <td>{{ status.bought_recently }}</td>
-        <td>{{ status.limit }}</td>
-        <td class="{{ 'negative' if status.remaining == 0 else '' }}">{{ status.remaining }}</td>
-        <td>{{ status.resets_at[:16].replace("T", " ") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table id="limits-table">
+      <thead>
+        <tr><th>Item</th><th class="num">Bought</th><th class="num">Limit</th><th class="num">Remaining</th><th>Resets at</th></tr>
+      </thead>
+      <tbody>
+        {% for status in statuses %}
+        <tr>
+          <td class="name">{{ status.item_name }}</td>
+          <td class="num">{{ "{:,}".format(status.bought_recently) }}</td>
+          <td class="num">{{ "{:,}".format(status.limit) }}</td>
+          <td class="num {{ 'negative' if status.remaining == 0 else '' }}">{{ "{:,}".format(status.remaining) }}</td>
+          <td>{{ status.resets_at[:16].replace("T", " ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
-  <div class="empty">Nothing bought in the last 4 hours.</div>
+  <div class="empty">
+    <strong>Nothing bought in the last 4 hours</strong>
+    {% if account.paired %}
+    Every item is at its full limit.
+    {% else %}
+    <a href="/profile">Connect the RuneLite plugin</a> so your fills are counted here.
+    {% endif %}
+  </div>
   {% endif %}
 </div>
 

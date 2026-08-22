@@ -1,94 +1,118 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="landing">
-  <h1>RuneScope</h1>
-  <p>Your OSRS trade journal, wherever you are.</p>
-  <a class="button" href="/auth/discord/login">Sign in with Discord</a>
 
-  <div style="margin:2rem auto 0; max-width:420px; text-align:left;">
-    <p class="hint" style="text-align:center">or, with no Discord account at all</p>
+<div class="hero">
+  <h1>Rune<em>Scope</em></h1>
+  <p class="lede">Plan better trades. Remember what actually happened. Your Old School
+    RuneScape trade journal and Grand Exchange research, in a browser tab next to the game.</p>
+  <div class="row">
+    <a class="button" href="/auth/discord/login">Sign in with Discord</a>
+    <a class="button secondary" href="#no-discord">Sign in without Discord</a>
+  </div>
+  <p class="hint">Nothing plays the game for you. No password, no email address, ever.</p>
+</div>
 
-    <div class="panel" style="margin-top:1rem" id="create-panel">
-      <strong>New here?</strong>
-      <p class="hint">Create an account with a recovery code instead of Discord — no email, no
-        password. Just don't lose the code: there is no way to recover a lost one.</p>
-      <div class="row">
-        <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off">
-        <button class="button secondary" onclick="createAccount()">Create account</button>
-      </div>
-      <div class="status-msg" id="create-status"></div>
-    </div>
-
-    <div class="panel">
-      <div class="row" style="justify-content:space-between">
-        <strong>Already have a code?</strong>
-      </div>
-      <div class="row" style="margin-top:0.6rem">
-        <input type="text" id="recovery-code" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="max-width:220px">
-        <button class="button secondary" onclick="signInWithCode()">Sign in</button>
-      </div>
-      <div class="status-msg" id="recovery-login-status"></div>
-    </div>
-
-    <div class="panel" id="code-reveal-panel" style="display:none">
-      <strong>Your recovery code — save it now</strong>
-      <p class="hint">This is the only time it will ever be shown. Anyone with this code can
-        sign in as you.</p>
-      <div class="row" style="justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.8rem 1rem;">
-        <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
-        <button class="button secondary" onclick="copyCode(this)">Copy</button>
-      </div>
-      <div class="row" style="margin-top:0.8rem">
-        <button class="button" onclick="location.href='/'">I've saved it — continue</button>
-      </div>
-    </div>
+<div class="feature-grid">
+  <div class="feature">
+    <h3>GE Flipper</h3>
+    <p>What to buy right now with the cash and free slots you actually have — sized to stay
+      inside buy limits, with tax already taken out.</p>
+  </div>
+  <div class="feature">
+    <h3>Trade Journal</h3>
+    <p>Every position from offer to payout, partial fills included, with profit that counts
+      Grand Exchange tax the way the game does.</p>
+  </div>
+  <div class="feature">
+    <h3>Performance</h3>
+    <p>Looks back at your journal and grades which strategies and items actually made you
+      money — realized results only, never a projection.</p>
+  </div>
+  <div class="feature">
+    <h3>RuneLite sync</h3>
+    <p>The companion plugin sends your real fills, live offer slots, bank and gear, so there
+      is nothing to type out by hand.</p>
+  </div>
+  <div class="feature">
+    <h3>Alch &amp; Skilling</h3>
+    <p>What is worth high-alching today after nature runes, and 83 skilling methods priced
+      off the live market.</p>
+  </div>
+  <div class="feature">
+    <h3>PvM Readiness</h3>
+    <p>Your gear, bank and levels against boss checklists: what you can do now, and exactly
+      what you are missing.</p>
   </div>
 </div>
+
+<div class="divider-text" id="no-discord">or, with no Discord account at all</div>
+
+<div class="grid-2">
+  <div class="panel" id="create-panel">
+    <h2>New here?</h2>
+    <p class="hint">Create an account with a recovery code instead of Discord — no email, no
+      password. Just don't lose the code: there is no way to recover a lost one.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off" style="max-width:190px">
+      <button class="button secondary" onclick="createAccount()">Create account</button>
+    </div>
+    <div class="status-msg" id="create-status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Already have a code?</h2>
+    <p class="hint">Paste it back in to pick up exactly where you left off, on any device.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="recovery-code" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="max-width:220px">
+      <button class="button secondary" onclick="signInWithCode()">Sign in</button>
+    </div>
+    <div class="status-msg" id="recovery-login-status"></div>
+  </div>
+</div>
+
+<div class="panel" id="code-reveal-panel" style="display:none">
+  <h2>Your recovery code — save it now</h2>
+  <p class="hint">This is the only time it will ever be shown. Anyone with this code can sign
+    in as you.</p>
+  <div class="code-box">
+    <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
+    <button class="button secondary small" onclick="copyValue('revealed-code', this)">Copy</button>
+  </div>
+  <div class="row" style="margin-top:0.9rem">
+    <button class="button" onclick="location.href='/'">I've saved it — continue</button>
+  </div>
+</div>
+
+<p class="hint" style="text-align:center; margin-top:2rem">
+  New to this? <a href="/help">Read how it works</a> · <a href="/about">What RuneScope is</a>
+</p>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
   async function signInWithCode() {
-    const status = document.getElementById('recovery-login-status');
     const code = document.getElementById('recovery-code').value.trim();
     if (!code) { return; }
-    const response = await fetch('/auth/recovery/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
-    });
-    if (!response.ok) {
-      const body = await response.json();
-      status.textContent = body.detail || 'That code was not recognized.';
-      status.className = 'status-msg error';
+    const result = await api('POST', '/auth/recovery/login', { code });
+    if (!result.ok) {
+      setStatus('recovery-login-status', result.error, 'error');
       return;
     }
     location.href = '/';
   }
 
   async function createAccount() {
-    const status = document.getElementById('create-status');
     const displayName = document.getElementById('display-name').value.trim();
-    const response = await fetch('/auth/recovery/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display_name: displayName }),
-    });
-    if (!response.ok) {
-      status.textContent = 'Could not create an account just now — try again in a moment.';
-      status.className = 'status-msg error';
+    const result = await api('POST', '/auth/recovery/create', { display_name: displayName });
+    if (!result.ok) {
+      setStatus('create-status', result.error, 'error');
       return;
     }
-    const body = await response.json();
-    document.getElementById('revealed-code').textContent = body.code;
+    document.getElementById('revealed-code').textContent = result.data.code;
     document.getElementById('create-panel').style.display = 'none';
     document.getElementById('code-reveal-panel').style.display = 'block';
-  }
-
-  function copyCode(button) {
-    const code = document.getElementById('revealed-code').textContent;
-    navigator.clipboard.writeText(code);
-    flashCopied(button);
+    document.getElementById('code-reveal-panel').scrollIntoView({ behavior: 'smooth' });
   }
 </script>
 {% endblock %}

@@ -49,6 +49,28 @@ class MarketCache:
                         raise
             return self._mappings, self._points
 
+    def age_seconds(self) -> float | None:
+        """How long ago the held snapshot was fetched, or ``None`` before the first one lands.
+
+        What the header's price pill reads. Deliberately not derived from the wiki's own
+        timestamps on individual prices — those say when an item last traded, which is a
+        different and much older number for a quiet item, and answers a question nobody asked
+        when what they want to know is whether this page is showing them a fresh read.
+        """
+        if not self._fetched_at:
+            return None
+        return max(0.0, time.monotonic() - self._fetched_at)
+
+    def invalidate(self) -> None:
+        """Drop the refresh window so the next ``snapshot`` pays for a fresh fetch.
+
+        The held snapshot itself is kept: if the wiki cannot be reached on that next call,
+        stale prices still beat an empty page, which is the same trade ``snapshot`` already
+        makes when a scheduled refresh fails.
+        """
+        with self._lock:
+            self._fetched_at = 0.0
+
     def timeseries(self, item_id: int) -> list[TimeseriesPoint]:
         """One item's price history. Not held behind the snapshot's own refresh window — the
         wiki client already caches each item's series to disk on its own, and a request for an

@@ -1,14 +1,75 @@
 {% extends "base.html" %}
+{% set page_title = item_name %}
+{% set page_sub = "Item #" ~ item_id ~ (" · members only" if breakdown and breakdown.members else (" · free to play" if breakdown else "")) %}
+{% set main_class = "narrow" %}
+
+{% block page_actions %}
+<button class="button secondary small" id="watch-button" onclick="toggleWatch({{ item_id }}, this)">{{ "Watching" if watched else "Watch" }}</button>
+<a class="button ghost small" href="/flips">Back to GE Flipper</a>
+{% endblock %}
+
 {% block content %}
 
-<p><a href="/">&larr; Back to dashboard</a></p>
+{% if breakdown %}
+<div class="stats">
+  <div class="stat">
+    <div class="label">Suggested buy</div>
+    <div class="value">{{ "{:,}".format(breakdown.buy_price) }}</div>
+    <div class="foot">Cautious passive offer</div>
+  </div>
+  <div class="stat">
+    <div class="label">Suggested sell</div>
+    <div class="value">{{ "{:,}".format(breakdown.sell_price) }}</div>
+    <div class="foot">After {{ "{:,}".format(breakdown.tax) }} gp tax</div>
+  </div>
+  <div class="stat">
+    <div class="label">Net margin</div>
+    <div class="value {{ 'positive' if breakdown.profit >= 0 else 'negative' }}">{{ "{:+,}".format(breakdown.profit) }}</div>
+    <div class="foot">Per item, tax paid</div>
+  </div>
+  <div class="stat">
+    <div class="label">ROI</div>
+    <div class="value {{ 'positive' if breakdown.roi >= 0 else 'negative' }}">{{ "%.2f"|format(breakdown.roi) }}%</div>
+    <div class="foot">Margin over capital</div>
+  </div>
+</div>
 
 <div class="panel">
-  <h2 style="margin-top:0">{{ item_name }}</h2>
+  <h2>Market detail</h2>
+  <p class="hint tight">Every price here is a completed transaction, not an outstanding offer.</p>
+  <div class="table-wrap" style="margin-top:0.8rem">
+    <table>
+      <tbody>
+        <tr><td>Latest instant-sell trade</td><td class="num">{{ "{:,}".format(breakdown.latest_low) }} gp</td></tr>
+        <tr><td>Latest instant-buy trade</td><td class="num">{{ "{:,}".format(breakdown.latest_high) }} gp</td></tr>
+        <tr><td>5m average instant-sell</td><td class="num">{% if breakdown.average_low_5m %}{{ "{:,}".format(breakdown.average_low_5m) }} gp{% else %}—{% endif %}</td></tr>
+        <tr><td>5m average instant-buy</td><td class="num">{% if breakdown.average_high_5m %}{{ "{:,}".format(breakdown.average_high_5m) }} gp{% else %}—{% endif %}</td></tr>
+        <tr><td>1h average instant-sell</td><td class="num">{% if breakdown.average_low_1h %}{{ "{:,}".format(breakdown.average_low_1h) }} gp{% else %}—{% endif %}</td></tr>
+        <tr><td>1h average instant-buy</td><td class="num">{% if breakdown.average_high_1h %}{{ "{:,}".format(breakdown.average_high_1h) }} gp{% else %}—{% endif %}</td></tr>
+        <tr><td>Five-minute volume</td><td class="num">{{ "{:,}".format(breakdown.volume_5m) }}</td></tr>
+        <tr><td>One-hour volume</td><td class="num">{{ "{:,}".format(breakdown.volume_1h) }}</td></tr>
+        <tr><td>Oldest trade used</td><td class="num">{{ breakdown.age_minutes }} min ago</td></tr>
+        <tr><td>Four-hour buy limit</td><td class="num">{% if breakdown.buy_limit %}{{ "{:,}".format(breakdown.buy_limit) }}{% else %}Unknown{% endif %}</td></tr>
+        <tr><td>High Alchemy value</td><td class="num">{% if breakdown.high_alch %}{{ "{:,}".format(breakdown.high_alch) }} gp{% else %}Not alchable{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel">
+  <div class="empty">
+    <strong>No live market data for this item</strong>
+    It may be untradeable, delisted, or simply missing from the current snapshot.
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>Price history</h2>
   {% if has_history %}
-  <div class="row" style="gap:1.2rem; margin-bottom:0.8rem; font-size:0.85rem; color:var(--muted)">
-    <span><svg width="12" height="12"><rect width="12" height="12" fill="#d5ad52"/></svg> Average high</span>
-    <span><svg width="12" height="12"><rect width="12" height="12" fill="#5fb0e2"/></svg> Average low</span>
+  <div class="row" style="gap:1.2rem; margin:0.5rem 0 0.8rem; font-size:0.82rem; color:var(--muted)">
+    <span><svg width="11" height="11"><rect width="11" height="11" fill="#d5ad52"/></svg> Average high</span>
+    <span><svg width="11" height="11"><rect width="11" height="11" fill="#5fb0e2"/></svg> Average low</span>
   </div>
   <div style="overflow-x:auto">{{ chart | safe }}</div>
   {% else %}
@@ -16,4 +77,21 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function toggleWatch(itemId, button) {
+    const watching = button.textContent.trim() === 'Watching';
+    const result = watching
+      ? await api('DELETE', `/api/watchlist/${itemId}`)
+      : await api('POST', '/api/watchlist', { item_id: itemId });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = watching ? 'Watch' : 'Watching';
+    toast(watching ? 'Removed from your watchlist.' : 'Added to your watchlist.', 'ok');
+  }
+</script>
 {% endblock %}

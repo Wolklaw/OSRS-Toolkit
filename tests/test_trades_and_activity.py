@@ -181,3 +181,22 @@ def _ge_fill_event() -> SyncedTrade:
             ),
         ),
     )
+
+
+def test_an_imported_event_can_be_deleted_from_the_journal(
+    signed_in: TestClient, settings: Settings
+):
+    """For an event that should never have been counted — a trade with a friend that was
+    really a gift. Imported events are acknowledged as they land, so one deleted here is not
+    handed back again by the next read."""
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.add_synced_trade(_ge_fill_event())
+
+    response = signed_in.delete("/api/activity/evt-1")
+
+    assert response.status_code == 200
+    assert "Bought Abyssal whip" not in signed_in.get("/activity").text
+
+
+def test_deleting_an_event_needs_a_session(client: TestClient):
+    assert client.delete("/api/activity/evt-1").status_code == 401

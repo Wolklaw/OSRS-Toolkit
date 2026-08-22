@@ -217,3 +217,41 @@ def test_a_zero_slot_count_is_clamped_up_rather_than_producing_no_offers(signed_
 
     assert response.status_code == 200
     assert '<option value="1" selected>' in response.text
+
+
+# -- watching straight from a ranked row -----------------------------------------------------
+
+
+def test_an_item_can_be_watched_by_id_from_a_ranked_row(signed_in: TestClient):
+    """The toggles on the flip and alch tables are looking at a row the snapshot produced,
+    so they name the id. Matching on the name instead would add a way for the exact item on
+    screen to be misidentified."""
+    with _patched_market():
+        response = signed_in.post("/api/watchlist", json={"item_id": _WHIP_ID})
+
+        assert response.status_code == 201
+        assert response.json()["name"] == "Abyssal whip"
+        assert "Abyssal whip" in signed_in.get("/watchlist").text
+
+
+def test_watching_the_same_id_twice_is_refused(signed_in: TestClient):
+    with _patched_market():
+        signed_in.post("/api/watchlist", json={"item_id": _WHIP_ID})
+        second = signed_in.post("/api/watchlist", json={"item_id": _WHIP_ID})
+
+    assert second.status_code == 409
+
+
+def test_an_id_the_market_has_never_heard_of_is_refused(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.post("/api/watchlist", json={"item_id": 999_999})
+
+    assert response.status_code == 404
+
+
+def test_the_flips_page_marks_an_item_already_watched(signed_in: TestClient):
+    with _patched_market():
+        signed_in.post("/api/watchlist", json={"item_id": _WHIP_ID})
+        response = signed_in.get("/flips")
+
+    assert "Watching" in response.text

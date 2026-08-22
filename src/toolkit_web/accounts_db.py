@@ -165,6 +165,20 @@ class AccountsDB:
             ).fetchone()
         return _row_to_account(row) if row else None
 
+    def set_display_name(self, discord_user_id: str, username: str) -> None:
+        """Rename an account from its own profile page.
+
+        Only offered to a recovery-code account, which has no identity provider to take a name
+        from — a Discord login's next sign-in overwrites this with whatever Discord says, which
+        is the right answer for a name Discord owns. Deciding who may rename is the caller's;
+        this just performs it.
+        """
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE account SET username = ? WHERE discord_user_id = ?",
+                (username, discord_user_id),
+            )
+
     def set_pairing_token(self, discord_user_id: str, token: str | None) -> None:
         """Attach a sync pairing token to this login, or remove one with ``None``.
 

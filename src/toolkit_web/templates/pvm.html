@@ -1,72 +1,97 @@
 {% extends "base.html" %}
+{% set page_title = "PvM Readiness" %}
+{% set page_sub = "Your synced gear, bank and stats against a hand-picked checklist for popular bosses. Requirements and GP/hr are community estimates, not guarantees — follow the wiki link to check any of them." %}
+
 {% block content %}
 
-<div class="panel">
-  <h2 style="margin-top:0">PvM readiness</h2>
-  <p class="hint">Checked against your most recent gear and bank snapshot from the plugin.</p>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Checklists</h2>
+      <p class="hint tight">Checked against your most recent gear and bank snapshot from the plugin.</p>
+    </div>
+    {% if has_snapshot %}
+    <input type="search" class="filter-input" placeholder="Search bosses…"
+           oninput="filterTable(this, 'pvm-table')" aria-label="Search bosses">
+    <span class="table-note" id="pvm-table-note"></span>
+    {% endif %}
+  </div>
 
   {% if not has_snapshot %}
   <div class="empty">
-    No snapshot yet. Turn on "Sync gear and bank for PvM readiness" in the plugin's settings,
-    then open your bank in game.
+    <strong>No snapshot yet</strong>
+    Turn on "Sync gear and bank for PvM readiness" in the plugin's settings, then open your
+    bank in game. <a href="/help">How to set that up</a>.
   </div>
   {% else %}
-  <table>
-    <thead>
-      <tr><th>Activity</th><th>Ready</th><th>Missing skills</th><th>Missing gear</th><th>Net gp/hr</th></tr>
-    </thead>
-    <tbody>
-      {% for entry in readiness %}
-      <tr>
-        <td><a href="{{ entry.activity.wiki_url }}" target="_blank" rel="noopener">{{ entry.activity.name }}</a></td>
-        <td class="{{ 'positive' if entry.is_ready else 'negative' }}">{{ 'Ready' if entry.is_ready else 'Not ready' }}</td>
-        <td>
-          {% if entry.missing_skills %}
-            {% for skill in entry.missing_skills %}{{ skill.skill }} {{ skill.current_level }}/{{ skill.required_level }}{% if not loop.last %}, {% endif %}{% endfor %}
-          {% else %}&mdash;{% endif %}
-        </td>
-        <td>
-          {% if entry.missing_gear %}{{ entry.missing_gear | join(", ") }}{% else %}&mdash;{% endif %}
-        </td>
-        <td>
-          {% if entry.net_gp_per_hour is not none %}{{ "{:,}".format(entry.net_gp_per_hour) }}{% else %}&mdash;{% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table id="pvm-table">
+      <thead>
+        <tr><th>Activity</th><th>Ready</th><th>Missing skills</th><th>Missing gear</th><th class="num">Net gp/hr</th></tr>
+      </thead>
+      <tbody>
+        {% for entry in readiness %}
+        <tr>
+          <td class="name"><a href="{{ entry.activity.wiki_url }}" target="_blank" rel="noopener">{{ entry.activity.name }}</a></td>
+          <td class="{{ 'positive' if entry.is_ready else 'negative' }}">{{ 'Ready' if entry.is_ready else 'Not ready' }}</td>
+          <td class="wrap table-note">
+            {% if entry.missing_skills %}
+              {% for skill in entry.missing_skills %}{{ skill.skill }} {{ skill.current_level }}/{{ skill.required_level }}{% if not loop.last %}, {% endif %}{% endfor %}
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td class="wrap table-note">
+            {% if entry.missing_gear %}{{ entry.missing_gear | join(", ") }}{% else %}&mdash;{% endif %}
+          </td>
+          <td class="num">
+            {% if entry.net_gp_per_hour is not none %}{{ "{:,}".format(entry.net_gp_per_hour) }}{% else %}&mdash;{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
 </div>
 
-<div class="panel">
-  <h2 style="margin-top:0">Supplies spend</h2>
-  <p class="hint">Positions marked "Supplies" in the Journal — quest and skilling buys that aren't flips.</p>
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Supplies spend</h2>
+      <p class="hint tight">Positions marked "Supplies" in your journal — quest and skilling
+        buys that were never meant to be flipped.</p>
+    </div>
+  </div>
   {% if supplies %}
-  <table>
-    <thead>
-      <tr><th>Item</th><th>Quantity</th><th>Spent</th><th>Purchases</th><th>Last bought</th></tr>
-    </thead>
-    <tbody>
-      {% for row in supplies %}
-      <tr>
-        <td>{{ row.item_name }}</td>
-        <td>{{ "{:,}".format(row.quantity) }}</td>
-        <td>{{ "{:,}".format(row.spent) }} gp</td>
-        <td>{{ row.purchases }}</td>
-        <td>{{ row.last_bought[:10] }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="2" style="color:var(--muted)">Total</td>
-        <td>{{ "{:,}".format(total_supplies_spend) }} gp</td>
-        <td colspan="2"></td>
-      </tr>
-    </tfoot>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Item</th><th class="num">Quantity</th><th class="num">Spent</th><th class="num">Purchases</th><th>Last bought</th></tr>
+      </thead>
+      <tbody>
+        {% for row in supplies %}
+        <tr>
+          <td class="name">{{ row.item_name }}</td>
+          <td class="num">{{ "{:,}".format(row.quantity) }}</td>
+          <td class="num">{{ "{:,}".format(row.spent) }} gp</td>
+          <td class="num">{{ row.purchases }}</td>
+          <td>{{ row.last_bought[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2">Total</td>
+          <td class="num">{{ "{:,}".format(total_supplies_spend) }} gp</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
   {% else %}
-  <div class="empty">Nothing marked "Supplies" yet.</div>
+  <div class="empty">
+    Nothing marked "Supplies" yet. Set a position's status to Supplies on the Dashboard and it
+    is counted here instead of being graded as a flip.
+  </div>
   {% endif %}
 </div>
 
