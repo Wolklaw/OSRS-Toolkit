@@ -187,7 +187,9 @@ class RuneLiteSyncImporter:
         """
         detected, payload, fresh = self.source.status_payload()
         if not detected or not isinstance(payload, dict):
-            return RuneLiteConnectionStatus(detected=detected)
+            # Detected with nothing to read means the source exists but did not answer: the
+            # website is down, or the token was revoked. The plugin may be running perfectly.
+            return RuneLiteConnectionStatus(detected=detected, source_reachable=not detected)
         if payload.get("schema_version") not in (None, SCHEMA_VERSION):
             return RuneLiteConnectionStatus(detected=True)
         account_name = payload.get("account_name")

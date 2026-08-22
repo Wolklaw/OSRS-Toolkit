@@ -50,6 +50,11 @@ class RuneLiteConnectionStatus:
     account_name: str | None = None
     account_hash: str | None = None
     player_trade_tracking: bool = False
+    #: Whether the source itself answered. False means this app could not reach wherever it
+    #: reads from -- which says nothing at all about whether the plugin is running, and is a
+    #: different thing to tell somebody than "the plugin is offline". Always true for the
+    #: local folder: a directory that exists has, by definition, already answered.
+    source_reachable: bool = True
 
 
 @dataclass(frozen=True, slots=True)

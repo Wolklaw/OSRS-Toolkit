@@ -209,3 +209,74 @@ def test_a_quiet_sync_redraws_nothing(window):
     window._mirror_journal()
 
     assert redrawn == []
+
+
+# -- what the status line says --------------------------------------------------------------
+
+
+def test_a_sync_shows_up_beside_the_connection_status(window):
+    from osrs_toolkit.journal_mirror import MirrorResult
+
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+    window._journal_mirror.sync = lambda: MirrorResult(reached=True, pulled=3, pushed=1)
+
+    window._mirror_journal()
+
+    assert "Synced 3 in, 1 out" in window.runelite_status.text()
+
+
+def test_a_quiet_pass_leaves_the_line_clean(window):
+    """Nearly every pass is quiet. A line that changed every minute would be noise."""
+    from osrs_toolkit.journal_mirror import MirrorResult
+
+    window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
+    window._journal_mirror.sync = lambda: MirrorResult(reached=True, checked_only=True)
+
+    window._mirror_journal()
+
+    assert "Synced" not in window.runelite_status.text()
+
+
+def test_an_unreachable_website_is_not_reported_as_the_plugin_being_offline(window):
+    """Different problems, different fixes. Saying "RuneLite offline" would send somebody off
+    to restart a plugin that is running perfectly well."""
+    from osrs_toolkit.sync_source import RuneLiteConnectionStatus
+
+    window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
+        detected=True, active=False, source_reachable=False
+    )
+
+    window._update_runelite_status()
+
+    text = window.runelite_status.text()
+    assert "Cannot reach the website" in text
+    assert "RuneLite offline" not in text
+    assert window.runelite_button.text() == "Website unreachable"
+
+
+def test_the_local_folder_is_never_called_unreachable(window):
+    """A directory that exists has already answered, so this path must keep its old wording."""
+    from osrs_toolkit.sync_source import RuneLiteConnectionStatus
+
+    window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
+        detected=True, active=False
+    )
+
+    window._update_runelite_status()
+
+    assert "RuneLite offline" in window.runelite_status.text()
+
+
+def test_the_unreachable_line_does_not_say_it_twice(window):
+    """Both halves of the line describe the same outage. Reading it twice in one sentence
+    only makes it harder to scan."""
+    from osrs_toolkit.sync_source import RuneLiteConnectionStatus
+
+    window._last_mirror_message = " • Could not reach the website"
+    window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
+        detected=True, active=False, source_reachable=False
+    )
+
+    window._update_runelite_status()
+
+    assert window.runelite_status.text().count("each the website") == 1

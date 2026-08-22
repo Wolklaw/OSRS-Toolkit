@@ -132,7 +132,7 @@ from osrs_toolkit.formatting import (
 )
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
-from osrs_toolkit.journal_mirror import JournalMirror
+from osrs_toolkit.journal_mirror import JournalMirror, MirrorResult
 from osrs_toolkit.journal_presentation import (
     JOURNAL_STATUS_FILTERS,
     PERIOD_FILTERS,
@@ -4267,6 +4267,9 @@ class MainWindow(QMainWindow):
             self._last_mirror_message = f" • journal sync paused: {exc}"
             return
         self._last_mirror_message = "" if result.checked_only else f" • {result.describe()}"
+        # The status line is redrawn on its own timer, but that is up to three seconds away
+        # and this is the moment the message it would show became true.
+        self._update_runelite_status()
         if result.changed:
             # The journal underneath the window just moved, so what is on screen is stale.
             self._refresh_journal_views()
@@ -4811,6 +4814,14 @@ class MainWindow(QMainWindow):
                 f"RuneLite connected{character} • syncing automatically • "
                 f"player trades {player_trades}"
             )
+        elif connection.detected and not connection.source_reachable:
+            # Not the same as the plugin being offline, and saying so would send somebody to
+            # restart a plugin that is running fine. What is unreachable is where we read from.
+            button_text = "Website unreachable"
+            status_text = (
+                "Cannot reach the website • your journal is safe on this PC and will "
+                "catch up on its own"
+            )
         elif connection.detected:
             button_text = "RuneLite offline"
             status_text = "RuneLite offline • saved activity will import when available"
@@ -4818,7 +4829,18 @@ class MainWindow(QMainWindow):
             button_text = "Connect RuneLite"
             status_text = "Connect RuneLite to import GE fills and optional player trades"
         self.runelite_button.setText(button_text)
-        self.runelite_status.setText(status_text + self._last_sync_message)
+        # Only that one sentence is dropped, and only when the line already leads with it:
+        # an unreachable website makes both halves say the same thing. Anything else the
+        # mirror has to report still belongs here, including a sync that did go through
+        # while the status probe itself was having a bad time.
+        mirror_message = self._last_mirror_message
+        if (
+            connection.detected
+            and not connection.source_reachable
+            and mirror_message.endswith(MirrorResult(reached=False).describe())
+        ):
+            mirror_message = ""
+        self.runelite_status.setText(status_text + self._last_sync_message + mirror_message)
         account_name = connection.account_name
         profile_name = self._profile.name.casefold() if self._profile else None
         if (
