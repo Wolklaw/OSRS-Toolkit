@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osrs-toolkit-web"
+version = "0.1.0"
+description = "Web front end for OSRS Toolkit — the companion to the OSRS Toolkit RuneLite plugin."
+readme = "README.md"
+requires-python = ">=3.12"
+# osrs-toolkit is not published anywhere pip can resolve on its own — it is a sibling repo,
+# installed editable alongside this one (see README). It supplies journal.py, ranking.py and
+# the rest of the domain layer; installing it without its "gui" extra keeps PySide6 out of
+# this environment entirely.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "itsdangerous>=2.2",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "ruff>=0.9", "httpx>=0.27"]
+
+[project.scripts]
+osrs-toolkit-web = "toolkit_web.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
