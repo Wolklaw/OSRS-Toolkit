@@ -98,14 +98,17 @@ Three of them matter more than the rest:
 - **`TOOLKIT_DEV_LOGIN`** — must never be set here. It issues a real session for whichever
   account id the caller names, with no Discord involved.
 
-### One worth changing
+### Why the sync URL is loopback
 
-`TOOLKIT_SYNC_BASE_URL` is currently `https://sync.runescope.app`. Both services are on this
-machine, so that sends every request out through Cloudflare and back in — the web app asks the
-sync service for new events before each journal read, so it is a round trip per page render,
-and it puts a Python HTTP client in front of Cloudflare, which is the traffic Bot Fight Mode
-exists to challenge. `http://127.0.0.1:8000` avoids both and keeps the front end working if the
-tunnel drops.
+`TOOLKIT_SYNC_BASE_URL` is `http://127.0.0.1:8000`, not the `https://sync.runescope.app`
+default. Both services are on this machine, so the default sent every request out through
+Cloudflare and back in — the web app asks the sync service for new events before each journal
+read, making it a round trip per page render, and it put a Python HTTP client in front of
+Cloudflare, which is the traffic Bot Fight Mode exists to challenge. Loopback avoids both and
+keeps the front end working if the tunnel drops.
+
+The default is still right for anything running off this machine, which is why it is the
+default — this override belongs to this deployment, not to the app.
 
 ## The Discord application
 
@@ -132,7 +135,22 @@ token. `market-cache/` is disposable.
 
 ## Known gaps
 
-- **Sleep targets are not masked** (`systemctl is-enabled sleep.target suspend.target` reports
-  `static`, not `masked`). The sync service's deploy notes recommend masking them, since a
-  laptop that suspends is the most likely cause of an outage.
+- **The laptop can still suspend, and closing the lid will do it.** `sleep.target`,
+  `suspend.target`, `hibernate.target` and `hybrid-sleep.target` are all `static` rather than
+  `masked`, and every `HandleLidSwitch*` line in `/etc/systemd/logind.conf` is commented out,
+  so the defaults apply — which suspend on lid close *even on mains power*. This is the outage
+  cause the sync service's notes call out as most likely. Needs a root password, so it has to
+  be done at the machine:
+
+  ```bash
+  sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+  ```
+
+  and, for the lid, `HandleLidSwitch=ignore` plus `HandleLidSwitchExternalPower=ignore` in
+  `/etc/systemd/logind.conf`, then `sudo systemctl restart systemd-logind`.
+
+- **Secrets sit in the unit file.** Mode 600 and owned by `wolklaw`, so this is acceptable —
+  but it is the reason not to paste that file anywhere, and the reason a rotation means editing
+  it rather than a config file somewhere friendlier.
+
 - **No auto-deploy.** Every update is the manual pull above.
