@@ -40,6 +40,30 @@ def known_characters(settings: Settings, account: Account) -> list[dict]:
     return source.known_accounts()
 
 
+def raw_sync_state(
+    settings: Settings, account: Account, account_hash: str | None
+) -> tuple[dict | None, bool, dict | None, dict | None]:
+    """The sync service's own payloads, unparsed: (status, status_fresh, offers, screen).
+
+    Deliberately not the parsed objects ``live_offer_state`` returns. This feeds the desktop
+    window, which already owns tested parsers for exactly these shapes -- handing it the raw
+    payload lets it keep using them, and keeps this app from becoming a second place where the
+    meaning of a Grand Exchange slot is decided.
+    """
+    if not account.pairing_token:
+        return None, False, None, None
+    source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
+    _detected, status, fresh = source.status_payload()
+    if not account_hash:
+        return status, fresh, None, None
+    return (
+        status,
+        fresh,
+        source.offer_state_payload(account_hash),
+        source.offer_screen_payload(account_hash),
+    )
+
+
 def live_offer_state(
     settings: Settings, account: Account, account_hash: str
 ) -> tuple[dict[int, GEOfferSlot], GEOfferScreen | None]:

@@ -14,7 +14,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from osrs_toolkit.account import AccountLookupError, fetch_player
@@ -41,7 +41,12 @@ from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.charting import net_worth_history_svg, price_history_svg
 from toolkit_web.config import Settings
-from toolkit_web.importing import journal_for, known_characters, live_offer_state
+from toolkit_web.importing import (
+    journal_for,
+    known_characters,
+    live_offer_state,
+    raw_sync_state,
+)
 from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
@@ -188,13 +193,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Web front end for the OSRS Toolkit trade journal.",
     )
 
+    def desktop_token_account_id(authorization: str | None) -> str | None:
+        """Whose account an ``Authorization: Bearer`` header names, if anyone's.
+
+        The desktop window has no browser and so no session cookie. It presents a credential
+        minted on the profile page instead, which resolves to exactly the same account the
+        cookie would have -- every route below is then reachable by either, without each one
+        having to know which arrived.
+        """
+        if not authorization:
+            return None
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            return None
+        return accounts.account_id_for_desktop_token(token.strip())
+
     def optional_account(
         session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+        authorization: str | None = Header(default=None),
     ) -> Account | None:
-        discord_user_id = signer.read(session)
+        discord_user_id = signer.read(session) or desktop_token_account_id(authorization)
         return accounts.get(discord_user_id) if discord_user_id else None
 
     OptionalAccount = Depends(optional_account)
+
+    def browser_account(
+        session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+    ) -> Account:
+        """A signed-in browser, specifically -- a desktop credential will not do.
+
+        Managing desktop credentials is deliberately out of reach of a desktop credential. If
+        one leaks, what it can do is read and write the journal; it cannot mint a second one to
+        outlive its own revocation, and it cannot sign the real desktop out.
+        """
+        discord_user_id = signer.read(session)
+        account = accounts.get(discord_user_id) if discord_user_id else None
+        if account is None:
+            raise HTTPException(
+                status_code=401, detail="Sign in from a browser to manage desktop access."
+            )
+        return account
+
+    BrowserAccount = Depends(browser_account)
 
     def current_account(account: Account | None = OptionalAccount) -> Account:
         if account is None:
@@ -1034,6 +1074,73 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         accounts.set_pairing_token(account.discord_user_id, token)
         return {"ok": True, "token": token}
+
+    # -- desktop access --------------------------------------------------------------------
+
+    @app.get("/api/desktop-tokens")
+    def list_desktop_tokens(account: Account = BrowserAccount) -> dict:
+        return {
+            "tokens": [
+                {
+                    "id": token.token_sha256,
+                    "label": token.label,
+                    "created_at": token.created_at,
+                    "last_used_at": token.last_used_at,
+                }
+                for token in accounts.list_desktop_tokens(account.discord_user_id)
+            ]
+        }
+
+    @app.post("/api/desktop-tokens", status_code=201)
+    def create_desktop_token(payload: dict, account: Account = BrowserAccount) -> dict:
+        """Mint a credential to paste into the desktop window.
+
+        The token comes back exactly once. Nothing stores it in a form that could be shown
+        again, so the response is the only chance to copy it -- which the profile page says
+        plainly rather than letting somebody close the dialog and find out afterwards.
+        """
+        label = payload.get("label")
+        label = label.strip()[:60] if isinstance(label, str) and label.strip() else "Desktop app"
+        token = accounts.create_desktop_token(account.discord_user_id, label)
+        return {"ok": True, "token": token, "label": label}
+
+    @app.delete("/api/desktop-tokens/{token_id}")
+    def revoke_desktop_token(token_id: str, account: Account = BrowserAccount) -> dict:
+        if not accounts.revoke_desktop_token(account.discord_user_id, token_id):
+            raise HTTPException(status_code=404, detail="No such desktop credential.")
+        return {"ok": True}
+
+    @app.get("/api/sync-state")
+    def sync_state(account: Account = CurrentAccount, account_hash: str | None = None) -> dict:
+        """Live plugin state, relayed to the desktop window.
+
+        The payloads are passed through exactly as the sync service gave them rather than
+        parsed into this app's own shapes. The desktop already has tested parsers for these,
+        and relaying keeps there from being a second place where the meaning of a Grand
+        Exchange slot is decided -- this route is a gate, not an interpreter.
+
+        Takes the character explicitly rather than reading the browser's switcher cookie: the
+        desktop has its own idea of which character is in front of the user and no cookie to
+        put it in. With nothing named and exactly one synced character, that one is the only
+        answer there is; with several, the caller has to say which.
+        """
+        # Everything the sync service lists is by definition a character it has seen play,
+        # so there is nothing here to filter -- the list is already the synced ones.
+        synced = known_characters(settings, account)
+        target = account_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        status, fresh, offers, screen = raw_sync_state(settings, account, target)
+        return {
+            "paired": account.paired,
+            "status": status,
+            "status_fresh": fresh,
+            "account_hash": target,
+            "offers": offers,
+            "screen": screen,
+            # Several characters and nothing chosen: the desktop has to ask which, rather than
+            # be handed one of them and quietly show the wrong player's slots.
+            "ambiguous": target is None and len(synced) > 1,
+            "characters": synced,
+        }
 
     @app.get("/api/accounts")
     def characters(account: Account = CurrentAccount) -> dict:

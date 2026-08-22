@@ -8,6 +8,8 @@ belongs to which login and which sync pairing feeds it. Losing this file loses n
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -52,6 +54,21 @@ CREATE TABLE IF NOT EXISTS trade_character (
     PRIMARY KEY (discord_user_id, trade_id)
 );
 
+-- A credential the desktop window signs in with, since it has no browser to hold a session
+-- cookie. Deliberately not the pairing token: that one is the plugin's write credential to the
+-- sync service, and a plugin token that could also read somebody's whole journal would be a
+-- much worse thing to leak. Stored as a SHA-256 digest for the same reason the sync service
+-- stores its own that way -- a copy of this file is not a set of working credentials.
+CREATE TABLE IF NOT EXISTS desktop_token (
+    token_sha256    TEXT PRIMARY KEY,
+    discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
+    label           TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    last_used_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS desktop_token_by_account ON desktop_token(discord_user_id);
+
 -- An item someone wants to keep an eye on without it having to clear GE Flipper's own ranking
 -- bar. Just the id: the name and every price on the watchlist page comes from the live market
 -- snapshot at render time, the same as everywhere else prices are shown.
@@ -94,6 +111,17 @@ class Character:
     character_id: int
     name: str
     account_hash: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class DesktopToken:
+    """One issued desktop credential. Never carries the secret -- only its digest, which is
+    all that survives being written down, and is enough to name the row for revocation."""
+
+    token_sha256: str
+    label: str
+    created_at: str
+    last_used_at: str | None
 
 
 #: Columns added after the table's first release. A fresh database gets them from SCHEMA
@@ -315,6 +343,87 @@ class AccountsDB:
                 "DELETE FROM watchlist_item WHERE discord_user_id = ? AND item_id = ?",
                 (discord_user_id, item_id),
             )
+
+    # -- desktop tokens ------------------------------------------------------------------
+
+    def create_desktop_token(self, discord_user_id: str, label: str) -> str:
+        """Mint a credential for the desktop window and return it once.
+
+        Once is the whole point: only the digest is stored, so this string cannot be shown
+        again afterwards. Losing it costs minting another, which is cheap -- far cheaper than
+        a table full of secrets that a stolen copy of this file would hand over intact.
+        """
+        token = secrets.token_urlsafe(32)
+        with self._transaction() as connection:
+            connection.execute(
+                "INSERT INTO desktop_token (token_sha256, discord_user_id, label, created_at)"
+                " VALUES (?, ?, ?, ?)",
+                (_digest(token), discord_user_id, label, _stamp()),
+            )
+        return token
+
+    def account_id_for_desktop_token(self, token: str) -> str | None:
+        """Whose account this credential belongs to, or ``None`` if it is not one of ours.
+
+        ``last_used_at`` is refreshed at most once a minute rather than on every call. It
+        exists so somebody can recognise a stale credential on their profile page, and that
+        question is not answered any better by a database write on every single API request.
+        """
+        digest = _digest(token)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT discord_user_id, last_used_at FROM desktop_token WHERE token_sha256 = ?",
+                (digest,),
+            ).fetchone()
+            if row is None:
+                return None
+            if _older_than_a_minute(row["last_used_at"]):
+                connection.execute(
+                    "UPDATE desktop_token SET last_used_at = ? WHERE token_sha256 = ?",
+                    (_stamp(), digest),
+                )
+        return row["discord_user_id"]
+
+    def list_desktop_tokens(self, discord_user_id: str) -> list[DesktopToken]:
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT token_sha256, label, created_at, last_used_at FROM desktop_token"
+                " WHERE discord_user_id = ? ORDER BY created_at DESC",
+                (discord_user_id,),
+            ).fetchall()
+        return [
+            DesktopToken(
+                token_sha256=row["token_sha256"],
+                label=row["label"],
+                created_at=row["created_at"],
+                last_used_at=row["last_used_at"],
+            )
+            for row in rows
+        ]
+
+    def revoke_desktop_token(self, discord_user_id: str, token_sha256: str) -> bool:
+        """Scoped to the account doing the revoking, so a digest read from somewhere else
+        cannot be used to sign out a stranger's desktop."""
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM desktop_token WHERE discord_user_id = ? AND token_sha256 = ?",
+                (discord_user_id, token_sha256),
+            )
+            return cursor.rowcount > 0
+
+
+def _digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _older_than_a_minute(stamp: str | None) -> bool:
+    if not stamp:
+        return True
+    try:
+        seen = datetime.fromisoformat(stamp)
+    except ValueError:
+        return True
+    return (datetime.now(UTC) - seen).total_seconds() > 60
 
 
 def _row_to_account(row: sqlite3.Row) -> Account:
