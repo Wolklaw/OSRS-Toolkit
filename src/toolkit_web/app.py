@@ -22,6 +22,7 @@ from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import STRATEGIES, plan_flip_portfolio, rank_flips
+from osrs_toolkit.runelite_sync import ge_offer_status_label
 from osrs_toolkit.savings_goal import (
     SavingsProgress,
     daily_profit_rate,
@@ -32,7 +33,7 @@ from osrs_toolkit.savings_goal import (
 from toolkit_web import discord_oauth
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.config import Settings
-from toolkit_web.importing import journal_for, known_characters
+from toolkit_web.importing import journal_for, known_characters, live_offer_state
 from toolkit_web.market_cache import MarketCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
@@ -136,6 +137,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repository = journal_for(settings, account)
         positions = repository.list_tracked(filter_hash)
         net_worth_history = repository.list_net_worth_history(filter_hash)
+        # The live GE dashboard needs one specific character to ask the sync service about —
+        # explicit when "All characters" isn't selected, or the only one there is when nobody
+        # has had to choose yet. With several and no choice made, there is no single answer
+        # worth showing, so the panel says so instead of guessing which one to display.
+        synced = switcher["synced_characters"]
+        live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        offer_slots, offer_screen = (
+            live_offer_state(settings, account, live_hash) if live_hash else ({}, None)
+        )
+        offer_rows = [
+            {**serialize(slot), "status_label": ge_offer_status_label(slot.state)}
+            for slot in sorted(offer_slots.values(), key=lambda entry: entry.slot)
+        ]
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -145,6 +159,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "total_invested": sum(position.invested for position in positions),
                 "total_estimated_profit": sum(position.estimated_profit for position in positions),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
+                "live_character_selected": live_hash is not None,
+                "offer_rows": offer_rows,
+                "offer_screen": serialize(offer_screen) if offer_screen else None,
                 **switcher,
             },
         )

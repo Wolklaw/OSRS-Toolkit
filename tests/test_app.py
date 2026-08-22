@@ -296,6 +296,38 @@ def test_characters_delegates_to_the_sync_service_once_paired(signed_in: TestCli
     assert response.json() == {"accounts": known}
 
 
+def test_a_live_ge_offer_shows_on_the_dashboard(signed_in: TestClient):
+    """The sync service has carried live offer-slot state since before this app existed to
+    read it — the dashboard just never asked. Pins that asking for it, and rendering what
+    comes back, actually works end to end."""
+    with patch("toolkit_web.app.probe_token", return_value=True):
+        signed_in.put("/api/pairing-token", json={"token": "good-token"})
+
+    slot_payload = {
+        "0": {
+            "itemId": 4151,
+            "itemName": "Abyssal whip",
+            "offerPrice": 2_000_000,
+            "totalQuantity": 1,
+            "quantityFilled": 0,
+            "spentGp": 0,
+            "state": "BUYING",
+        }
+    }
+    with (
+        patch(
+            "toolkit_web.importing.HttpSyncSource.offer_state_payload",
+            return_value=slot_payload,
+        ),
+        patch("toolkit_web.importing.HttpSyncSource.offer_screen_payload", return_value=None),
+    ):
+        signed_in.cookies.set("active_character", "hash-a")
+        response = signed_in.get("/")
+
+    assert "Abyssal whip" in response.text
+    assert "Buying" in response.text
+
+
 def test_a_signed_in_account_with_a_real_avatar_renders_it(client: TestClient):
     """Pins the field name the header reads. It previously read account.avatar_url, which
     does not exist on the Account dataclass (the field is named avatar) — every existing

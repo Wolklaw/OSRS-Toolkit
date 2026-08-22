@@ -66,6 +66,56 @@
   {% endif %}
 </div>
 
+{% if account.paired %}
+<div class="panel">
+  <h2 style="margin-top:0">Grand Exchange — live</h2>
+  {% if not live_character_selected %}
+  <div class="empty">
+    {% if synced_characters|length > 1 %}
+    Pick a character above to see its live Grand Exchange slots.
+    {% else %}
+    Nothing live yet — this fills in once the plugin reports a session.
+    {% endif %}
+  </div>
+  {% else %}
+    {% if offer_screen and offer_screen.focused %}
+    <p class="hint">
+      Setting up a {{ offer_screen.side or 'an' }} offer on <strong>{{ offer_screen.item_name }}</strong>.
+    </p>
+    {% endif %}
+    {% if offer_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Slot</th>
+          <th>Item</th>
+          <th>Side</th>
+          <th>Price</th>
+          <th>Filled</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for slot in offer_rows %}
+        <tr>
+          <td>{{ slot.slot + 1 }}</td>
+          <td>{{ slot.item_name }}</td>
+          <td>{{ slot.side or "—" }}</td>
+          <td>{{ "{:,}".format(slot.offer_price) }}</td>
+          <td>{{ "{:,}".format(slot.quantity_filled) }} / {{ "{:,}".format(slot.total_quantity) }}
+            ({{ "%.0f"|format(slot.percent_filled) }}%)</td>
+          <td>{{ slot.status_label }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No Grand Exchange offers open right now.</div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="panel">
   <h2 style="margin-top:0">Positions</h2>
   {% if positions %}

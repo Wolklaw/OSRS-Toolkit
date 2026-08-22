@@ -10,7 +10,7 @@ trade for a service sized for a handful of users rather than one that needs to s
 from __future__ import annotations
 
 from osrs_toolkit.journal import JournalRepository
-from osrs_toolkit.runelite_sync import RuneLiteSyncImporter
+from osrs_toolkit.runelite_sync import GEOfferScreen, GEOfferSlot, RuneLiteSyncImporter
 from osrs_toolkit.sync_source import HttpSyncSource
 
 from toolkit_web.accounts_db import Account
@@ -38,3 +38,17 @@ def known_characters(settings: Settings, account: Account) -> list[dict]:
         return []
     source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
     return source.known_accounts()
+
+
+def live_offer_state(
+    settings: Settings, account: Account, account_hash: str
+) -> tuple[dict[int, GEOfferSlot], GEOfferScreen | None]:
+    """This character's Grand Exchange slots right now, and what the "Set up offer" box is
+    focused on if it's open — the same live state the desktop app's own GE dashboard reads,
+    fetched fresh on every call since there is nothing here worth caching for longer than one
+    page render."""
+    if not account.pairing_token:
+        return {}, None
+    source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
+    importer = RuneLiteSyncImporter(source=source)
+    return importer.read_offer_state(account_hash), importer.read_offer_screen(account_hash)
