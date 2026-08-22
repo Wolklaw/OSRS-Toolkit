@@ -120,7 +120,16 @@
 </head>
 <body>
   <header>
-    <div class="brand">Rune<span>Scope</span></div>
+    <div class="row" style="gap:1.5rem">
+      <div class="brand">Rune<span>Scope</span></div>
+      {% if account %}
+      <nav class="row" style="gap:1rem">
+        <a href="/">Dashboard</a>
+        <a href="/trades">Trades</a>
+        <a href="/activity">Activity</a>
+      </nav>
+      {% endif %}
+    </div>
     {% if account %}
     <div class="account">
       {% if account.avatar_url %}<img src="{{ account.avatar_url }}" alt="">{% endif %}

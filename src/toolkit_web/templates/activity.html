@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Recent activity</h2>
+  <p class="hint">Everything the RuneLite plugin has sent, last {{ window_days }} days.</p>
+  {% if activity %}
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Source</th>
+        <th>What</th>
+        <th>Given</th>
+        <th>Received</th>
+        <th>Net</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in activity %}
+      <tr>
+        <td>{{ event.occurred_at[:16].replace("T", " ") }}</td>
+        <td>{{ event.source }}</td>
+        <td>{{ event.label }}</td>
+        <td>{{ event.given_summary }}</td>
+        <td>{{ event.received_summary }}</td>
+        <td class="{{ 'positive' if event.estimated_difference >= 0 else 'negative' }}">
+          {{ "{:+,}".format(event.estimated_difference) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing recorded yet in this window.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

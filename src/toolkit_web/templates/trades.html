@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Record a trade</h2>
+  <p class="hint">For a flip completed outside the plugin, or from before you connected it.</p>
+  <div class="row">
+    <input type="text" id="item-name" placeholder="Item name" autocomplete="off">
+    <input type="text" id="quantity" placeholder="Quantity" autocomplete="off" style="max-width:110px">
+    <input type="text" id="buy-price" placeholder="Buy price (each)" autocomplete="off" style="max-width:150px">
+    <input type="text" id="sell-price" placeholder="Sell price (each)" autocomplete="off" style="max-width:150px">
+    <button class="button" onclick="addTrade()">Add</button>
+  </div>
+  <div class="status-msg" id="add-status"></div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Trade log</h2>
+  {% if trades %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Qty</th>
+        <th>Buy</th>
+        <th>Sell</th>
+        <th>Profit</th>
+        <th>ROI</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for trade in trades %}
+      <tr>
+        <td>{{ trade.item_name }}</td>
+        <td>{{ trade.quantity }}</td>
+        <td>{{ "{:,}".format(trade.buy_price) }}</td>
+        <td>{{ "{:,}".format(trade.sell_price) }}</td>
+        <td class="{{ 'positive' if trade.profit >= 0 else 'negative' }}">
+          {{ "{:+,}".format(trade.profit) }}
+        </td>
+        <td class="{{ 'positive' if trade.roi >= 0 else 'negative' }}">{{ "%.1f"|format(trade.roi) }}%</td>
+        <td><a href="#" onclick="deleteTrade({{ trade.trade_id }}); return false;">Remove</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">No manual trades recorded yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function addTrade() {
+    const status = document.getElementById('add-status');
+    const itemName = document.getElementById('item-name').value.trim();
+    const quantity = document.getElementById('quantity').value.trim();
+    const buyPrice = document.getElementById('buy-price').value.trim();
+    const sellPrice = document.getElementById('sell-price').value.trim();
+    if (!itemName || !quantity || !buyPrice || !sellPrice) {
+      status.textContent = 'Fill in every field.';
+      status.className = 'status-msg error';
+      return;
+    }
+    try {
+      const response = await fetch('/api/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_name: itemName,
+          quantity: Number(quantity),
+          buy_price: Number(buyPrice),
+          sell_price: Number(sellPrice),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        status.textContent = body.detail || 'Could not add that trade.';
+        status.className = 'status-msg error';
+        return;
+      }
+      location.reload();
+    } catch (error) {
+      status.textContent = 'Could not reach the server — try again in a moment.';
+      status.className = 'status-msg error';
+    }
+  }
+
+  async function deleteTrade(tradeId) {
+    if (!confirm('Remove this trade from the log?')) { return; }
+    await fetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
+    location.reload();
+  }
+</script>
+{% endblock %}

@@ -49,6 +49,7 @@
         <th>Buy</th>
         <th>Sell target</th>
         <th>Est. profit</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -62,6 +63,7 @@
         <td class="{{ 'positive' if position.estimated_profit >= 0 else 'negative' }}">
           {{ "{:+,}".format(position.estimated_profit) }}
         </td>
+        <td><a href="#" onclick="deletePosition({{ position.position_id }}); return false;">Remove</a></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -75,6 +77,12 @@
 
 {% block scripts %}
 <script>
+  async function deletePosition(positionId) {
+    if (!confirm('Remove this position? This does not undo anything in game.')) { return; }
+    await fetch(`/api/positions/${positionId}`, { method: 'DELETE' });
+    location.reload();
+  }
+
   async function savePairingToken() {
     const input = document.getElementById('pairing-token');
     const status = document.getElementById('pairing-status');

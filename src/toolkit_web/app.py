@@ -16,6 +16,7 @@ from pathlib import Path
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.sync_source import HttpSyncSource
 
 from toolkit_web import discord_oauth
@@ -79,6 +80,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "total_estimated_profit": sum(position.estimated_profit for position in positions),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
             },
+        )
+
+    @app.get("/trades", response_class=HTMLResponse)
+    def trades_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+        repository = journal_for(settings, account)
+        return templates.TemplateResponse(
+            request,
+            "trades.html",
+            {
+                "account": account,
+                "trades": [serialize(trade) for trade in repository.list_all()],
+            },
+        )
+
+    @app.get("/activity", response_class=HTMLResponse)
+    def activity_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
+        repository = journal_for(settings, account)
+        since = datetime.now(UTC) - timedelta(days=ACTIVITY_WINDOW_DAYS)
+        rows = []
+        for event in repository.list_synced_trades(since=since):
+            row = serialize(event)
+            row["label"] = synced_trade_label(event)
+            row["given_summary"] = compact_items(event.given)
+            row["received_summary"] = compact_items(event.received)
+            rows.append(row)
+        return templates.TemplateResponse(
+            request,
+            "activity.html",
+            {"account": account, "activity": rows, "window_days": ACTIVITY_WINDOW_DAYS},
         )
 
     # -- auth ----------------------------------------------------------------------------
@@ -221,6 +251,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def trades(account: Account = CurrentAccount) -> dict:
         repository = journal_for(settings, account)
         return {"trades": [serialize(trade) for trade in repository.list_all()]}
+
+    @app.post("/api/trades", status_code=201)
+    def add_trade(payload: dict, account: Account = CurrentAccount) -> dict:
+        item_name = payload.get("item_name")
+        try:
+            quantity = int(payload.get("quantity"))
+            buy_price = int(payload.get("buy_price"))
+            sell_price = int(payload.get("sell_price"))
+        except (TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=422,
+                detail="quantity, buy_price and sell_price must all be whole numbers",
+            ) from error
+        if not isinstance(item_name, str) or not item_name.strip():
+            raise HTTPException(status_code=422, detail="item_name is required")
+        if quantity <= 0 or buy_price < 0 or sell_price < 0:
+            raise HTTPException(
+                status_code=422, detail="quantity must be positive, prices cannot be negative"
+            )
+        repository = journal_for(settings, account)
+        trade_id = repository.add(item_name.strip(), quantity, buy_price, sell_price)
+        return {"ok": True, "trade_id": trade_id}
+
+    @app.delete("/api/trades/{trade_id}")
+    def remove_trade(trade_id: int, account: Account = CurrentAccount) -> dict:
+        repository = journal_for(settings, account)
+        repository.delete(trade_id)
+        return {"ok": True}
+
+    @app.delete("/api/positions/{position_id}")
+    def remove_position(position_id: int, account: Account = CurrentAccount) -> dict:
+        repository = journal_for(settings, account)
+        repository.delete_tracked(position_id)
+        return {"ok": True}
 
     @app.get("/api/activity")
     def activity(account: Account = CurrentAccount) -> dict:
