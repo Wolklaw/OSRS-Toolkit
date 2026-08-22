@@ -119,12 +119,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/trades", response_class=HTMLResponse)
     def trades_page(request: Request, account: Account = CurrentAccount) -> HTMLResponse:
         repository = journal_for(settings, account)
+        characters = accounts.list_characters(account.discord_user_id)
+        names_by_id = {character.character_id: character.name for character in characters}
+        trade_characters = accounts.get_trade_characters(account.discord_user_id)
+        trades = []
+        for trade in repository.list_all():
+            row = serialize(trade)
+            character_id = trade_characters.get(trade.trade_id)
+            row["character_name"] = names_by_id.get(character_id)
+            trades.append(row)
         return templates.TemplateResponse(
             request,
             "trades.html",
             {
                 "account": account,
-                "trades": [serialize(trade) for trade in repository.list_all()],
+                "trades": trades,
+                "characters": [serialize(character) for character in characters],
             },
         )
 
@@ -484,8 +494,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=422, detail="quantity must be positive, prices cannot be negative"
             )
+        character_id = payload.get("character_id")
+        if character_id is not None and not isinstance(character_id, int):
+            raise HTTPException(status_code=422, detail="character_id must be a whole number")
         repository = journal_for(settings, account)
         trade_id = repository.add(item_name.strip(), quantity, buy_price, sell_price)
+        if character_id is not None:
+            accounts.set_trade_character(account.discord_user_id, trade_id, character_id)
         return {"ok": True, "trade_id": trade_id}
 
     @app.delete("/api/trades/{trade_id}")
@@ -498,6 +513,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def remove_position(position_id: int, account: Account = CurrentAccount) -> dict:
         repository = journal_for(settings, account)
         repository.delete_tracked(position_id)
+        return {"ok": True}
+
+    @app.get("/api/characters")
+    def characters_list(account: Account = CurrentAccount) -> dict:
+        return {
+            "characters": [
+                serialize(character)
+                for character in accounts.list_characters(account.discord_user_id)
+            ]
+        }
+
+    @app.post("/api/characters", status_code=201)
+    def add_character(payload: dict, account: Account = CurrentAccount) -> dict:
+        name = payload.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=422, detail="name is required")
+        character = accounts.add_character(account.discord_user_id, name.strip())
+        if character is None:
+            raise HTTPException(
+                status_code=409, detail="You already have a character with that name."
+            )
+        return {"ok": True, "character": serialize(character)}
+
+    @app.delete("/api/characters/{character_id}")
+    def remove_character(character_id: int, account: Account = CurrentAccount) -> dict:
+        accounts.delete_character(account.discord_user_id, character_id)
         return {"ok": True}
 
     @app.get("/api/activity")

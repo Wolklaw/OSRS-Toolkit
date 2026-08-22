@@ -27,6 +27,30 @@ CREATE TABLE IF NOT EXISTS account (
     goal_target     INTEGER,
     goal_created_at TEXT
 );
+
+-- A character someone has named for themselves, for anyone without the plugin yet to have
+-- something to attribute a manual trade to. account_hash starts NULL and is here for later —
+-- once the plugin reports this same character by hash, that is what lets the two be linked
+-- as the same one rather than the manual history starting over under a second name.
+CREATE TABLE IF NOT EXISTS character (
+    character_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    account_hash    TEXT,
+    created_at      TEXT NOT NULL,
+    UNIQUE(discord_user_id, name)
+);
+
+-- Which character a manual trade belongs to. Kept here rather than as a column on the trade
+-- itself: a trade lives in that account's own journal.db, a file this app shares unchanged
+-- with the desktop window, and a character is a concept the desktop window has never needed
+-- to know about. trade_id is only unique within one account's journal, hence the pairing.
+CREATE TABLE IF NOT EXISTS trade_character (
+    discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
+    trade_id        INTEGER NOT NULL,
+    character_id    INTEGER NOT NULL REFERENCES character(character_id) ON DELETE CASCADE,
+    PRIMARY KEY (discord_user_id, trade_id)
+);
 """
 
 
@@ -55,6 +79,13 @@ class Account:
         return self.goal_target is not None
 
 
+@dataclass(frozen=True, slots=True)
+class Character:
+    character_id: int
+    name: str
+    account_hash: str | None
+
+
 #: Columns added after the table's first release. A fresh database gets them from SCHEMA
 #: above; a database that already exists needs each added by hand so its one real row — a
 #: login, a pairing token — is not lost the way dropping and recreating the table would lose it.
@@ -80,6 +111,9 @@ class AccountsDB:
         connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
+        # Off by default in SQLite regardless of the schema saying otherwise — needed for
+        # character's and trade_character's ON DELETE CASCADE to actually take effect.
+        connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
     @contextmanager
@@ -160,6 +194,74 @@ class AccountsDB:
                 " goal_created_at = NULL WHERE discord_user_id = ?",
                 (discord_user_id,),
             )
+
+    # -- characters --------------------------------------------------------------------
+
+    def add_character(self, discord_user_id: str, name: str) -> Character | None:
+        """A new named character for this account, or ``None`` if that name is already
+        taken by one of their others — the caller decides what to tell the user about it,
+        this just refuses to create a second row that would make "which one?" ambiguous."""
+        try:
+            with self._transaction() as connection:
+                cursor = connection.execute(
+                    "INSERT INTO character (discord_user_id, name, created_at) VALUES (?, ?, ?)",
+                    (discord_user_id, name, _stamp()),
+                )
+                character_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            return None
+        return Character(character_id=character_id, name=name, account_hash=None)
+
+    def list_characters(self, discord_user_id: str) -> list[Character]:
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT character_id, name, account_hash FROM character"
+                " WHERE discord_user_id = ? ORDER BY name",
+                (discord_user_id,),
+            ).fetchall()
+        return [
+            Character(
+                character_id=row["character_id"], name=row["name"], account_hash=row["account_hash"]
+            )
+            for row in rows
+        ]
+
+    def delete_character(self, discord_user_id: str, character_id: int) -> None:
+        """The character disappears; trades that were attributed to it are not deleted, only
+        left unattributed — trade_character's own foreign key cascades that automatically."""
+        with self._transaction() as connection:
+            connection.execute(
+                "DELETE FROM character WHERE discord_user_id = ? AND character_id = ?",
+                (discord_user_id, character_id),
+            )
+
+    def set_trade_character(
+        self, discord_user_id: str, trade_id: int, character_id: int | None
+    ) -> None:
+        with self._transaction() as connection:
+            if character_id is None:
+                connection.execute(
+                    "DELETE FROM trade_character WHERE discord_user_id = ? AND trade_id = ?",
+                    (discord_user_id, trade_id),
+                )
+                return
+            connection.execute(
+                "INSERT INTO trade_character (discord_user_id, trade_id, character_id)"
+                " VALUES (?, ?, ?)"
+                " ON CONFLICT(discord_user_id, trade_id)"
+                " DO UPDATE SET character_id = excluded.character_id",
+                (discord_user_id, trade_id, character_id),
+            )
+
+    def get_trade_characters(self, discord_user_id: str) -> dict[int, int]:
+        """Every trade this account has attributed to a character, as trade_id -> character_id
+        — read once per page render rather than once per row."""
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT trade_id, character_id FROM trade_character WHERE discord_user_id = ?",
+                (discord_user_id,),
+            ).fetchall()
+        return {row["trade_id"]: row["character_id"] for row in rows}
 
 
 def _row_to_account(row: sqlite3.Row) -> Account:
