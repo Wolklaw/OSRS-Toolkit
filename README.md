@@ -35,17 +35,31 @@ kept in the browser rather than on the server.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e "../OSRS Toolkit"   # the domain layer, without its gui extra
 .venv/bin/pip install -e ".[dev]"
 python -m toolkit_web
 ```
+
+That is the whole setup. The domain layer comes down with it — `pyproject.toml` pins
+`osrs-toolkit` to a commit in its own repository, so there is nothing to clone by hand and no
+way to end up with a checkout that imports a package that was never installed.
+
+If you are changing the domain layer and this app together, install the sibling editable
+afterwards and it takes precedence for the rest of that session:
+
+```bash
+.venv/bin/pip install -e "../OSRS Toolkit"
+```
+
+When that work lands, bump the pinned commit in `pyproject.toml` — that is the one step that
+makes the change real for everyone else.
 
 Listens on `127.0.0.1:8100` by default and speaks plain HTTP — put a tunnel or reverse proxy in
 front of it for anything reachable from outside the machine, the same as the sync service.
 
 For a real deployment beside the sync service, see **[docs/deploying.md](docs/deploying.md)**:
 how the laptop is actually set up, how to update it, and the settings
-that quietly break it if missed — `TOOLKIT_SESSION_SECRET`, and pulling *both* repositories.
+that quietly break it if missed — `TOOLKIT_SESSION_SECRET`, and reinstalling after the pinned
+domain layer moves.
 
 ### Settings
 

@@ -8,11 +8,18 @@ version = "0.1.0"
 description = "Web front end for OSRS Toolkit — the companion to the OSRS Toolkit RuneLite plugin."
 readme = "README.md"
 requires-python = ">=3.12"
-# osrs-toolkit is not published anywhere pip can resolve on its own — it is a sibling repo,
-# installed editable alongside this one (see README). It supplies journal.py, ranking.py and
-# the rest of the domain layer; installing it without its "gui" extra keeps PySide6 out of
-# this environment entirely.
+# osrs-toolkit supplies journal.py, ranking.py and the rest of the domain layer. It is not on
+# PyPI, so it is pinned to a commit in its own repository — that way a fresh clone of this repo
+# installs into something that actually runs, rather than importing a package nobody declared.
+# It is pinned to a commit rather than to a release tag on purpose: the desktop releases version
+# the Windows installer, and the domain layer this app needs regularly runs ahead of the newest
+# one. Bumping this line is how the domain layer moves, and it shows up in review as a diff.
+# No "gui" extra here keeps PySide6 out of this environment entirely.
+#
+# Working on both repos at once? Install the sibling editable afterwards and it takes precedence:
+#   .venv/bin/pip install -e "../OSRS Toolkit"
 dependencies = [
+    "osrs-toolkit @ git+https://github.com/Wolklaw/OSRS-Toolkit@d43bc56c9660eff560731a84c1919c8b9f8ac0b3",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "itsdangerous>=2.2",

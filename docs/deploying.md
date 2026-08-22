@@ -14,7 +14,7 @@ command below is `systemctl --user` and there is no `sudo` anywhere in normal op
 | | |
 |---|---|
 | Web app | `~/osrs-web`, unit `toolkit-web.service`, listening on `127.0.0.1:8100` |
-| Domain layer | `~/osrs-toolkit-desktop` — the desktop repo, installed editable into the web app's venv |
+| Domain layer | No checkout of its own — pip installs it from the commit pinned in `pyproject.toml` |
 | Sync service | `~/osrs-sync`, unit `osrs-sync.service`, listening on `127.0.0.1:8000` |
 | Tunnel | `cloudflared.service`, config at `~/.cloudflared/config.yml` |
 | Web app data | `~/.local/share/toolkit-web` — `accounts.db`, `journals/`, `market-cache/` |
@@ -45,19 +45,25 @@ cd ~/osrs-web && git pull --ff-only
 systemctl --user restart toolkit-web
 ```
 
-Both repositories are editable installs, so a pull is normally the whole deploy. Re-run
-`~/osrs-web/.venv/bin/pip install -e .` only when `pyproject.toml` gained a dependency.
+This repo is an editable install, so a pull is normally the whole deploy. Re-run
+`~/osrs-web/.venv/bin/pip install -e .` when `pyproject.toml` changed at all — that now includes
+the pinned domain layer, not just the third-party dependencies.
 
 ### When the domain layer moved too
 
 The web app has no domain layer of its own — it imports `journal.py`, `ranking.py`,
-`sync_source.py` and the rest from `~/osrs-toolkit-desktop`. If a change spans both repos, that
-one has to be pulled as well, **and it does not track `main`**:
+`sync_source.py` and the rest from `osrs-toolkit`, which pip installs from the commit pinned in
+`pyproject.toml`. There is no second checkout on the laptop to keep in step, and no branch to
+get wrong. A domain-layer change reaches production by bumping that pin and pulling here:
 
 ```bash
-cd ~/osrs-toolkit-desktop && git status -sb   # expect: ## fresh-main...origin/fresh-main
-cd ~/osrs-toolkit-desktop && git pull --ff-only
+cd ~/osrs-web && git pull --ff-only
+~/osrs-web/.venv/bin/pip install -e . --upgrade
+systemctl --user restart toolkit-web
 ```
+
+`--upgrade` matters: without it pip may keep the domain layer it already has even though the
+pinned commit in `pyproject.toml` moved.
 
 A web app pulled forward against a stale domain layer fails at import, not at runtime — the
 service enters a restart loop and no page is served at all. Worth one check before restarting:
