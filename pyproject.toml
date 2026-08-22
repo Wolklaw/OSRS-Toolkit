@@ -9,7 +9,10 @@ description = "A Windows desktop companion for Old School RuneScape market analy
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
-dependencies = ["PySide6>=6.8,<7"]
+# No hard runtime dependency: the desktop window is the only thing that needs PySide6, and it
+# is optional below as "gui". A web server importing this package for journal.py or ranking.py
+# has no business pulling in a full Qt install to get code that never touches a widget.
+dependencies = []
 classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: Microsoft :: Windows",
@@ -19,7 +22,8 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "ruff>=0.9", "nuitka>=2.5"]
+gui = ["PySide6>=6.8,<7"]
+dev = ["osrs-toolkit[gui]", "pytest>=8.3", "ruff>=0.9", "nuitka>=2.5"]
 
 [project.scripts]
 osrs-toolkit = "osrs_toolkit.app:main"
