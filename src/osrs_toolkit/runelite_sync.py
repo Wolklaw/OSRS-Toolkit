@@ -396,10 +396,15 @@ class RuneLiteSyncImporter:
                     event.offer_price,
                     suggested_sell_prices.get(event.item_id),
                     event.restored,
+                    account_hash=event.account_hash,
                 )
             else:
                 touched = repository.apply_offer_cancelled(
-                    event.item_id, event.side, event.total_quantity, event.offer_price
+                    event.item_id,
+                    event.side,
+                    event.total_quantity,
+                    event.offer_price,
+                    account_hash=event.account_hash,
                 )
         except ValueError:
             return False
@@ -424,6 +429,7 @@ class RuneLiteSyncImporter:
                 item.unit_value,
                 total_quantity=total_quantity,
                 suggested_sell_price=suggested_sell_prices.get(item.item_id),
+                account_hash=trade.account_hash,
             )
         except ValueError:
             # A matching invariant (e.g. a stale quantity) failed; leave it for manual review

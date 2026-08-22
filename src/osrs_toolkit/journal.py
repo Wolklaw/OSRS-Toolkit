@@ -87,6 +87,11 @@ class TrackedTrade:
     suggestion_reviewed_at: str | None = None
     completed_at: str | None = None
     listed_sell_price: int | None = None
+    # Which synced character this position belongs to, or None for one opened before this
+    # column existed, or entered by hand with no character context to attach. A caller
+    # filtering by character treats None as belonging to every character, rather than to
+    # none of them — an untagged position is unassigned, not somebody else's.
+    account_hash: str | None = None
 
     @property
     def estimated_profit(self) -> int:
@@ -516,6 +521,7 @@ class JournalRepository:
                 "suggestion_reviewed_at": "TEXT",
                 "completed_at": "TEXT",
                 "listed_sell_price": "INTEGER",
+                "account_hash": "TEXT",
             }
             for column, definition in column_migrations.items():
                 if column not in tracked_columns:
@@ -644,6 +650,7 @@ class JournalRepository:
         target_buy: int,
         target_sell: int,
         strategy: str = "Balanced (1–4h)",
+        account_hash: str | None = None,
     ) -> int:
         with self._connect() as connection:
             created_at = datetime.now(UTC).isoformat(timespec="seconds")
@@ -652,8 +659,8 @@ class JournalRepository:
                 INSERT INTO tracked_trades (
                     created_at, item_id, item_name, quantity, target_buy, target_sell, status,
                     strategy, current_buy_suggestion, current_sell_suggestion,
-                    suggestion_reviewed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy', ?, ?, ?, ?)
+                    suggestion_reviewed_at, account_hash
+                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy', ?, ?, ?, ?, ?)
                 """,
                 (
                     created_at,
@@ -666,15 +673,32 @@ class JournalRepository:
                     target_buy,
                     target_sell,
                     created_at,
+                    account_hash,
                 ),
             )
             return int(cursor.lastrowid)
 
-    def list_tracked(self) -> list[TrackedTrade]:
+    def list_tracked(self, account_hash: str | None = None) -> list[TrackedTrade]:
+        """Every tracked position, or just one character's plus anything never tagged to one.
+
+        An untagged position — opened before this column existed, or entered by hand with no
+        character context — has no owner to exclude it from a character's view, so it is kept
+        in every filtered read rather than only in the unfiltered one.
+        """
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM tracked_trades ORDER BY created_at DESC, position_id DESC"
-            ).fetchall()
+            if account_hash is None:
+                rows = connection.execute(
+                    "SELECT * FROM tracked_trades ORDER BY created_at DESC, position_id DESC"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM tracked_trades
+                    WHERE account_hash = ? OR account_hash IS NULL
+                    ORDER BY created_at DESC, position_id DESC
+                    """,
+                    (account_hash,),
+                ).fetchall()
             fill_rows = connection.execute(
                 "SELECT * FROM tracked_sale_fills ORDER BY fill_id ASC"
             ).fetchall()
@@ -740,6 +764,9 @@ class JournalRepository:
                     int(row["listed_sell_price"])
                     if row["listed_sell_price"] is not None
                     else None
+                ),
+                account_hash=(
+                    str(row["account_hash"]) if row["account_hash"] is not None else None
                 ),
             )
             for row in rows
@@ -869,6 +896,7 @@ class JournalRepository:
         unit_price: int,
         total_quantity: int | None = None,
         suggested_sell_price: int | None = None,
+        account_hash: str | None = None,
     ) -> int | None:
         """Match a synced GE fill to the oldest eligible tracked position for this item and
         record it as a buy or sale fill, transitioning status when it completes a side.
@@ -908,7 +936,11 @@ class JournalRepository:
             if side == "buy"
             else ("Bought", "Listed for sale", "Partially sold", "Supplies")
         )
-        tracked = [trade for trade in self.list_tracked() if trade.item_id == item_id]
+        # Restricted to this character's own positions (plus any never tagged to one) once an
+        # account_hash is given, so a fill on one character cannot absorb into a position another
+        # character opened for the same item — two people flipping the same item through one
+        # pairing token used to merge into whichever position happened to be oldest.
+        tracked = [trade for trade in self.list_tracked(account_hash) if trade.item_id == item_id]
         candidates = sorted(
             (trade for trade in tracked if trade.status in eligible_statuses),
             key=lambda trade: trade.created_at,
@@ -985,7 +1017,10 @@ class JournalRepository:
             # RuneLite activity feed until a fill reports the real total, or an explicit
             # ge_offer_opened event starts tracking it properly from the outset.
             return None
-        position_id = self.track(item_id, item_name, total_quantity, unit_price, unit_price)
+        position_id = self.track(
+            item_id, item_name, total_quantity, unit_price, unit_price,
+            account_hash=account_hash,
+        )
         status = "Bought" if quantity == total_quantity else "Pending buy"
         self.update_tracked(position_id, status, None, None, None, [(quantity, unit_price)])
         if suggested_sell_price is not None and suggested_sell_price > unit_price:
@@ -1001,6 +1036,7 @@ class JournalRepository:
         offer_price: int,
         suggested_sell_price: int | None = None,
         restored: bool = False,
+        account_hash: str | None = None,
     ) -> int | None:
         """Start (or advance) tracking the moment an offer is placed, before anything fills.
 
@@ -1045,7 +1081,10 @@ class JournalRepository:
         """
         if side not in ("buy", "sell"):
             raise ValueError("side must be 'buy' or 'sell'")
-        by_age = sorted(self.list_tracked(), key=lambda trade: trade.created_at)
+        # Restricted the same way apply_synced_ge_fill is: to this character's own positions
+        # plus any never tagged to one, so an offer placed on one character cannot adopt a plan
+        # or an in-flight position that belongs to another.
+        by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
         if side == "buy":
             untouched_plan = next(
                 (
@@ -1073,7 +1112,8 @@ class JournalRepository:
             )
             if planned is None:
                 position_id = self.track(
-                    item_id, item_name, total_quantity, offer_price, offer_price
+                    item_id, item_name, total_quantity, offer_price, offer_price,
+                    account_hash=account_hash,
                 )
                 if suggested_sell_price is not None and suggested_sell_price > offer_price:
                     self.review_suggestion(position_id, offer_price, suggested_sell_price)
@@ -1190,7 +1230,12 @@ class JournalRepository:
         )
 
     def apply_offer_cancelled(
-        self, item_id: int, side: str, total_quantity: int, offer_price: int
+        self,
+        item_id: int,
+        side: str,
+        total_quantity: int,
+        offer_price: int,
+        account_hash: str | None = None,
     ) -> int | None:
         """Resolve the position a cancelled GE offer leaves behind.
 
@@ -1218,7 +1263,7 @@ class JournalRepository:
         """
         if side not in ("buy", "sell"):
             raise ValueError("side must be 'buy' or 'sell'")
-        by_age = sorted(self.list_tracked(), key=lambda trade: trade.created_at)
+        by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
         if side == "sell":
             # A sell offer never created the position — a buy did — so neither its price nor its
             # size describes how the position was tracked: the player can list part of one, or
@@ -1381,7 +1426,11 @@ class JournalRepository:
         return results
 
     def list_synced_trades(
-        self, event_type: str | None = None, *, since: datetime | None = None
+        self,
+        event_type: str | None = None,
+        *,
+        since: datetime | None = None,
+        account_hash: str | None = None,
     ) -> list[SyncedTrade]:
         """Imported RuneLite activity, newest first.
 
@@ -1390,12 +1439,19 @@ class JournalRepository:
         Without it this loads every event ever imported, plus every one of their items —
         fine for the activity feed, which shows exactly that, and steadily more expensive
         for anything on a timer.
+
+        ``account_hash``, unlike the same filter on ``list_tracked``, is exact: every synced
+        trade carries a real character it happened on, so there is no untagged case to fall
+        back into.
         """
         conditions: list[str] = []
         parameters: list[str] = []
         if event_type is not None:
             conditions.append("event_type = ?")
             parameters.append(event_type)
+        if account_hash is not None:
+            conditions.append("account_hash = ?")
+            parameters.append(account_hash)
         if since is not None:
             conditions.append("occurred_at >= ?")
             parameters.append(
@@ -1549,11 +1605,21 @@ class JournalRepository:
                 (snapshot.account_hash, snapshot.account_hash, MAX_NET_WORTH_HISTORY_PER_ACCOUNT),
             )
 
-    def list_net_worth_history(self) -> list[NetWorthPoint]:
+    def list_net_worth_history(self, account_hash: str | None = None) -> list[NetWorthPoint]:
         with self._connect() as connection:
-            rows = connection.execute(
-                "SELECT * FROM net_worth_history ORDER BY captured_at ASC, entry_id ASC"
-            ).fetchall()
+            if account_hash is None:
+                rows = connection.execute(
+                    "SELECT * FROM net_worth_history ORDER BY captured_at ASC, entry_id ASC"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM net_worth_history
+                    WHERE account_hash = ?
+                    ORDER BY captured_at ASC, entry_id ASC
+                    """,
+                    (account_hash,),
+                ).fetchall()
         return [
             NetWorthPoint(
                 account_hash=str(row["account_hash"]),
