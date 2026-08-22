@@ -7,7 +7,7 @@
     RuneScape trade journal and Grand Exchange research, in a browser tab next to the game.</p>
   <div class="row">
     <a class="button" href="/auth/discord/login">Sign in with Discord</a>
-    <a class="button secondary" href="#no-discord">Sign in without Discord</a>
+    <a class="button secondary" href="#no-discord" id="no-discord-link">Sign in without Discord</a>
   </div>
   <p class="hint">Nothing plays the game for you. No password, no email address, ever.</p>
 </div>
@@ -45,7 +45,7 @@
   </div>
 </div>
 
-<div class="divider-text" id="no-discord">or, with no Discord account at all</div>
+<div class="divider-text" id="no-discord" style="scroll-margin-top:5.5rem">or, with no Discord account at all</div>
 
 <div class="grid-2">
   <div class="panel" id="create-panel">
@@ -91,6 +91,13 @@
 
 {% block scripts %}
 <script>
+  document.getElementById('no-discord-link').addEventListener('click', () => {
+    // The scroll alone is easy to miss -- an instant jump with nothing to draw the eye to
+    // it can look exactly like the click did nothing. Landing focus in the field the person
+    // is about to type into is what makes it unmistakable that something happened.
+    setTimeout(() => document.getElementById('display-name').focus(), 350);
+  });
+
   async function signInWithCode() {
     const code = document.getElementById('recovery-code').value.trim();
     if (!code) { return; }

@@ -1,8 +1,13 @@
 # OSRS Toolkit — web
 
 The web front end for OSRS Toolkit. Sign in with Discord, paste the pairing token the sync
-service gave you, and your Journal reads and writes through here instead of a desktop
-installer.
+service gave you, and your Journal reads and writes through here — from any device, nothing to
+install.
+
+The desktop app is not an alternative to this; it is a companion. Mint a desktop access token
+on `/profile` and paste it into the desktop app's Settings, and its journal mirrors this one:
+a trade recorded in either place reaches the other within a minute. Not connected, it stays
+exactly what it always was — a local app with a local journal.
 
 Sits beside [osrs-toolkit-sync-server](https://github.com/Wolklaw/osrs-toolkit-sync-server)
 (the plugin's endpoint) and depends on
@@ -24,7 +29,7 @@ and none of which need PySide6 installed to run headless on a server.
 | `/performance` | Realized results by strategy and item, and plan versus actual. |
 | `/pvm` `/savings-goal` | Boss checklists against your synced loadout; one savings target. |
 | `/item/{id}` | One item's full market breakdown and price history. |
-| `/profile` | Account, pairing token, characters, data export, theme. |
+| `/profile` | Account, pairing token, desktop access tokens, characters, data export, theme. |
 | `/about` `/help` | What this is and what it holds; setup, FAQ, and how to get in touch. **Both render signed out** — they answer the questions asked before signing in. |
 
 Every page shares one shell (`templates/base.html`): sidebar navigation, a price-freshness
@@ -103,8 +108,11 @@ asks the sync service for anything new and imports it, then reads the user's own
 
 ## API
 
-Interactive docs at `/docs` once running. Every `/api/*` route needs a signed-in session;
-`/api/pairing-token` is how an account attaches to a RuneLite plugin's sync token.
+Interactive docs at `/docs` once running. Every `/api/*` route needs a signed-in session or a
+bearer desktop access token; `/api/pairing-token` is how an account attaches to a RuneLite
+plugin's sync token, and `/api/desktop-tokens` is how it mints and revokes the desktop app's
+own credential — a different one, since a leaked plugin token should not also read a whole
+journal. `/api/journal/version`, `/pull` and `/push` are what the desktop app mirrors through.
 
 ## Development
 

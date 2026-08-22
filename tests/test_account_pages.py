@@ -80,6 +80,28 @@ def test_named_characters_are_managed_from_the_profile(signed_in: TestClient):
     assert "Alt Account" in response.text
 
 
+def test_desktop_tokens_are_shown_and_reachable_from_the_profile(signed_in: TestClient):
+    """The only way to get a credential the desktop app can use -- if this page cannot mint
+    one, nothing else about the desktop mirror is reachable at all."""
+    minted = signed_in.post("/api/desktop-tokens", json={"label": "This PC"})
+    assert minted.status_code == 201
+
+    response = signed_in.get("/profile")
+
+    assert "This PC" in response.text
+    # The secret itself must never come back out of a page render.
+    assert minted.json()["token"] not in response.text
+
+
+def test_a_revoked_desktop_token_drops_off_the_profile(signed_in: TestClient):
+    signed_in.post("/api/desktop-tokens", json={"label": "This PC"})
+    token_id = signed_in.get("/api/desktop-tokens").json()["tokens"][0]["id"]
+
+    signed_in.delete(f"/api/desktop-tokens/{token_id}")
+
+    assert "This PC" not in signed_in.get("/profile").text
+
+
 # -- display name ----------------------------------------------------------------------------
 
 

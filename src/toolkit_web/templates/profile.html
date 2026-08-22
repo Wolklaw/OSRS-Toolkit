@@ -85,6 +85,48 @@
   <p class="hint"><a href="/help">Step-by-step plugin setup</a></p>
 </div>
 
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Desktop app</h2>
+      <p class="hint tight">Points the Windows app at this account, so its journal mirrors
+        this one and it reads your live Grand Exchange state from here instead of the plugin
+        directly. Not the plugin's own pairing token above — this is a separate credential,
+        because leaking it should not hand over write access to the sync pipeline.</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <input type="text" id="desktop-token-label" placeholder="Label (e.g. this PC)" autocomplete="off" style="max-width:220px">
+    <button class="button" onclick="generateDesktopToken()">Get a token</button>
+  </div>
+  <div id="generated-desktop-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-desktop-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-desktop-token', this)">Copy</button>
+    </div>
+  </div>
+  <div class="status-msg" id="desktop-token-status"></div>
+
+  {% if desktop_tokens %}
+  <table style="margin-top:0.9rem">
+    <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+      {% for token in desktop_tokens %}
+      <tr>
+        <td>{{ token.label }}</td>
+        <td>{{ token.created_at[:10] }}</td>
+        <td>{{ token.last_used_at[:10] if token.last_used_at else "Never" }}</td>
+        <td><button class="button danger small" onclick="revokeDesktopToken('{{ token.id }}')">Revoke</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="hint">Paste it into the desktop app's <strong>Settings → Website</strong> tab.
+    <a href="/help">Step-by-step desktop setup</a></p>
+</div>
+
 <div class="grid-2">
   <div class="panel">
     <h2>Synced characters</h2>
@@ -224,6 +266,29 @@
   async function disconnectPlugin() {
     if (!confirm('Disconnect the plugin? Nothing already imported is deleted — new events just stop arriving.')) { return; }
     await api('DELETE', '/api/pairing-token');
+    location.reload();
+  }
+
+  async function generateDesktopToken() {
+    const label = document.getElementById('desktop-token-label').value.trim();
+    setStatus('desktop-token-status', 'Generating…');
+    const result = await api('POST', '/api/desktop-tokens', { label });
+    if (!result.ok) {
+      setStatus('desktop-token-status', result.error, 'error');
+      return;
+    }
+    document.getElementById('generated-desktop-token').textContent = result.data.token;
+    document.getElementById('generated-desktop-token-box').style.display = 'block';
+    setStatus(
+      'desktop-token-status',
+      "Copy this now — it will not be shown again. Paste it into the desktop app.",
+      'ok'
+    );
+  }
+
+  async function revokeDesktopToken(tokenId) {
+    if (!confirm('Revoke this token? The desktop app using it stops syncing until a new one is entered.')) { return; }
+    await api('DELETE', `/api/desktop-tokens/${tokenId}`);
     location.reload();
   }
 

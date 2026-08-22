@@ -405,6 +405,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "position_count": len(repository.list_tracked()),
                 "trade_count": len(repository.list_all()),
                 "watchlist_count": len(accounts.list_watchlist_item_ids(account.discord_user_id)),
+                "desktop_tokens": [
+                    {
+                        "id": token.token_sha256,
+                        "label": token.label,
+                        "created_at": token.created_at,
+                        "last_used_at": token.last_used_at,
+                    }
+                    for token in accounts.list_desktop_tokens(account.discord_user_id)
+                ],
                 **switcher,
             },
         )

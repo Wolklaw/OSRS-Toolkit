@@ -47,6 +47,30 @@
 
 <div class="panel">
   <div class="prose">
+    <h2 style="margin-top:0">Connecting the desktop app</h2>
+    <p>Optional, and separate from the plugin above. This points the Windows app at your
+      account here so its journal — manual trades and tracked positions — mirrors this one,
+      and so it can show live Grand Exchange state without going near the plugin's files
+      directly. Signed out, the desktop app is unaffected and stays exactly as it always
+      was: a local journal on your PC.</p>
+    <ol class="steps">
+      <li>On your <a href="/profile">profile</a>, under <strong>Desktop app</strong>, choose
+        <strong>Get a token</strong> and copy it. This is a different credential from the
+        plugin's pairing token above — it is what proves the desktop app to your account, not
+        what feeds the sync service.</li>
+      <li>In the desktop app, open <strong>Settings → Website</strong> and paste it in.</li>
+      <li>Leave the website address as it is unless you are running your own copy of
+        RuneScope.</li>
+      <li>A trade recorded in either place reaches the other within a minute, sooner if the
+        desktop window is the one in front. Deleting a trade in one removes it from both.</li>
+    </ol>
+    <p>Lost a token, or replacing a PC? Revoke the old one from your profile and mint a new
+      one — nothing already synced is lost by doing that.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
     <h2 style="margin-top:0">What each page is for</h2>
     <ul>
       <li><strong>Dashboard</strong> — open positions, your live Grand Exchange slots, and net
@@ -117,6 +141,16 @@
       <p>The account is gone. The code is never stored — only a hash of it — which is exactly
         what makes it work with no email address behind it, and exactly why nothing can recover
         one. If that worries you, sign in with Discord instead.</p>
+    </details>
+
+    <details class="faq">
+      <summary>Can I use this alongside the desktop app?</summary>
+      <p>Yes — connect it from your <a href="/profile">profile</a> under
+        <strong>Desktop app</strong> and paste the token into the desktop app's
+        <strong>Settings → Website</strong> tab. From then on the two share one journal: a
+        trade recorded in either place reaches the other within a minute. Leave it
+        disconnected and the desktop app works exactly as it always has, entirely on your
+        PC.</p>
     </details>
 
     <details class="faq">
