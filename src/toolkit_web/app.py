@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from osrs_toolkit.sync_source import HttpSyncSource
 
 from toolkit_web import discord_oauth
@@ -36,22 +38,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     accounts = AccountsDB(settings.accounts_db_path)
     signer = SessionSigner(settings.session_secret)
+    templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
     app = FastAPI(
         title="OSRS Toolkit",
         summary="Web front end for the OSRS Toolkit trade journal.",
     )
 
-    def current_account(
+    def optional_account(
         session: str | None = Cookie(default=None, alias=COOKIE_NAME),
-    ) -> Account:
+    ) -> Account | None:
         discord_user_id = signer.read(session)
-        account = accounts.get(discord_user_id) if discord_user_id else None
+        return accounts.get(discord_user_id) if discord_user_id else None
+
+    OptionalAccount = Depends(optional_account)
+
+    def current_account(account: Account | None = OptionalAccount) -> Account:
         if account is None:
             raise HTTPException(status_code=401, detail="Not signed in")
         return account
 
     CurrentAccount = Depends(current_account)
+
+    # -- pages -----------------------------------------------------------------------------
+
+    @app.get("/", response_class=HTMLResponse)
+    def index(request: Request, account: Account | None = OptionalAccount) -> HTMLResponse:
+        if account is None:
+            return templates.TemplateResponse(request, "landing.html")
+        repository = journal_for(settings, account)
+        positions = repository.list_tracked()
+        net_worth_history = repository.list_net_worth_history()
+        return templates.TemplateResponse(
+            request,
+            "dashboard.html",
+            {
+                "account": account,
+                "positions": [serialize(position) for position in positions],
+                "total_invested": sum(position.invested for position in positions),
+                "total_estimated_profit": sum(position.estimated_profit for position in positions),
+                "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
+            },
+        )
 
     # -- auth ----------------------------------------------------------------------------
 

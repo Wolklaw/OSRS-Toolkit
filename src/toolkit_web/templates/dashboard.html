@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if not account.paired %}
+<div class="panel">
+  <h2 style="margin-top:0">Connect your RuneLite plugin</h2>
+  <p class="hint">Paste the pairing token the OSRS Toolkit Sync plugin gave you. Your Journal
+    starts filling in as soon as it's saved.</p>
+  <div class="row">
+    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off">
+    <button class="button" onclick="savePairingToken()">Connect</button>
+  </div>
+  <div class="status-msg" id="pairing-status"></div>
+</div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Open positions</div>
+    <div class="value">{{ positions | length }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Invested</div>
+    <div class="value">{{ "{:,}".format(total_invested) }} gp</div>
+  </div>
+  <div class="stat">
+    <div class="label">Estimated profit</div>
+    <div class="value {{ 'positive' if total_estimated_profit >= 0 else 'negative' }}">
+      {{ "{:+,}".format(total_estimated_profit) }} gp
+    </div>
+  </div>
+  {% if net_worth %}
+  <div class="stat">
+    <div class="label">Net worth</div>
+    <div class="value">{{ "{:,}".format(net_worth.total_value) }} gp</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Positions</h2>
+  {% if positions %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Qty</th>
+        <th>Status</th>
+        <th>Buy</th>
+        <th>Sell target</th>
+        <th>Est. profit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for position in positions %}
+      <tr>
+        <td>{{ position.item_name }}</td>
+        <td>{{ position.quantity }}</td>
+        <td>{{ position.status }}</td>
+        <td>{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>
+        <td>{{ "{:,}".format(position.sell_suggestion) }}</td>
+        <td class="{{ 'positive' if position.estimated_profit >= 0 else 'negative' }}">
+          {{ "{:+,}".format(position.estimated_profit) }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing tracked yet. Fills recorded by the plugin will show up here.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function savePairingToken() {
+    const input = document.getElementById('pairing-token');
+    const status = document.getElementById('pairing-status');
+    const token = input.value.trim();
+    if (!token) { return; }
+    status.textContent = 'Checking...';
+    status.className = 'status-msg';
+    try {
+      const response = await fetch('/api/pairing-token', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        status.textContent = body.detail || 'That token was not accepted.';
+        status.className = 'status-msg error';
+        return;
+      }
+      status.textContent = 'Connected.';
+      status.className = 'status-msg ok';
+      setTimeout(() => location.reload(), 600);
+    } catch (error) {
+      status.textContent = 'Could not reach the server — try again in a moment.';
+      status.className = 'status-msg error';
+    }
+  }
+</script>
+{% endblock %}

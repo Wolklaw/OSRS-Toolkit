@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}RuneScope{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #14161b;
+      --panel: #1c1f26;
+      --border: #2a2e38;
+      --text: #e6e6e6;
+      --muted: #8b8f9a;
+      --accent: #d5ad52;
+      --accent-dim: #a8843e;
+      --good: #70d6a1;
+      --bad: #e2685f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header .brand {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    header .brand span { color: var(--accent); }
+    header .account {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    header .account img {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+    }
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat { text-align: left; }
+    .stat .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat .value { font-size: 1.5rem; font-weight: 700; margin-top: 0.2rem; }
+    .value.positive { color: var(--good); }
+    .value.negative { color: var(--bad); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:last-child td { border-bottom: none; }
+    .empty { color: var(--muted); padding: 1rem 0; }
+    .button {
+      display: inline-block;
+      background: var(--accent);
+      color: #14161b;
+      font-weight: 600;
+      padding: 0.55rem 1.1rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .button:hover { background: var(--accent-dim); text-decoration: none; }
+    .button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .button.secondary:hover { background: var(--border); }
+    input[type=text] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.5rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 100%;
+      max-width: 360px;
+    }
+    .row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.5rem; }
+    .status-msg { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+    .status-msg.ok { color: var(--good); }
+    .status-msg.error { color: var(--bad); }
+    .landing { text-align: center; padding: 5rem 1rem; }
+    .landing h1 {
+      font-size: 3rem;
+      margin: 0 0 0.5rem;
+      text-shadow: -1px 0 var(--bad), 1px 0 #5fb0e2;
+    }
+    .landing p { color: var(--muted); font-size: 1.05rem; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Rune<span>Scope</span></div>
+    {% if account %}
+    <div class="account">
+      {% if account.avatar_url %}<img src="{{ account.avatar_url }}" alt="">{% endif %}
+      <span>{{ account.username }}</span>
+      <button class="button secondary" onclick="signOut()">Sign out</button>
+    </div>
+    {% endif %}
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <script>
+    async function signOut() {
+      await fetch('/auth/logout', { method: 'POST' });
+      location.href = '/';
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
