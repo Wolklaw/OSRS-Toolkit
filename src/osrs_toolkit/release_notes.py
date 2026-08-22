@@ -249,9 +249,7 @@ def catch_up_to_html(releases: Sequence[ReleaseNotes]) -> str:
         )
     parts.append(notes_to_html(newest))
     if earlier:
-        parts.append(
-            "<h3 style='margin-bottom:2px;'>Also new since you last opened the app</h3>"
-        )
+        parts.append("<h3 style='margin-bottom:2px;'>Also new since you last opened the app</h3>")
         for release in earlier:
             date = f" <span style='color:{MUTED};'>· {html.escape(release.date)}</span>"
             parts.append(

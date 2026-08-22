@@ -83,7 +83,8 @@ def backdate(
     """
     opened = datetime.now(UTC) - timedelta(hours=opened_hours_ago)
     finished = (
-        None if held_hours is None
+        None
+        if held_hours is None
         else (opened + timedelta(hours=held_hours)).isoformat(timespec="seconds")
     )
     with window._journal._connect() as connection:
@@ -127,19 +128,13 @@ def add_journal_examples(window: MainWindow) -> int:
     """Populate a private demo journal that shows every important trade state."""
     strategy = window.strategy.currentText()
 
-    listed_id = window._journal.track(
-        1519, "Willow branch", 1_333, 117, 127, strategy
-    )
+    listed_id = window._journal.track(1519, "Willow branch", 1_333, 117, 127, strategy)
     window._journal.update_tracked(listed_id, "Listed for sale", 118, None)
 
-    cancelled_id = window._journal.track(
-        4151, "Abyssal whip", 1, 1_500_000, 1_550_000, strategy
-    )
+    cancelled_id = window._journal.track(4151, "Abyssal whip", 1, 1_500_000, 1_550_000, strategy)
     window._journal.update_tracked(cancelled_id, "Cancelled", None, None, [])
 
-    loss_id = window._journal.track(
-        2353, "Steel bar", 1_200, 450, 500, strategy
-    )
+    loss_id = window._journal.track(2353, "Steel bar", 1_200, 450, 500, strategy)
     window._journal.update_tracked(
         loss_id,
         "Completed",
@@ -148,9 +143,7 @@ def add_journal_examples(window: MainWindow) -> int:
         [(1_200, 440)],
     )
 
-    variable_id = window._journal.track(
-        21316, "Amethyst broad bolts", 1_000, 195, 212, strategy
-    )
+    variable_id = window._journal.track(21316, "Amethyst broad bolts", 1_000, 195, 212, strategy)
     window._journal.update_tracked(
         variable_id,
         "Completed",
@@ -175,9 +168,7 @@ def add_journal_examples(window: MainWindow) -> int:
             max(1, overnight.sell_price - 2),
         )
 
-    partial_id = window._journal.track(
-        19478, "Dragon dart tip", 1_000, 733, 850, strategy
-    )
+    partial_id = window._journal.track(19478, "Dragon dart tip", 1_000, 733, 850, strategy)
     window._journal.update_tracked(
         partial_id,
         "Partially sold",
@@ -481,9 +472,7 @@ def main() -> int:
         save_widget(window, output_dir / "trade-journal.png", app)
 
         partial_trade = next(
-            trade
-            for trade in window._journal.list_tracked()
-            if trade.position_id == partial_id
+            trade for trade in window._journal.list_tracked() if trade.position_id == partial_id
         )
         fills = UpdateTrackedTradeDialog(partial_trade, window)
         fills.resize(720, 660)
@@ -574,9 +563,7 @@ def main() -> int:
         settings.resize(760, 760)
         tabs = settings.findChild(QTabWidget)
         if tabs is not None:
-            about_index = next(
-                (i for i in range(tabs.count()) if tabs.tabText(i) == "About"), 1
-            )
+            about_index = next((i for i in range(tabs.count()) if tabs.tabText(i) == "About"), 1)
             tabs.setCurrentIndex(about_index)
         settings.update_status.setText(f"You are up to date — version {__version__}.")
         settings.update_button.setText("Check again")

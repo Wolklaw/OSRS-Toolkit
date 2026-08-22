@@ -78,9 +78,7 @@ def _draw_sidebar(painter: QPainter) -> None:
 
     painter.setPen(GOLD_BRIGHT)
     painter.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
-    painter.drawText(
-        QRectF(0.0, 152.0, width, 24.0), Qt.AlignmentFlag.AlignCenter, "OSRS Toolkit"
-    )
+    painter.drawText(QRectF(0.0, 152.0, width, 24.0), Qt.AlignmentFlag.AlignCenter, "OSRS Toolkit")
 
     painter.setPen(QPen(GOLD, 1.0))
     painter.drawLine(int(width / 2 - 28), 182, int(width / 2 + 28), 182)

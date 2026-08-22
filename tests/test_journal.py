@@ -1007,7 +1007,9 @@ def _synced_trade(event_id: str, occurred_at: str = "2026-08-14T12:00:00+00:00")
         direction="buy",
         metadata={},
         items=(
-            SyncedItem(flow="received", item_id=4151, item_name="Whip", quantity=1, unit_value=1_500),
+            SyncedItem(
+                flow="received", item_id=4151, item_name="Whip", quantity=1, unit_value=1_500
+            ),
             SyncedItem(flow="given", item_id=995, item_name="Coins", quantity=1_500, unit_value=1),
         ),
     )
@@ -1291,9 +1293,7 @@ def _synced_fill(event_id: str, occurred_at: datetime) -> SyncedTrade:
         metadata={},
         items=(
             SyncedItem(flow="given", item_id=995, item_name="Coins", quantity=5_000, unit_value=1),
-            SyncedItem(
-                flow="received", item_id=453, item_name="Coal", quantity=50, unit_value=100
-            ),
+            SyncedItem(flow="received", item_id=453, item_name="Coal", quantity=50, unit_value=100),
         ),
     )
 

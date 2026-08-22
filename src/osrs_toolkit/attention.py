@@ -46,9 +46,7 @@ def newly_reached[Key: Hashable](
     if previous is None:
         return frozenset()
     return frozenset(
-        key
-        for key, state in current.items()
-        if state in states and previous.get(key) not in states
+        key for key, state in current.items() if state in states and previous.get(key) not in states
     )
 
 

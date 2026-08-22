@@ -107,7 +107,9 @@ class WikiMarketClient:
         for item_key, price in latest.items():
             high, low = price.get("high"), price.get("low")
             high_time, low_time = price.get("highTime"), price.get("lowTime")
-            if not all(isinstance(value, int) and value > 0 for value in (high, low, high_time, low_time)):
+            if not all(
+                isinstance(value, int) and value > 0 for value in (high, low, high_time, low_time)
+            ):
                 continue
             five_item = five.get(item_key, {})
             hour_item = hour.get(item_key, {})
@@ -117,11 +119,15 @@ class WikiMarketClient:
             low_volume_1h = int(hour_item.get("lowPriceVolume") or 0)
             points.append(
                 MarketPoint(
-                    item_id=int(item_key), high=high, low=low,
-                    high_time=high_time, low_time=low_time,
+                    item_id=int(item_key),
+                    high=high,
+                    low=low,
+                    high_time=high_time,
+                    low_time=low_time,
                     volume_5m=high_volume_5m + low_volume_5m,
                     volume_1h=high_volume_1h + low_volume_1h,
-                    average_5m=_midpoint(five_item), average_1h=_midpoint(hour_item),
+                    average_5m=_midpoint(five_item),
+                    average_1h=_midpoint(hour_item),
                     average_high_5m=_price(five_item.get("avgHighPrice")),
                     average_low_5m=_price(five_item.get("avgLowPrice")),
                     average_high_1h=_price(hour_item.get("avgHighPrice")),

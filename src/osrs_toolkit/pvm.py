@@ -162,8 +162,14 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Vorkath/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 70, "Prayer": 43, "Defence": 60},
         gear=(
-            GearRequirement("Anti-dragon breath protection", ("Anti-dragon shield", "Dragonfire shield", "Dragonfire ward")),
-            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow")),
+            GearRequirement(
+                "Anti-dragon breath protection",
+                ("Anti-dragon shield", "Dragonfire shield", "Dragonfire ward"),
+            ),
+            GearRequirement(
+                "Ranged weapon",
+                ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow"),
+            ),
             GearRequirement("Anti-venom", ("Anti-venom", "Anti-venom+")),
         ),
         gross_gp_per_hour=1_800_000,
@@ -175,10 +181,22 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Zulrah/Strategies",
         skill_requirements={"Hitpoints": 75, "Ranged": 70, "Magic": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")),
-            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff", "Tumeken's shadow")),
+            GearRequirement(
+                "Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")
+            ),
+            GearRequirement(
+                "Magic weapon",
+                (
+                    "Trident of the seas",
+                    "Trident of the swamp",
+                    "Sanguinesti staff",
+                    "Tumeken's shadow",
+                ),
+            ),
             GearRequirement("Anti-venom", ("Anti-venom", "Anti-venom+")),
-            GearRequirement("Serpentine helm or equivalent poison immunity", ("Serpentine helm", "Anti-venom+")),
+            GearRequirement(
+                "Serpentine helm or equivalent poison immunity", ("Serpentine helm", "Anti-venom+")
+            ),
         ),
         gross_gp_per_hour=1_600_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 5),
@@ -201,7 +219,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Kree%27arra/Strategies",
         skill_requirements={"Hitpoints": 70, "Ranged": 70, "Defence": 65, "Prayer": 43},
         gear=(
-            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow")),
+            GearRequirement(
+                "Ranged weapon",
+                ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow"),
+            ),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=900_000,
@@ -214,7 +235,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         skill_requirements={"Hitpoints": 75, "Slayer": 91, "Defence": 70, "Prayer": 43},
         gear=(
             GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
-            GearRequirement("Antifire protection (lava pools)", ("Antifire potion", "Super antifire potion")),
+            GearRequirement(
+                "Antifire protection (lava pools)", ("Antifire potion", "Super antifire potion")
+            ),
         ),
         gross_gp_per_hour=1_700_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 5),
@@ -225,7 +248,15 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/King_Black_Dragon/Strategies",
         skill_requirements={"Hitpoints": 65, "Prayer": 43},
         gear=(
-            GearRequirement("Anti-dragon breath protection", ("Anti-dragon shield", "Dragonfire shield", "Dragonfire ward", "Super antifire potion")),
+            GearRequirement(
+                "Anti-dragon breath protection",
+                (
+                    "Anti-dragon shield",
+                    "Dragonfire shield",
+                    "Dragonfire ward",
+                    "Super antifire potion",
+                ),
+            ),
         ),
         gross_gp_per_hour=350_000,
         supplies=_prayer_and_food(2, _SHARK, "Shark", 6),
@@ -235,9 +266,7 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         name="Giant Mole",
         wiki_url="https://oldschool.runescape.wiki/w/Giant_Mole/Strategies",
         skill_requirements={"Hitpoints": 50},
-        gear=(
-            GearRequirement("Strong melee weapon", ("Dragon scimitar",) + _META_MELEE_WEAPONS),
-        ),
+        gear=(GearRequirement("Strong melee weapon", ("Dragon scimitar",) + _META_MELEE_WEAPONS),),
         gross_gp_per_hour=450_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 4),
         notes="Low-requirement melee boss, good for practicing prayer flicking before harder content.",
@@ -259,7 +288,16 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Kalphite_Queen/Strategies",
         skill_requirements={"Hitpoints": 50},
         gear=(
-            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Zaryte crossbow", "Twisted bow", "Tumeken's shadow")),
+            GearRequirement(
+                "Ranged or Magic weapon",
+                (
+                    "Toxic blowpipe",
+                    "Trident of the seas",
+                    "Zaryte crossbow",
+                    "Twisted bow",
+                    "Tumeken's shadow",
+                ),
+            ),
         ),
         gross_gp_per_hour=400_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 6),
@@ -271,7 +309,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         skill_requirements={"Hitpoints": 70, "Prayer": 43},
         gear=(
             GearRequirement("Melee weapon", _META_MELEE_WEAPONS),
-            GearRequirement("Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")),
+            GearRequirement(
+                "Ranged weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow")
+            ),
             GearRequirement("Protection prayer access", ("Prayer potion",)),
         ),
         gross_gp_per_hour=700_000,
@@ -284,7 +324,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         skill_requirements={"Hitpoints": 75, "Strength": 70, "Prayer": 43},
         gear=(
             GearRequirement("Strong melee weapon", _META_MELEE_WEAPONS),
-            GearRequirement("Spirit shield or equivalent", ("Spectral spirit shield", "Elysian spirit shield", "Arcane spirit shield")),
+            GearRequirement(
+                "Spirit shield or equivalent",
+                ("Spectral spirit shield", "Elysian spirit shield", "Arcane spirit shield"),
+            ),
         ),
         gross_gp_per_hour=1_200_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 5),
@@ -295,7 +338,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Thermonuclear_smoke_devil/Strategies",
         skill_requirements={"Slayer": 93, "Hitpoints": 70},
         gear=(
-            GearRequirement("Ranged or Magic weapon", ("Toxic blowpipe", "Trident of the seas", "Armadyl crossbow", "Tumeken's shadow")),
+            GearRequirement(
+                "Ranged or Magic weapon",
+                ("Toxic blowpipe", "Trident of the seas", "Armadyl crossbow", "Tumeken's shadow"),
+            ),
             GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask")),
         ),
         gross_gp_per_hour=500_000,
@@ -307,7 +353,15 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Kraken/Strategies",
         skill_requirements={"Slayer": 87, "Magic": 68},
         gear=(
-            GearRequirement("Magic weapon", ("Trident of the seas", "Trident of the swamp", "Sanguinesti staff", "Tumeken's shadow")),
+            GearRequirement(
+                "Magic weapon",
+                (
+                    "Trident of the seas",
+                    "Trident of the swamp",
+                    "Sanguinesti staff",
+                    "Tumeken's shadow",
+                ),
+            ),
         ),
         gross_gp_per_hour=600_000,
         supplies=_prayer_and_food(2, _SHARK, "Shark", 8),
@@ -319,7 +373,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         skill_requirements={"Slayer": 95, "Hitpoints": 75, "Defence": 70},
         gear=(
             GearRequirement("Strong melee weapon", ("Dragon hunter lance",) + _META_MELEE_WEAPONS),
-            GearRequirement("Ranged weapon", ("Dragon hunter crossbow", "Armadyl crossbow", "Zaryte crossbow")),
+            GearRequirement(
+                "Ranged weapon", ("Dragon hunter crossbow", "Armadyl crossbow", "Zaryte crossbow")
+            ),
         ),
         gross_gp_per_hour=1_900_000,
         supplies=_prayer_and_food(4, _SARADOMIN_BREW_4, "Saradomin brew(4)", 6),
@@ -342,7 +398,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Sarachnis/Strategies",
         skill_requirements={"Hitpoints": 50},
         gear=(
-            GearRequirement("Strong melee weapon", ("Rune scimitar", "Dragon scimitar") + _META_MELEE_WEAPONS),
+            GearRequirement(
+                "Strong melee weapon", ("Rune scimitar", "Dragon scimitar") + _META_MELEE_WEAPONS
+            ),
         ),
         gross_gp_per_hour=350_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 5),
@@ -377,7 +435,11 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Venenatis/Strategies",
         skill_requirements={"Hitpoints": 70, "Ranged": 70, "Prayer": 43},
         gear=(
-            GearRequirement("Ranged or melee weapon", ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow") + _META_MELEE_WEAPONS),
+            GearRequirement(
+                "Ranged or melee weapon",
+                ("Toxic blowpipe", "Armadyl crossbow", "Zaryte crossbow", "Twisted bow")
+                + _META_MELEE_WEAPONS,
+            ),
             GearRequirement("Anti-venom", ("Anti-venom", "Anti-venom+")),
         ),
         gross_gp_per_hour=450_000,
@@ -389,7 +451,10 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/Chaos_Elemental/Strategies",
         skill_requirements={"Hitpoints": 60},
         gear=(
-            GearRequirement("Strong melee or ranged weapon", ("Toxic blowpipe", "Rune crossbow", "Zaryte crossbow") + _META_MELEE_WEAPONS),
+            GearRequirement(
+                "Strong melee or ranged weapon",
+                ("Toxic blowpipe", "Rune crossbow", "Zaryte crossbow") + _META_MELEE_WEAPONS,
+            ),
         ),
         gross_gp_per_hour=300_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 6),
@@ -439,7 +504,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         wiki_url="https://oldschool.runescape.wiki/w/The_Whisperer/Strategies",
         skill_requirements={"Hitpoints": 75, "Magic": 90, "Prayer": 77},
         gear=(
-            GearRequirement("Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")),
+            GearRequirement(
+                "Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")
+            ),
             GearRequirement("Blackstone fragment", ("Blackstone fragment",)),
         ),
         gross_gp_per_hour=6_000_000,
@@ -470,7 +537,9 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
                 "Ranged weapon",
                 ("Twisted bow", "Zaryte crossbow", "Armadyl crossbow", "Toxic blowpipe"),
             ),
-            GearRequirement("Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")),
+            GearRequirement(
+                "Magic weapon", ("Sanguinesti staff", "Trident of the swamp", "Tumeken's shadow")
+            ),
             GearRequirement("Face mask or equivalent", ("Slayer helmet", "Facemask", "Gas mask")),
         ),
         gross_gp_per_hour=6_500_000,
@@ -481,9 +550,7 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
         name="Scurrius",
         wiki_url="https://oldschool.runescape.wiki/w/Scurrius/Strategies",
         skill_requirements={"Hitpoints": 60, "Prayer": 43},
-        gear=(
-            GearRequirement("Protection prayer access", ("Prayer potion",)),
-        ),
+        gear=(GearRequirement("Protection prayer access", ("Prayer potion",)),),
         gross_gp_per_hour=190_000,
         supplies=_prayer_and_food(1, _SHARK, "Shark", 5),
         notes="No formal requirements beyond 60 combat. Attacks rotate between melee, ranged, and magic, so quick prayer switching matters more than any one weapon.",
@@ -570,9 +637,7 @@ PVM_ACTIVITIES: tuple[PvmActivity, ...] = (
 )
 
 
-def assess_readiness(
-    activity: PvmActivity, snapshot: LoadoutSnapshot | None
-) -> ActivityReadiness:
+def assess_readiness(activity: PvmActivity, snapshot: LoadoutSnapshot | None) -> ActivityReadiness:
     """Compare a loadout snapshot against one activity's checklist.
 
     Gear is matched by item name (case-insensitive, dose suffix ignored) across equipment,

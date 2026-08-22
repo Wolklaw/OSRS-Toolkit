@@ -89,9 +89,7 @@ def test_whats_new_shows_again_after_an_upgrade(window: MainWindow, monkeypatch)
     assert whats_new.shown == [NOTES, EARLIER], "only the newest release was shown"
 
 
-def test_a_first_run_announces_itself_without_a_history(
-    window: MainWindow, monkeypatch
-) -> None:
+def test_a_first_run_announces_itself_without_a_history(window: MainWindow, monkeypatch) -> None:
     """Nothing was missed on a fresh install, so it opens on this version alone rather
     than on releases the machine never ran."""
     _whats_new, _update = _patch_dialogs(monkeypatch)

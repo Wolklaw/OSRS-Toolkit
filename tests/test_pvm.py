@@ -125,8 +125,13 @@ def test_gp_estimate_nets_live_supply_cost_from_the_gross_baseline() -> None:
     now = 1_000_000
     points = [
         MarketPoint(
-            item_id=supply.item_id, high=100, low=90, high_time=now - 60, low_time=now - 60,
-            volume_5m=500, volume_1h=5_000,
+            item_id=supply.item_id,
+            high=100,
+            low=90,
+            high_time=now - 60,
+            low_time=now - 60,
+            volume_5m=500,
+            volume_1h=5_000,
         )
         for supply in barrows.supplies
     ]
@@ -157,8 +162,13 @@ def test_gp_estimate_prices_what_it_can_when_one_supply_item_is_missing() -> Non
     priced_supply = barrows.supplies[0]
     points = [
         MarketPoint(
-            item_id=priced_supply.item_id, high=100, low=90, high_time=999_940, low_time=999_940,
-            volume_5m=500, volume_1h=5_000,
+            item_id=priced_supply.item_id,
+            high=100,
+            low=90,
+            high_time=999_940,
+            low_time=999_940,
+            volume_5m=500,
+            volume_1h=5_000,
         )
     ]
 

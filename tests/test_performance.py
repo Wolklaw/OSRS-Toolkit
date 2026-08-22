@@ -40,9 +40,7 @@ def _position(
 ) -> TrackedTrade:
     """A tracked position with the weighted-average buy price the repository would store."""
     bought = sum(fill_quantity for fill_quantity, _price in buys)
-    actual_buy = (
-        round(sum(q * p for q, p in buys) / bought) if bought else None
-    )
+    actual_buy = round(sum(q * p for q, p in buys) / bought) if bought else None
     return TrackedTrade(
         position_id=position_id,
         created_at=created_at.isoformat(timespec="seconds"),
@@ -57,9 +55,7 @@ def _position(
         sale_fills=tuple(
             SaleFill(index, position_id, q, p) for index, (q, p) in enumerate(sales, 1)
         ),
-        buy_fills=tuple(
-            BuyFill(index, position_id, q, p) for index, (q, p) in enumerate(buys, 1)
-        ),
+        buy_fills=tuple(BuyFill(index, position_id, q, p) for index, (q, p) in enumerate(buys, 1)),
         strategy=strategy,
         completed_at=completed_at.isoformat(timespec="seconds") if completed_at else None,
     )

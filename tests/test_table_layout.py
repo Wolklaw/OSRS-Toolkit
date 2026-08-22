@@ -25,13 +25,17 @@ def _price_every_skilling_input(window: MainWindow) -> None:
         item.item_id for method in SKILL_METHODS for item in (*method.inputs, *method.outputs)
     }
     window._mappings = {
-        item_id: ItemMapping(item_id, f"Item {item_id}", False, 1_000, 100)
-        for item_id in item_ids
+        item_id: ItemMapping(item_id, f"Item {item_id}", False, 1_000, 100) for item_id in item_ids
     }
     window._points = [
         MarketPoint(
-            item_id=item_id, high=200, low=150, high_time=now - 60, low_time=now - 60,
-            volume_5m=500, volume_1h=5_000,
+            item_id=item_id,
+            high=200,
+            low=150,
+            high_time=now - 60,
+            low_time=now - 60,
+            volume_5m=500,
+            volume_1h=5_000,
         )
         for item_id in item_ids
     ]

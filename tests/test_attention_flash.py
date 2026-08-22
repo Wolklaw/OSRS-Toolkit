@@ -84,9 +84,7 @@ def _finish_the_blink(window: MainWindow, qt_app: QApplication) -> None:
 # --- a finished buy ---------------------------------------------------------------------
 
 
-def test_a_finished_buy_lights_up_its_journal_row(
-    window: MainWindow, qt_app: QApplication
-) -> None:
+def test_a_finished_buy_lights_up_its_journal_row(window: MainWindow, qt_app: QApplication) -> None:
     """The feature: the buy is done, and the row you now have to sell blinks yellow."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._render_journal()
@@ -114,9 +112,7 @@ def test_the_blink_stops_by_itself_and_gives_the_row_back(
     assert _lit_rows(window) == set()
 
 
-def test_a_re_render_mid_blink_keeps_the_row_lit(
-    window: MainWindow, qt_app: QApplication
-) -> None:
+def test_a_re_render_mid_blink_keeps_the_row_lit(window: MainWindow, qt_app: QApplication) -> None:
     """The journal re-renders on every import that touches a position, which builds fresh
     cells with nothing painted on them."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
@@ -540,9 +536,7 @@ def test_two_offers_finishing_together_still_share_one_blink(
 
 def _ask_cell(window: MainWindow, item_name: str):
     table = window.journal_table
-    row = next(
-        row for row in range(table.rowCount()) if table.item(row, 2).text() == item_name
-    )
+    row = next(row for row in range(table.rowCount()) if table.item(row, 2).text() == item_name)
     return table.item(row, 6)
 
 
@@ -578,7 +572,10 @@ def test_the_price_stops_shouting_once_the_offer_is_listed(window: MainWindow) -
     assert _ask_cell(window, "Abyssal whip").font().bold()
 
     window._journal.apply_offer_opened(
-        item_id=4_151, item_name="Abyssal whip", side="sell", total_quantity=10,
+        item_id=4_151,
+        item_name="Abyssal whip",
+        side="sell",
+        total_quantity=10,
         offer_price=1_700,
     )
     window._render_journal()
@@ -713,9 +710,7 @@ def test_a_second_flip_finishing_still_shows_while_the_first_stays_queued(
     """One position hidden by the filter must not swallow the flash of another the
     filter is showing just fine."""
     hidden = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
-    window._journal.update_tracked(
-        hidden, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
-    )
+    window._journal.update_tracked(hidden, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)])
     shown = window._journal.track(1_234, "Dragon bones", 100, 2_000, 2_500)
     window.journal_status_filter.setCurrentText("Active trades")
     _watching(window, qt_app)

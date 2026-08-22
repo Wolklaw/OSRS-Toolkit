@@ -383,9 +383,20 @@ def test_imports_loadout_snapshot_and_replaces_earlier_one(tmp_path: Path) -> No
     first = _event(
         "loadout_snapshot",
         {
-            "equipment": [{"item_id": 1, "item_name": "Rune scimitar", "quantity": 1, "unit_value": 15_000}],
-            "inventory": [{"item_id": 995, "item_name": "Coins", "quantity": 100_000, "unit_value": 1}],
-            "bank": [{"item_id": 11_802, "item_name": "Armadyl godsword", "quantity": 1, "unit_value": 40_000_000}],
+            "equipment": [
+                {"item_id": 1, "item_name": "Rune scimitar", "quantity": 1, "unit_value": 15_000}
+            ],
+            "inventory": [
+                {"item_id": 995, "item_name": "Coins", "quantity": 100_000, "unit_value": 1}
+            ],
+            "bank": [
+                {
+                    "item_id": 11_802,
+                    "item_name": "Armadyl godsword",
+                    "quantity": 1,
+                    "unit_value": 40_000_000,
+                }
+            ],
             "skills": {"Attack": 75, "Strength": 80},
         },
     )
@@ -404,7 +415,14 @@ def test_imports_loadout_snapshot_and_replaces_earlier_one(tmp_path: Path) -> No
         {
             "equipment": [],
             "inventory": [],
-            "bank": [{"item_id": 11_802, "item_name": "Armadyl godsword", "quantity": 2, "unit_value": 40_000_000}],
+            "bank": [
+                {
+                    "item_id": 11_802,
+                    "item_name": "Armadyl godsword",
+                    "quantity": 2,
+                    "unit_value": 40_000_000,
+                }
+            ],
             "skills": {"Attack": 76, "Strength": 80},
         },
     )
@@ -1086,9 +1104,7 @@ def test_ge_offer_status_label_reads_naturally() -> None:
 def _write_offer_screen(root: Path, account_hash: str, payload: object) -> None:
     state_dir = root / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / f"{account_hash}-screen.json").write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+    (state_dir / f"{account_hash}-screen.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _screen_payload(**overrides: object) -> dict[str, object]:

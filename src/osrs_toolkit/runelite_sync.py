@@ -154,9 +154,7 @@ class RuneLiteSyncImporter:
     still means the folder, which is what every existing caller does.
     """
 
-    def __init__(
-        self, sync_root: Path | None = None, *, source: SyncSource | None = None
-    ) -> None:
+    def __init__(self, sync_root: Path | None = None, *, source: SyncSource | None = None) -> None:
         self.source = source or LocalFileSource(sync_root)
         self.sync_root = getattr(self.source, "sync_root", None)
 
@@ -418,7 +416,11 @@ class RuneLiteSyncImporter:
     ) -> bool:
         item = trade.received[0] if trade.direction == "buy" else trade.given[0]
         total_quantity = trade.metadata.get("total_quantity")
-        if not isinstance(total_quantity, int) or isinstance(total_quantity, bool) or total_quantity <= 0:
+        if (
+            not isinstance(total_quantity, int)
+            or isinstance(total_quantity, bool)
+            or total_quantity <= 0
+        ):
             total_quantity = None
         try:
             position_id = repository.apply_synced_ge_fill(
@@ -485,9 +487,7 @@ def parse_sync_event(payload: object) -> ParsedEvent:
     if not isinstance(body, dict):
         raise SyncEventError("Missing payload")
     if event_type == "ge_fill":
-        return _parse_ge_fill(
-            event_id, occurred_at, account_hash, account_name, body
-        )
+        return _parse_ge_fill(event_id, occurred_at, account_hash, account_name, body)
     if event_type == "player_trade":
         return _parse_player_trade(event_id, occurred_at, account_hash, account_name, body)
     if event_type == "ge_offer_opened":

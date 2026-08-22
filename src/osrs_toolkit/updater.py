@@ -15,9 +15,7 @@ from pathlib import Path
 from osrs_toolkit import __version__
 
 LATEST_RELEASE_URL = "https://api.github.com/repos/Wolklaw/OSRS-Toolkit/releases/latest"
-USER_AGENT = (
-    f"OSRS-Toolkit-Updater/{__version__} (+https://github.com/Wolklaw/OSRS-Toolkit)"
-)
+USER_AGENT = f"OSRS-Toolkit-Updater/{__version__} (+https://github.com/Wolklaw/OSRS-Toolkit)"
 _FINALIZE_ATTEMPTS = 5
 _FINALIZE_RETRY_SECONDS = 0.4
 
@@ -105,7 +103,10 @@ def download_installer(
     digest = hashlib.sha256()
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response, partial.open("wb") as file:
+        with (
+            urllib.request.urlopen(request, timeout=timeout) as response,
+            partial.open("wb") as file,
+        ):
             total = int(response.headers.get("Content-Length", 0))
             downloaded = 0
             while chunk := response.read(1024 * 256):

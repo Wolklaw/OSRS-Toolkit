@@ -158,9 +158,7 @@ def test_pending_yields_events_with_their_id_as_the_handle():
 
 
 def test_pending_skips_an_event_with_no_id_since_it_could_never_be_acknowledged():
-    payload = {
-        "events": [{"event_type": "ge_fill"}, {"event_id": "", "event_type": "ge_fill"}]
-    }
+    payload = {"events": [{"event_type": "ge_fill"}, {"event_id": "", "event_type": "ge_fill"}]}
     with patch("urllib.request.urlopen", return_value=_response(payload)):
         assert list(_source().pending(scan_limit=500)) == []
 

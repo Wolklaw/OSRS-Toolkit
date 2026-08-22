@@ -30,9 +30,7 @@ PERIOD_FILTERS = (
     "This year",
 )
 
-_ACTIVE_STATUSES = frozenset(
-    {"Pending buy", "Bought", "Listed for sale", "Partially sold"}
-)
+_ACTIVE_STATUSES = frozenset({"Pending buy", "Bought", "Listed for sale", "Partially sold"})
 _COMPLETED_STATUSES = frozenset({"Completed", "Completed (manual)"})
 
 MoneyTone = Literal["positive", "negative", "muted", "neutral"]
@@ -100,9 +98,7 @@ def trade_within_period(timestamp: str | None, period: str, now: datetime) -> bo
     raise ValueError(f"Unknown period filter: {period}")
 
 
-def tracked_position_within_period(
-    completed_at: str | None, period: str, now: datetime
-) -> bool:
+def tracked_position_within_period(completed_at: str | None, period: str, now: datetime) -> bool:
     """Scope a tracked position to the selected period.
 
     The period filter scopes *history*, so it only applies to positions that have finished.
@@ -215,11 +211,7 @@ def offer_screen_positions(
         if candidate_item_id == item_id
     }
     wanted = (
-        _BUY_SIDE_STATUSES
-        if side == "buy"
-        else _SELL_SIDE_STATUSES
-        if side == "sell"
-        else None
+        _BUY_SIDE_STATUSES if side == "buy" else _SELL_SIDE_STATUSES if side == "sell" else None
     )
     if wanted is not None:
         on_side = frozenset(
@@ -290,11 +282,7 @@ def journal_pl_presentation(
         if remaining_quantity > 0:
             text += f" • {remaining_quantity:,} left"
         tone: MoneyTone = (
-            "positive"
-            if realized_profit > 0
-            else "negative"
-            if realized_profit < 0
-            else "neutral"
+            "positive" if realized_profit > 0 else "negative" if realized_profit < 0 else "neutral"
         )
         return JournalPLPresentation(text, tone)
 
@@ -307,7 +295,9 @@ def journal_pl_presentation(
         # roughly "the GE tax you'd pay if you resold it at cost" — an alarming, meaningless
         # number for something that was never going to be sold in the first place.
         return JournalPLPresentation(
-            "—", "neutral", "Marked Supplies — not tracked for profit, so there's no P/L to project."
+            "—",
+            "neutral",
+            "Marked Supplies — not tracked for profit, so there's no P/L to project.",
         )
 
     estimated_tone: MoneyTone = (

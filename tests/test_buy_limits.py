@@ -27,10 +27,19 @@ def _buy(
         metadata={},
         items=(
             SyncedItem(
-                flow="received", item_id=item_id, item_name=item_name,
-                quantity=quantity, unit_value=unit_value,
+                flow="received",
+                item_id=item_id,
+                item_name=item_name,
+                quantity=quantity,
+                unit_value=unit_value,
             ),
-            SyncedItem(flow="given", item_id=995, item_name="Coins", quantity=quantity * unit_value, unit_value=1),
+            SyncedItem(
+                flow="given",
+                item_id=995,
+                item_name="Coins",
+                quantity=quantity * unit_value,
+                unit_value=1,
+            ),
         ),
     )
 
@@ -46,8 +55,20 @@ def _sell(item_id: int, item_name: str, quantity: int, occurred_at: str) -> Sync
         direction="sell",
         metadata={},
         items=(
-            SyncedItem(flow="given", item_id=item_id, item_name=item_name, quantity=quantity, unit_value=100),
-            SyncedItem(flow="received", item_id=995, item_name="Coins", quantity=quantity * 100, unit_value=1),
+            SyncedItem(
+                flow="given",
+                item_id=item_id,
+                item_name=item_name,
+                quantity=quantity,
+                unit_value=100,
+            ),
+            SyncedItem(
+                flow="received",
+                item_id=995,
+                item_name="Coins",
+                quantity=quantity * 100,
+                unit_value=1,
+            ),
         ),
     )
 

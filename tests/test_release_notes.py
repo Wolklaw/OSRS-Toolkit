@@ -70,7 +70,9 @@ def test_unreleased_heading_is_not_a_version() -> None:
 def test_wrapped_bullets_are_joined() -> None:
     added = parse_changelog(SAMPLE)[0].sections[0]
     assert added.heading == "Added"
-    assert added.entries == ("A bullet that wraps onto a second line and should be joined back together.",)
+    assert added.entries == (
+        "A bullet that wraps onto a second line and should be joined back together.",
+    )
 
 
 def test_notes_for_version_ignores_a_v_prefix() -> None:

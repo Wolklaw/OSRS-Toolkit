@@ -140,9 +140,9 @@ def test_projected_zero_is_not_described_as_realized() -> None:
 )
 def test_realized_profit_tone_follows_its_sign(realized_profit: int, tone: str) -> None:
     sign = "+" if realized_profit > 0 else ""
-    assert journal_pl_presentation(
-        "Completed", 99_999, realized_profit
-    ) == JournalPLPresentation(f"{sign}{realized_profit:,} gp", tone)
+    assert journal_pl_presentation("Completed", 99_999, realized_profit) == JournalPLPresentation(
+        f"{sign}{realized_profit:,} gp", tone
+    )
 
 
 def test_realized_partial_profit_includes_remaining_quantity() -> None:
@@ -158,9 +158,7 @@ def test_realized_profit_takes_precedence_for_cancelled_partial_trade() -> None:
 
 
 def test_cancelled_break_even_with_sale_fills_is_described_as_realized() -> None:
-    presentation = journal_pl_presentation(
-        "Cancelled", 99_999, 0, remaining_quantity=3
-    )
+    presentation = journal_pl_presentation("Cancelled", 99_999, 0, remaining_quantity=3)
 
     assert presentation.tooltip == "Realized break-even result."
 
@@ -300,9 +298,7 @@ def test_a_plan_with_no_offer_on_the_grand_exchange_reads_as_planned() -> None:
 
 
 def test_a_plan_the_grand_exchange_is_holding_an_offer_for_stays_pending() -> None:
-    assert (
-        journal_display_status("Pending buy", 0, 12_404, frozenset({12_404})) == "Pending buy"
-    )
+    assert journal_display_status("Pending buy", 0, 12_404, frozenset({12_404})) == "Pending buy"
 
 
 def test_a_pending_buy_with_fills_stays_pending_even_with_no_offer_left() -> None:

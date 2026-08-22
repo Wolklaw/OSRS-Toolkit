@@ -69,9 +69,7 @@ def test_supplies_spend_rows_uses_the_most_recent_purchase_date(tmp_path: Path) 
 def test_total_supplies_spend_ignores_flips(tmp_path: Path) -> None:
     repository = JournalRepository(tmp_path / "journal.db")
     flip_id = repository.track(1234, "Dragon bones", 100, 2_000, 2_500)
-    repository.update_tracked(
-        flip_id, "Completed", None, None, [(100, 2_500)], [(100, 2_000)]
-    )
+    repository.update_tracked(flip_id, "Completed", None, None, [(100, 2_500)], [(100, 2_000)])
     supplies_id = repository.track(379, "Lobster", 100, 150, 150)
     repository.update_tracked(supplies_id, "Supplies", None, None, None, [(100, 150)])
 

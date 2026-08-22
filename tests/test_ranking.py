@@ -91,13 +91,16 @@ def test_ranker_rejects_fragile_one_gp_margin() -> None:
     point = MarketPoint(1, 6, 5, now, now, 100_000, 1_000_000, 5.5, 5.5)
 
     for strategy in ("Quick (up to 1h)", "Balanced (1–4h)", "Overnight (8–12h)"):
-        assert rank_flips(
-            mappings,
-            [point],
-            cash_stack=2_000_000,
-            strategy=strategy,
-            now=now,
-        ) == []
+        assert (
+            rank_flips(
+                mappings,
+                [point],
+                cash_stack=2_000_000,
+                strategy=strategy,
+                now=now,
+            )
+            == []
+        )
 
 
 def test_offer_targets_ignore_anomalous_below_market_trade() -> None:

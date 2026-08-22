@@ -78,7 +78,8 @@ def main() -> int:
     painter.setFont(QFont("Segoe UI", 40, QFont.Weight.Bold))
     painter.setPen(TEXT)
     painter.drawText(
-        QRectF(192, 62, 900, 62), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        QRectF(192, 62, 900, 62),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         "OSRS Toolkit",
     )
 
@@ -87,21 +88,24 @@ def main() -> int:
     painter.setFont(wordmark)
     painter.setPen(GOLD)
     painter.drawText(
-        QRectF(196, 120, 900, 30), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        QRectF(196, 120, 900, 30),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         "MARKET COMPANION",
     )
 
     painter.setFont(QFont("Segoe UI", 22))
     painter.setPen(TEXT)
     painter.drawText(
-        QRectF(72, 190, 1140, 36), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        QRectF(72, 190, 1140, 36),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         "Plan better trades. Record what actually happened.",
     )
 
     painter.setFont(QFont("Segoe UI", 15))
     painter.setPen(MUTED)
     painter.drawText(
-        QRectF(72, 238, 1140, 28), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        QRectF(72, 238, 1140, 28),
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
         "Free Windows app  ·  No login  ·  No game automation  ·  Your journal stays on your PC",
     )
 

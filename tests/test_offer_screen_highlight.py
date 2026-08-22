@@ -112,9 +112,7 @@ def _bold_columns(window: MainWindow, item_name: str) -> set[int]:
         if table.item(row, 2).text() != item_name:
             continue
         return {
-            column
-            for column in range(table.columnCount())
-            if table.item(row, column).font().bold()
+            column for column in range(table.columnCount()) if table.item(row, column).font().bold()
         }
     raise AssertionError(f"No row for {item_name}")
 
@@ -135,9 +133,7 @@ def test_the_open_offer_box_picks_out_the_row_and_its_two_figures(
     # Quantity and Buy suggestion: the two boxes the game is waiting on. The Status cell is
     # bold on every row already, so it comes along and is not what this is about.
     assert {3, 4} <= _bold_columns(window, "Revenant cave teleport")
-    assert window.journal_table.item(0, 3).foreground().color().name() == (
-        window._live_offer_color
-    )
+    assert window.journal_table.item(0, 3).foreground().color().name() == (window._live_offer_color)
 
 
 def test_closing_the_box_takes_the_highlight_back(window: MainWindow, tmp_path: Path) -> None:
@@ -213,9 +209,7 @@ def test_a_row_for_a_different_item_is_left_alone(window: MainWindow, tmp_path: 
     assert _washed_rows(window) == {"Revenant cave teleport"}
 
 
-def test_an_item_with_no_journal_row_highlights_nothing(
-    window: MainWindow, tmp_path: Path
-) -> None:
+def test_an_item_with_no_journal_row_highlights_nothing(window: MainWindow, tmp_path: Path) -> None:
     root = _connect(window, tmp_path)
     window._journal.track(4_151, "Abyssal whip", 1, 1_500, 1_700)
     _open_offer_box(root)
@@ -271,9 +265,7 @@ def test_offer_screen_positions_has_nothing_to_say_without_an_open_box() -> None
 # --- the rest of the trade ----------------------------------------------------------------
 
 
-def test_the_row_stays_lit_after_the_offer_is_confirmed(
-    window: MainWindow, tmp_path: Path
-) -> None:
+def test_the_row_stays_lit_after_the_offer_is_confirmed(window: MainWindow, tmp_path: Path) -> None:
     """Confirming closes the box but not the trade: the offer is now filling in front of you."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)

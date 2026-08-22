@@ -19,7 +19,9 @@ from osrs_toolkit.models import MarketPoint
 def _stale_position(window: MainWindow) -> int:
     """Asking 8,180; live suggestion will be set well below that."""
     position_id = window._journal.track(1234, "Antidote++(3)", 70, 7_125, 8_180)
-    window._journal.update_tracked(position_id, "Partially sold", None, None, [(1, 8_180)], [(70, 7_125)])
+    window._journal.update_tracked(
+        position_id, "Partially sold", None, None, [(1, 8_180)], [(70, 7_125)]
+    )
     return position_id
 
 

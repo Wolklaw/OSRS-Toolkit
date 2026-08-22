@@ -180,9 +180,7 @@ class ItemDetailsDialog(QDialog):
     def _history_loaded(self, points: list[TimeseriesPoint]) -> None:
         usable = [p for p in points if p.average_high is not None or p.average_low is not None]
         if not usable:
-            self.history_status.setText(
-                "No price history is available for this item yet."
-            )
+            self.history_status.setText("No price history is available for this item yet.")
             return
         buy_series = QLineSeries()
         buy_series.setName("Instant-buy average")
@@ -226,9 +224,7 @@ class ItemDetailsDialog(QDialog):
         self._update_watch_button()
 
     def _update_watch_button(self) -> None:
-        self.watch_button.setText(
-            "Remove from watchlist" if self.watched else "Add to watchlist"
-        )
+        self.watch_button.setText("Remove from watchlist" if self.watched else "Add to watchlist")
 
     def _request_tracking(self) -> None:
         self.track_requested = True

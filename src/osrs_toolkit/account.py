@@ -8,10 +8,31 @@ from dataclasses import dataclass
 from osrs_toolkit import __version__
 
 HISCORE_SKILLS = [
-    "Overall", "Attack", "Defence", "Strength", "Hitpoints", "Ranged", "Prayer",
-    "Magic", "Cooking", "Woodcutting", "Fletching", "Fishing", "Firemaking",
-    "Crafting", "Smithing", "Mining", "Herblore", "Agility", "Thieving",
-    "Slayer", "Farming", "Runecraft", "Hunter", "Construction", "Sailing",
+    "Overall",
+    "Attack",
+    "Defence",
+    "Strength",
+    "Hitpoints",
+    "Ranged",
+    "Prayer",
+    "Magic",
+    "Cooking",
+    "Woodcutting",
+    "Fletching",
+    "Fishing",
+    "Firemaking",
+    "Crafting",
+    "Smithing",
+    "Mining",
+    "Herblore",
+    "Agility",
+    "Thieving",
+    "Slayer",
+    "Farming",
+    "Runecraft",
+    "Hunter",
+    "Construction",
+    "Sailing",
 ]
 
 

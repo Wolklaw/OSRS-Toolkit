@@ -115,7 +115,9 @@ def rank_flips(
         liquidity = min(1.0, math.log1p(point.volume_1h) / math.log1p(20_000))
         stability = _stability(point)
         confidence = round(100 * (0.38 * liquidity + 0.34 * freshness + 0.28 * stability))
-        if confidence < int(settings["min_confidence"]) or stability < float(settings["min_stability"]):
+        if confidence < int(settings["min_confidence"]) or stability < float(
+            settings["min_stability"]
+        ):
             continue
         slot_fraction = 1 / max(1, slot_count)
         capital_fraction = max(float(settings["capital_fraction"]), slot_fraction)
@@ -145,13 +147,22 @@ def rank_flips(
         )
         candidates.append(
             FlipCandidate(
-                item_id=point.item_id, name=item.name, buy_price=buy_price,
-                sell_price=sell_price, tax=tax, profit_each=profit, roi=roi,
-                hourly_volume=point.volume_1h, projected_volume=projected_volume,
-                buy_limit=item.buy_limit, suggested_quantity=quantity,
+                item_id=point.item_id,
+                name=item.name,
+                buy_price=buy_price,
+                sell_price=sell_price,
+                tax=tax,
+                profit_each=profit,
+                roi=roi,
+                hourly_volume=point.volume_1h,
+                projected_volume=projected_volume,
+                buy_limit=item.buy_limit,
+                suggested_quantity=quantity,
                 capital_required=capital_required,
-                potential_profit=potential, confidence=confidence,
-                age_seconds=age, score=score,
+                potential_profit=potential,
+                confidence=confidence,
+                age_seconds=age,
+                score=score,
             )
         )
     return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)
@@ -240,9 +251,7 @@ def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
     priority = sorted(
         range(len(selected)),
         key=lambda index: (
-            selected[index].profit_each
-            * selected[index].confidence
-            / selected[index].buy_price,
+            selected[index].profit_each * selected[index].confidence / selected[index].buy_price,
             selected[index].score,
         ),
         reverse=True,
@@ -256,9 +265,7 @@ def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
     return quantities
 
 
-def _allocate_selected(
-    selected: list[FlipCandidate], cash_stack: int
-) -> list[FlipCandidate]:
+def _allocate_selected(selected: list[FlipCandidate], cash_stack: int) -> list[FlipCandidate]:
     """``_size_offers`` applied to the offers themselves, for the plan that is returned."""
     return [
         replace(
@@ -267,9 +274,7 @@ def _allocate_selected(
             capital_required=candidate.buy_price * quantity,
             potential_profit=candidate.profit_each * quantity,
         )
-        for candidate, quantity in zip(
-            selected, _size_offers(selected, cash_stack), strict=True
-        )
+        for candidate, quantity in zip(selected, _size_offers(selected, cash_stack), strict=True)
     ]
 
 

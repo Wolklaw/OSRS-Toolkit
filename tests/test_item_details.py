@@ -42,7 +42,9 @@ def _dialog(qt_app: QApplication, client: object | None = None) -> ItemDetailsDi
     return dialog
 
 
-def _wait_for_thread(qt_app: QApplication, dialog: ItemDetailsDialog, timeout_ms: int = 2_000) -> None:
+def _wait_for_thread(
+    qt_app: QApplication, dialog: ItemDetailsDialog, timeout_ms: int = 2_000
+) -> None:
     thread = dialog._history_thread
     if thread is None:
         return

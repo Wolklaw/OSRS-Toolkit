@@ -183,9 +183,7 @@ def _select_only_row(window: MainWindow) -> None:
     window.journal_table.setCurrentCell(0, 0)
 
 
-def test_a_planned_row_can_be_deleted(
-    window: MainWindow, tmp_path: Path, monkeypatch
-) -> None:
+def test_a_planned_row_can_be_deleted(window: MainWindow, tmp_path: Path, monkeypatch) -> None:
     """Regression: the Status cell carries the row's stored status for the buttons to act on,
     and showing "Planned" there made Delete route the position id at the manual-entry table
     instead — where it matched nothing, so the row could not be removed at all."""

@@ -124,8 +124,7 @@ class TrackedTrade:
     @property
     def suggestion_was_refreshed(self) -> bool:
         return bool(
-            self.suggestion_reviewed_at
-            and self.suggestion_reviewed_at[:10] > self.created_at[:10]
+            self.suggestion_reviewed_at and self.suggestion_reviewed_at[:10] > self.created_at[:10]
         )
 
     @property
@@ -267,9 +266,7 @@ class LoadoutSnapshot:
     @property
     def owned_item_ids(self) -> frozenset[int]:
         """Items available for a PvM trip: equipped, carried, or one bank trip away."""
-        return frozenset(
-            item.item_id for item in (*self.equipment, *self.inventory, *self.bank)
-        )
+        return frozenset(item.item_id for item in (*self.equipment, *self.inventory, *self.bank))
 
     def quantity_owned(self, item_id: int) -> int:
         return sum(
@@ -761,9 +758,7 @@ class JournalRepository:
                     str(row["completed_at"]) if row["completed_at"] is not None else None
                 ),
                 listed_sell_price=(
-                    int(row["listed_sell_price"])
-                    if row["listed_sell_price"] is not None
-                    else None
+                    int(row["listed_sell_price"]) if row["listed_sell_price"] is not None else None
                 ),
                 account_hash=(
                     str(row["account_hash"]) if row["account_hash"] is not None else None
@@ -800,7 +795,9 @@ class JournalRepository:
                 if bought_quantity > effective_quantity:
                     raise ValueError("Buy fills exceed the tracked quantity")
                 if status == "Completed" and bought_quantity != effective_quantity:
-                    raise ValueError("A completed trade must account for the full quantity of buy fills")
+                    raise ValueError(
+                        "A completed trade must account for the full quantity of buy fills"
+                    )
                 actual_buy = (
                     round(
                         sum(fill_quantity * price for fill_quantity, price in buy_fills)
@@ -849,10 +846,7 @@ class JournalRepository:
                     INSERT INTO tracked_sale_fills (position_id, quantity, sell_price)
                     VALUES (?, ?, ?)
                     """,
-                    [
-                        (position_id, fill_quantity, price)
-                        for fill_quantity, price in sale_fills
-                    ],
+                    [(position_id, fill_quantity, price) for fill_quantity, price in sale_fills],
                 )
             if buy_fills is not None:
                 connection.execute(
@@ -863,10 +857,7 @@ class JournalRepository:
                     INSERT INTO tracked_buy_fills (position_id, quantity, buy_price)
                     VALUES (?, ?, ?)
                     """,
-                    [
-                        (position_id, fill_quantity, price)
-                        for fill_quantity, price in buy_fills
-                    ],
+                    [(position_id, fill_quantity, price) for fill_quantity, price in buy_fills],
                 )
 
     def _completion_time(
@@ -961,9 +952,7 @@ class JournalRepository:
                 remaining = trade.quantity - trade.bought_quantity
                 if remaining < quantity:
                     continue
-                new_buy_fills = [
-                    (fill.quantity, fill.buy_price) for fill in trade.buy_fills
-                ]
+                new_buy_fills = [(fill.quantity, fill.buy_price) for fill in trade.buy_fills]
                 new_buy_fills.append((quantity, unit_price))
                 new_status = (
                     trade.status
@@ -986,9 +975,7 @@ class JournalRepository:
                 remaining = stock - trade.sold_quantity
                 if remaining < quantity:
                     continue
-                new_sale_fills = [
-                    (fill.quantity, fill.sell_price) for fill in trade.sale_fills
-                ]
+                new_sale_fills = [(fill.quantity, fill.sell_price) for fill in trade.sale_fills]
                 new_sale_fills.append((quantity, unit_price))
                 new_status = (
                     trade.status
@@ -1018,7 +1005,11 @@ class JournalRepository:
             # ge_offer_opened event starts tracking it properly from the outset.
             return None
         position_id = self.track(
-            item_id, item_name, total_quantity, unit_price, unit_price,
+            item_id,
+            item_name,
+            total_quantity,
+            unit_price,
+            unit_price,
             account_hash=account_hash,
         )
         status = "Bought" if quantity == total_quantity else "Pending buy"
@@ -1106,13 +1097,15 @@ class JournalRepository:
             # adopts a flip that was never placed, and resizes it to an offer that has
             # nothing to do with it, while the position doing the buying is left behind.
             planned = (
-                already_tracked or untouched_plan
-                if restored
-                else untouched_plan or already_tracked
+                already_tracked or untouched_plan if restored else untouched_plan or already_tracked
             )
             if planned is None:
                 position_id = self.track(
-                    item_id, item_name, total_quantity, offer_price, offer_price,
+                    item_id,
+                    item_name,
+                    total_quantity,
+                    offer_price,
+                    offer_price,
                     account_hash=account_hash,
                 )
                 if suggested_sell_price is not None and suggested_sell_price > offer_price:
@@ -1179,9 +1172,7 @@ class JournalRepository:
             "Listed for sale",
             candidate.actual_buy,
             candidate.actual_sell,
-            quantity=(
-                candidate.bought_quantity if candidate.status == "Pending buy" else None
-            ),
+            quantity=(candidate.bought_quantity if candidate.status == "Pending buy" else None),
         )
         # The one moment the app learns what the player is really asking. Dropping it left the
         # Needs attention flag grading every listing against the app's own original target, so
@@ -1316,9 +1307,7 @@ class JournalRepository:
 
     def delete_tracked(self, position_id: int) -> None:
         with self._connect() as connection:
-            connection.execute(
-                "DELETE FROM tracked_trades WHERE position_id = ?", (position_id,)
-            )
+            connection.execute("DELETE FROM tracked_trades WHERE position_id = ?", (position_id,))
 
     def record_listed_price(self, position_id: int, sell_price: int) -> None:
         """Record the price a sell offer was actually placed at.

@@ -23,7 +23,10 @@ classifiers = [
 
 [project.optional-dependencies]
 gui = ["PySide6>=6.8,<7"]
-dev = ["osrs-toolkit[gui]", "pytest>=8.3", "ruff>=0.9", "nuitka>=2.5"]
+# ruff is pinned rather than floating: it is both the linter and the formatter, so a new
+# release changes what `ruff format --check .` considers correct and turns a clean checkout
+# red without a line of this project having changed. Raise it deliberately.
+dev = ["osrs-toolkit[gui]", "pytest>=8.3", "ruff==0.16.3", "nuitka>=2.5"]
 
 [project.scripts]
 osrs-toolkit = "osrs_toolkit.app:main"

@@ -109,9 +109,7 @@ def test_the_recommendation_card_grades_it_the_same_way(window: MainWindow) -> N
 def _stale_listing(window: MainWindow, item_id: int, name: str) -> int:
     """A position asking well above what the market will now support."""
     position_id = window._journal.track(item_id, name, 70, 7_125, 8_180)
-    window._journal.update_tracked(
-        position_id, "Listed for sale", 7_125, None, None, [(70, 7_125)]
-    )
+    window._journal.update_tracked(position_id, "Listed for sale", 7_125, None, None, [(70, 7_125)])
     window._points.append(
         MarketPoint(
             item_id=item_id,

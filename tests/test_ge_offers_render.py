@@ -59,9 +59,7 @@ def test_empty_state_when_runelite_is_not_connected(window: MainWindow) -> None:
     assert window.ge_slots_frame.isHidden() is True
 
 
-def test_all_eight_slots_render_even_with_nothing_open(
-    window: MainWindow, tmp_path: Path
-) -> None:
+def test_all_eight_slots_render_even_with_nothing_open(window: MainWindow, tmp_path: Path) -> None:
     _connect(window, tmp_path)
 
     window._render_ge_offers()
@@ -130,6 +128,4 @@ def test_a_long_item_name_does_not_stretch_its_slot(
     card = window.ge_slot_cards[2]
     assert card._item.toolTip() == long_name, "the full name should survive in the tooltip"
     assert card._item.text() != long_name, "the label should have elided"
-    assert card.width() <= window.ge_slot_cards[0].width() + 2, (
-        "the long name widened its own slot"
-    )
+    assert card.width() <= window.ge_slot_cards[0].width() + 2, "the long name widened its own slot"

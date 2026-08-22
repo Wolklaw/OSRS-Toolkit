@@ -21,13 +21,10 @@ def _price_every_skilling_input(window: MainWindow) -> None:
     """Give every recipe item a fresh price so all skilling methods render."""
     now = int(time.time())
     item_ids = {
-        item.item_id
-        for method in SKILL_METHODS
-        for item in (*method.inputs, *method.outputs)
+        item.item_id for method in SKILL_METHODS for item in (*method.inputs, *method.outputs)
     }
     window._mappings = {
-        item_id: ItemMapping(item_id, f"Item {item_id}", False, 1_000, 100)
-        for item_id in item_ids
+        item_id: ItemMapping(item_id, f"Item {item_id}", False, 1_000, 100) for item_id in item_ids
     }
     window._points = [
         MarketPoint(
@@ -116,8 +113,12 @@ def test_selected_synced_trade_survives_a_user_sort(window: MainWindow) -> None:
 
     window._journal.add_synced_trades(
         [
-            fill("11111111-1111-4111-8111-111111111111", "2026-01-01T10:00:00+00:00", "Zulrah scale"),
-            fill("22222222-2222-4222-8222-222222222222", "2026-01-02T10:00:00+00:00", "Abyssal whip"),
+            fill(
+                "11111111-1111-4111-8111-111111111111", "2026-01-01T10:00:00+00:00", "Zulrah scale"
+            ),
+            fill(
+                "22222222-2222-4222-8222-222222222222", "2026-01-02T10:00:00+00:00", "Abyssal whip"
+            ),
         ]
     )
     window._render_synced_trades()

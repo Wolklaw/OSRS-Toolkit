@@ -27,9 +27,7 @@ class _Response:
 
 
 def _serve(monkeypatch: pytest.MonkeyPatch, payload: object) -> None:
-    monkeypatch.setattr(
-        "urllib.request.urlopen", lambda _request, timeout=None: _Response(payload)
-    )
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request, timeout=None: _Response(payload))
 
 
 def _fail(monkeypatch: pytest.MonkeyPatch) -> None:

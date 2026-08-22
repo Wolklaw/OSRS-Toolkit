@@ -117,17 +117,14 @@ def item_detail_lines(items: tuple[SyncedItem, ...]) -> list[str]:
             lines.append(f"  {gp(item.quantity)}")
         else:
             lines.append(
-                f"  {item.quantity:,} × {item.item_name} "
-                f"(estimated {gp(item.total_value)})"
+                f"  {item.quantity:,} × {item.item_name} (estimated {gp(item.total_value)})"
             )
     return lines
 
 
 def compact_items(items: tuple[SyncedItem, ...]) -> str:
     labels = [
-        gp(item.quantity)
-        if item.item_id == 995
-        else f"{item.quantity:,} × {item.item_name}"
+        gp(item.quantity) if item.item_id == 995 else f"{item.quantity:,} × {item.item_name}"
         for item in items
     ]
     if len(labels) <= 2:

@@ -236,9 +236,7 @@ class _RecordingMenu:
         _RecordingMenu.opened.append(list(self._labels))
 
 
-def test_right_clicking_a_row_selects_it_and_opens_a_menu(
-    window: MainWindow, monkeypatch
-) -> None:
+def test_right_clicking_a_row_selects_it_and_opens_a_menu(window: MainWindow, monkeypatch) -> None:
     """Through the real signal, not the builder: Qt does not reliably move the selection on
     a right-press, so an action reading "the selected trade" could act on another row."""
     window._flips = [_flip(), _flip(1_001, "Dragon bones")]
@@ -256,9 +254,7 @@ def test_right_clicking_a_row_selects_it_and_opens_a_menu(
     assert _RecordingMenu.opened and "View details…" in _RecordingMenu.opened[0]
 
 
-def test_right_clicking_past_the_last_row_opens_nothing(
-    window: MainWindow, monkeypatch
-) -> None:
+def test_right_clicking_past_the_last_row_opens_nothing(window: MainWindow, monkeypatch) -> None:
     """Empty space below a table is not a row, and an empty menu is worse than none."""
     window._flips = [_flip()]
     window._render_flips()
@@ -330,11 +326,7 @@ def test_a_render_that_empties_the_table_disables_them(window: MainWindow) -> No
 
 def _delete_shortcuts(table) -> list[QShortcut]:  # type: ignore[no-untyped-def]
     wanted = QKeySequence(QKeySequence.StandardKey.Delete)
-    return [
-        shortcut
-        for shortcut in table.findChildren(QShortcut)
-        if shortcut.key() == wanted
-    ]
+    return [shortcut for shortcut in table.findChildren(QShortcut) if shortcut.key() == wanted]
 
 
 def test_delete_removes_the_selected_row_from_the_table_that_has_focus(
