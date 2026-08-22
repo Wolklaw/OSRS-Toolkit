@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Watchlist</h2>
+  <p class="hint">Items you're keeping an eye on, whether or not they clear the flip suggestions bar.</p>
+  <div class="row">
+    <input type="text" id="watchlist-item-name" placeholder="Item name" autocomplete="off">
+    <button class="button secondary" onclick="addWatchlistItem()">Add</button>
+  </div>
+  <div class="status-msg" id="watchlist-status"></div>
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">Live prices couldn't be reached just now — try again shortly.</div>
+</div>
+{% else %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Watched items</h2>
+  {% if rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Buy</th>
+        <th>Sell</th>
+        <th>Profit</th>
+        <th>ROI</th>
+        <th>1h volume</th>
+        <th>Age</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="/item/{{ row.item_id }}">{{ row.name }}</a></td>
+        <td>{{ "{:,}".format(row.buy_price) }}</td>
+        <td>{{ "{:,}".format(row.sell_price) }}</td>
+        <td class="{{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
+        <td>{{ "%.2f"|format(row.roi) }}%</td>
+        <td>{{ "{:,}".format(row.volume_1h) }}</td>
+        <td>{{ row.age_minutes }} min</td>
+        <td><a href="#" onclick="removeWatchlistItem({{ row.item_id }}); return false;">Remove</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">Nothing on your watchlist yet.</div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function addWatchlistItem() {
+    const status = document.getElementById('watchlist-status');
+    const input = document.getElementById('watchlist-item-name');
+    const name = input.value.trim();
+    if (!name) { return; }
+    try {
+      const response = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        status.textContent = body.detail || 'Could not add that item.';
+        status.className = 'status-msg error';
+        return;
+      }
+      input.value = '';
+      location.reload();
+    } catch (error) {
+      status.textContent = 'Could not reach the server — try again in a moment.';
+      status.className = 'status-msg error';
+    }
+  }
+
+  async function removeWatchlistItem(itemId) {
+    await fetch(`/api/watchlist/${itemId}`, { method: 'DELETE' });
+    location.reload();
+  }
+</script>
+{% endblock %}

@@ -26,7 +26,7 @@ from osrs_toolkit.journal_presentation import PERIOD_FILTERS
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
-from osrs_toolkit.ranking import STRATEGIES, plan_flip_portfolio, rank_flips
+from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, plan_flip_portfolio, rank_flips
 from osrs_toolkit.runelite_sync import ge_offer_status_label
 from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 from osrs_toolkit.savings_goal import (
@@ -354,6 +354,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "candidates": [serialize(candidate) for candidate in candidates[:30]],
             },
         )
+
+    @app.get("/watchlist", response_class=HTMLResponse)
+    def watchlist_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        context = {"account": account, **character_switcher_context(account, active)}
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            return templates.TemplateResponse(
+                request, "watchlist.html", {**context, "market_unavailable": True}
+            )
+        point_by_id = {point.item_id: point for point in points}
+        now = int(datetime.now(UTC).timestamp())
+        rows = []
+        for item_id in accounts.list_watchlist_item_ids(account.discord_user_id):
+            item, point = mappings.get(item_id), point_by_id.get(item_id)
+            if item is None or point is None:
+                # Delisted, or not yet in this snapshot — nothing priceable to show for it
+                # right now, but the watch itself is untouched and reappears once it prices.
+                continue
+            buy_price, sell_price = offer_targets(point)
+            profit = sell_price - buy_price - ge_tax(sell_price)
+            rows.append(
+                {
+                    "item_id": item_id,
+                    "name": item.name,
+                    "buy_price": buy_price,
+                    "sell_price": sell_price,
+                    "profit": profit,
+                    "roi": profit / buy_price * 100 if buy_price else 0.0,
+                    "volume_1h": point.volume_1h,
+                    "age_minutes": max(0, now - min(point.high_time, point.low_time)) // 60,
+                }
+            )
+        rows.sort(key=lambda row: row["name"])
+        return templates.TemplateResponse(
+            request,
+            "watchlist.html",
+            {**context, "market_unavailable": False, "rows": rows},
+        )
+
+    @app.post("/api/watchlist", status_code=201)
+    def add_watchlist_item(payload: dict, account: Account = CurrentAccount) -> dict:
+        name = payload.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise HTTPException(status_code=422, detail="name is required")
+        try:
+            mappings, _points = market.snapshot()
+        except MarketDataError:
+            raise HTTPException(
+                status_code=502, detail="Could not reach live prices — try again shortly."
+            ) from None
+        typed = name.strip().casefold()
+        match = next((item for item in mappings.values() if item.name.casefold() == typed), None)
+        if match is None:
+            raise HTTPException(status_code=404, detail=f'No item found named "{name.strip()}".')
+        added = accounts.add_watchlist_item(account.discord_user_id, match.item_id)
+        if not added:
+            raise HTTPException(
+                status_code=409, detail=f"{match.name} is already on your watchlist."
+            )
+        return {"ok": True, "item_id": match.item_id, "name": match.name}
+
+    @app.delete("/api/watchlist/{item_id}")
+    def remove_watchlist_item(item_id: int, account: Account = CurrentAccount) -> dict:
+        accounts.remove_watchlist_item(account.discord_user_id, item_id)
+        return {"ok": True}
 
     @app.get("/alch", response_class=HTMLResponse)
     def alch_page(

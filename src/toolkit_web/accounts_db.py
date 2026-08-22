@@ -51,6 +51,16 @@ CREATE TABLE IF NOT EXISTS trade_character (
     character_id    INTEGER NOT NULL REFERENCES character(character_id) ON DELETE CASCADE,
     PRIMARY KEY (discord_user_id, trade_id)
 );
+
+-- An item someone wants to keep an eye on without it having to clear GE Flipper's own ranking
+-- bar. Just the id: the name and every price on the watchlist page comes from the live market
+-- snapshot at render time, the same as everywhere else prices are shown.
+CREATE TABLE IF NOT EXISTS watchlist_item (
+    discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
+    item_id         INTEGER NOT NULL,
+    added_at        TEXT NOT NULL,
+    PRIMARY KEY (discord_user_id, item_id)
+);
 """
 
 
@@ -262,6 +272,35 @@ class AccountsDB:
                 (discord_user_id,),
             ).fetchall()
         return {row["trade_id"]: row["character_id"] for row in rows}
+
+    # -- watchlist -----------------------------------------------------------------------
+
+    def add_watchlist_item(self, discord_user_id: str, item_id: int) -> bool:
+        """Returns False rather than raising when the item is already watched — the caller
+        decides what, if anything, to tell the user about that, the same way ``add_character``
+        leaves that call to its caller."""
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO watchlist_item (discord_user_id, item_id, added_at)"
+                " VALUES (?, ?, ?)",
+                (discord_user_id, item_id, _stamp()),
+            )
+            return cursor.rowcount > 0
+
+    def list_watchlist_item_ids(self, discord_user_id: str) -> list[int]:
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT item_id FROM watchlist_item WHERE discord_user_id = ? ORDER BY added_at",
+                (discord_user_id,),
+            ).fetchall()
+        return [row["item_id"] for row in rows]
+
+    def remove_watchlist_item(self, discord_user_id: str, item_id: int) -> None:
+        with self._transaction() as connection:
+            connection.execute(
+                "DELETE FROM watchlist_item WHERE discord_user_id = ? AND item_id = ?",
+                (discord_user_id, item_id),
+            )
 
 
 def _row_to_account(row: sqlite3.Row) -> Account:

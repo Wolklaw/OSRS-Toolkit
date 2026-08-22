@@ -53,6 +53,46 @@ def _patched_market():
     )
 
 
+# -- watchlist --------------------------------------------------------------------------------
+
+
+def test_adding_a_watchlist_item_by_name_and_seeing_it_priced(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.post("/api/watchlist", json={"name": "Abyssal whip"})
+        assert response.status_code == 201
+
+        page = signed_in.get("/watchlist")
+
+    assert "Abyssal whip" in page.text
+
+
+def test_adding_an_unknown_item_name_is_rejected(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.post("/api/watchlist", json={"name": "Not a real item"})
+
+    assert response.status_code == 404
+
+
+def test_adding_the_same_item_twice_is_rejected(signed_in: TestClient):
+    with _patched_market():
+        first = signed_in.post("/api/watchlist", json={"name": "Abyssal whip"})
+        second = signed_in.post("/api/watchlist", json={"name": "Abyssal whip"})
+
+    assert first.status_code == 201
+    assert second.status_code == 409
+
+
+def test_removing_a_watchlist_item(signed_in: TestClient):
+    with _patched_market():
+        signed_in.post("/api/watchlist", json={"name": "Abyssal whip"})
+        signed_in.delete(f"/api/watchlist/{_WHIP_ID}")
+
+        page = signed_in.get("/watchlist")
+
+    assert "Abyssal whip" not in page.text
+    assert "Nothing on your watchlist yet" in page.text
+
+
 # -- flips ----------------------------------------------------------------------------------
 
 
