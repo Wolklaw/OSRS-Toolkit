@@ -78,6 +78,62 @@ def test_net_worth_shows_the_most_recent_reading_not_an_older_one(
     assert '<div class="value">1,000,000 gp</div>' not in response.text
 
 
+def test_the_performance_page_renders_with_no_history_yet(signed_in: TestClient):
+    response = signed_in.get("/performance")
+
+    assert response.status_code == 200
+    assert "Undefined" not in response.text
+    assert "Nothing realized in this period yet" in response.text
+
+
+def test_the_performance_page_shows_a_completed_positions_realized_profit(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    position_id = repository.track(
+        4151, "Abyssal whip", 1, target_buy=1_000_000, target_sell=1_200_000
+    )
+    repository.update_tracked(position_id, "Completed", 1_000_000, 1_200_000)
+
+    response = signed_in.get("/performance")
+
+    assert response.status_code == 200
+    assert "Undefined" not in response.text
+    # By-strategy groups even a single position (minimum_positions=1); the default
+    # strategy label from track() is what should show up there.
+    assert "Balanced (1" in response.text
+
+
+def test_the_performance_page_groups_repeat_items_once_there_are_two(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    for _ in range(2):
+        position_id = repository.track(
+            4151, "Abyssal whip", 1, target_buy=1_000_000, target_sell=1_200_000
+        )
+        repository.update_tracked(position_id, "Completed", 1_000_000, 1_200_000)
+
+    response = signed_in.get("/performance")
+
+    assert "Abyssal whip" in response.text
+
+
+def test_pvm_shows_supplies_spend_grouped_by_item(signed_in: TestClient, settings: Settings):
+    repository = JournalRepository(settings.journal_path("111"))
+    position_id = repository.track(
+        1755, "Prayer potion(4)", 10, target_buy=10_000, target_sell=10_000
+    )
+    repository.update_tracked(position_id, "Supplies", 10_000, None, buy_fills=[(10, 10_000)])
+
+    response = signed_in.get("/pvm")
+
+    assert response.status_code == 200
+    assert "Undefined" not in response.text
+    assert "Prayer potion(4)" in response.text
+    assert "100,000" in response.text  # 10 * 10,000 spent
+
+
 def test_the_item_history_page_degrades_cleanly_when_the_wiki_is_unreachable(
     signed_in: TestClient,
 ):

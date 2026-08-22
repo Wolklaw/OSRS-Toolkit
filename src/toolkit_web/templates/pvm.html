@@ -38,4 +38,36 @@
   {% endif %}
 </div>
 
+<div class="panel">
+  <h2 style="margin-top:0">Supplies spend</h2>
+  <p class="hint">Positions marked "Supplies" in the Journal — quest and skilling buys that aren't flips.</p>
+  {% if supplies %}
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Quantity</th><th>Spent</th><th>Purchases</th><th>Last bought</th></tr>
+    </thead>
+    <tbody>
+      {% for row in supplies %}
+      <tr>
+        <td>{{ row.item_name }}</td>
+        <td>{{ "{:,}".format(row.quantity) }}</td>
+        <td>{{ "{:,}".format(row.spent) }} gp</td>
+        <td>{{ row.purchases }}</td>
+        <td>{{ row.last_bought[:10] }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="color:var(--muted)">Total</td>
+        <td>{{ "{:,}".format(total_supplies_spend) }} gp</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+  {% else %}
+  <div class="empty">Nothing marked "Supplies" yet.</div>
+  {% endif %}
+</div>
+
 {% endblock %}

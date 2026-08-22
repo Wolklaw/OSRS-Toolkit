@@ -20,10 +20,13 @@ from fastapi.templating import Jinja2Templates
 from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
+from osrs_toolkit.journal_presentation import PERIOD_FILTERS
 from osrs_toolkit.market import MarketDataError
+from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import STRATEGIES, plan_flip_portfolio, rank_flips
 from osrs_toolkit.runelite_sync import ge_offer_status_label
+from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 from osrs_toolkit.savings_goal import (
     SavingsProgress,
     daily_profit_rate,
@@ -275,6 +278,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/performance", response_class=HTMLResponse)
+    def performance_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        period: str = "All time",
+    ) -> HTMLResponse:
+        if period not in PERIOD_FILTERS:
+            period = "All time"
+        switcher = character_switcher_context(account, active)
+        repository = journal_for(settings, account)
+        tracked = repository.list_tracked(switcher["active_character"])
+        now = datetime.now(UTC)
+        results = realized_results(tracked, repository.list_all(), period, now)
+        summary = summarize(results)
+        return templates.TemplateResponse(
+            request,
+            "performance.html",
+            {
+                "account": account,
+                "period": period,
+                "periods": list(PERIOD_FILTERS),
+                "summary": serialize(summary),
+                "by_strategy": [serialize(row) for row in by_strategy(results)],
+                "by_item": [serialize(row) for row in by_item(results)],
+                "calibration": [serialize(row) for row in calibration(tracked, period, now)],
+                **switcher,
+            },
+        )
+
     @app.get("/flips", response_class=HTMLResponse)
     def flips_page(
         request: Request,
@@ -383,6 +416,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else:
                 row["net_gp_per_hour"] = None
             rows.append(row)
+        tracked = repository.list_tracked(filter_hash)
         return templates.TemplateResponse(
             request,
             "pvm.html",
@@ -390,6 +424,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "account": account,
                 "readiness": rows,
                 "has_snapshot": snapshot is not None,
+                "supplies": [serialize(row) for row in supplies_spend_rows(tracked)],
+                "total_supplies_spend": total_supplies_spend(tracked),
                 **switcher,
             },
         )
