@@ -5,11 +5,13 @@ import os
 import shutil
 import sqlite3
 import sys
+import uuid
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 
 from osrs_toolkit.ranking import ge_tax
 
@@ -340,6 +342,22 @@ class OfferCancelled:
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
 
+    #: What a row needs before it can be recognised on another machine. ``trades`` and
+    #: ``tracked_trades`` are the only two tables without a global name of their own --
+    #: everything the plugin produces already carries an ``event_id``, and a loadout is keyed
+    #: by character. So these two are the only ones that need one invented.
+    #:
+    #: ``sync_uid`` is minted locally rather than handed out by the website, so a row created
+    #: with no network still has its final identity the moment it exists. ``deleted_at`` is a
+    #: tombstone rather than a real delete: without one, a row missing from the other side is
+    #: ambiguous between "deleted there" and "created here and not pushed yet", and guessing
+    #: wrong either resurrects deleted rows forever or silently eats new ones.
+    _SYNC_COLUMNS: ClassVar[dict[str, str]] = {
+        "sync_uid": "TEXT",
+        "updated_at": "TEXT",
+        "deleted_at": "TEXT",
+    }
+
     def __init__(self, database_path: Path | None = None) -> None:
         using_default_path = database_path is None
         if database_path is None:
@@ -349,9 +367,50 @@ class JournalRepository:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         if using_default_path:
             self._recover_or_migrate_default_database()
+            self._backup_before_migration()
         self._initialize()
         if using_default_path:
             self._create_startup_backup()
+
+    def _backup_before_migration(self) -> None:
+        """Copy the journal aside when this launch is about to change its shape.
+
+        ``_create_startup_backup`` runs after ``_initialize``, so every copy it keeps is of an
+        already-migrated file. That is the right thing for an ordinary launch and the wrong
+        thing for the launch that migrates: the state worth having back is the one that existed
+        before the columns were added, and only ten backups are kept, so it would roll off
+        within a fortnight of daily use.
+
+        Only for a migrating launch. Doing it every time would double the copies kept for no
+        reason, and a migration that has already happened is not one anybody needs to undo.
+        """
+        if not self.database_path.exists() or self.database_path.stat().st_size == 0:
+            return
+        try:
+            with closing(sqlite3.connect(f"file:{self.database_path}?mode=ro", uri=True)) as db:
+                db.row_factory = sqlite3.Row
+                pending = False
+                for table in ("trades", "tracked_trades"):
+                    columns = {
+                        str(row["name"]) for row in db.execute(f"PRAGMA table_info({table})")
+                    }
+                    if not columns:
+                        continue
+                    if not self._SYNC_COLUMNS.keys() <= columns:
+                        pending = True
+                if not pending:
+                    return
+                roaming_data = Path(os.getenv("APPDATA", Path.home()))
+                backup_dir = roaming_data / "OSRSToolkit" / "backups"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+                destination_path = backup_dir / f"toolkit-premigration-{stamp}.db"
+                with closing(sqlite3.connect(destination_path)) as destination:
+                    db.backup(destination)
+        except sqlite3.Error:
+            # A journal too damaged to read is one this cannot help, and refusing to start over
+            # a backup would strand somebody whose app still would have opened.
+            return
 
     def _recover_or_migrate_default_database(self) -> None:
         if self.database_path.exists():
@@ -391,6 +450,34 @@ class JournalRepository:
         for old_backup in backups[:-10]:
             old_backup.unlink(missing_ok=True)
 
+    def _migrate_sync_columns(
+        self, connection: sqlite3.Connection, table: str, primary_key: str, stamp_from: str
+    ) -> None:
+        """Give one table the columns that let its rows be recognised elsewhere.
+
+        Backfills ``sync_uid`` for rows that predate it, one identity per row, generated here
+        because SQLite has no uuid of its own. ``updated_at`` starts as whatever the row
+        already said about when it happened -- not "now", which would make every existing row
+        look freshly edited and win every conflict against the other side on first contact.
+        """
+        existing = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
+        for column, definition in self._SYNC_COLUMNS.items():
+            if column not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+        connection.execute(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {table}_sync_uid ON {table}(sync_uid)"
+            " WHERE sync_uid IS NOT NULL"
+        )
+        connection.execute(f"UPDATE {table} SET updated_at = {stamp_from} WHERE updated_at IS NULL")
+        unnamed = connection.execute(
+            f"SELECT {primary_key} FROM {table} WHERE sync_uid IS NULL"
+        ).fetchall()
+        for row in unnamed:
+            connection.execute(
+                f"UPDATE {table} SET sync_uid = ? WHERE {primary_key} = ?",
+                (uuid.uuid4().hex, row[primary_key]),
+            )
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.database_path)
@@ -416,6 +503,7 @@ class JournalRepository:
                 )
                 """
             )
+            self._migrate_sync_columns(connection, "trades", "trade_id", "recorded_at")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS synced_trades (
@@ -525,6 +613,7 @@ class JournalRepository:
                     connection.execute(
                         f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
                     )
+            self._migrate_sync_columns(connection, "tracked_trades", "position_id", "created_at")
             connection.execute(
                 """
                 UPDATE tracked_trades
@@ -603,17 +692,23 @@ class JournalRepository:
 
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
+            # Named at birth, not when it is first synced: a trade recorded with no network
+            # has to already own the identity it will be recognised by later.
+            recorded_at = datetime.now(UTC).isoformat(timespec="seconds")
             cursor = connection.execute(
                 """
-                INSERT INTO trades (recorded_at, item_name, quantity, buy_price, sell_price)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO trades (recorded_at, item_name, quantity, buy_price, sell_price,
+                    sync_uid, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    datetime.now(UTC).isoformat(timespec="seconds"),
+                    recorded_at,
                     item_name.strip(),
                     quantity,
                     buy_price,
                     sell_price,
+                    uuid.uuid4().hex,
+                    recorded_at,
                 ),
             )
             return int(cursor.lastrowid)
@@ -656,8 +751,8 @@ class JournalRepository:
                 INSERT INTO tracked_trades (
                     created_at, item_id, item_name, quantity, target_buy, target_sell, status,
                     strategy, current_buy_suggestion, current_sell_suggestion,
-                    suggestion_reviewed_at, account_hash
-                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy', ?, ?, ?, ?, ?)
+                    suggestion_reviewed_at, account_hash, sync_uid, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'Pending buy', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     created_at,
@@ -671,6 +766,8 @@ class JournalRepository:
                     target_sell,
                     created_at,
                     account_hash,
+                    uuid.uuid4().hex,
+                    created_at,
                 ),
             )
             return int(cursor.lastrowid)
