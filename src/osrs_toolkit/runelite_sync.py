@@ -168,6 +168,17 @@ class RuneLiteSyncImporter:
     def plugin_active(self) -> bool:
         return self.connection_status().active
 
+    def known_accounts(self) -> list[dict]:
+        """Every character seen under this connection, for a "switch character" control.
+
+        Empty for a source that has no such registry — the local file bridge only ever knew
+        whichever character was logged in when it last wrote a file, never the others — so
+        this reads the source's own list where one exists rather than promising a capability
+        every transport has to support.
+        """
+        lister = getattr(self.source, "known_accounts", None)
+        return lister() if callable(lister) else []
+
     def connection_status(self) -> RuneLiteConnectionStatus:
         """Whether anything is feeding us, and who it says is logged in.
 

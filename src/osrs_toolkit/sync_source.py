@@ -230,6 +230,21 @@ class HttpSyncSource:
             return (True, None, False)
         return (True, payload, bool(payload.get("active")))
 
+    def known_accounts(self) -> list[dict]:
+        """Every character the service has ever seen for this pairing, newest first.
+
+        A capability the local file bridge never had: it only ever tracked whichever character
+        happened to be logged in when it last wrote a file, and had no registry of the others.
+        Centralising state on the service is what makes "switch character" something a caller
+        can offer at all, so this lives here rather than on ``SyncSource`` — a source that
+        cannot support it should not have to fake an empty answer for it.
+        """
+        payload = self._call("GET", "/v1/accounts")
+        if not isinstance(payload, dict):
+            return []
+        accounts = payload.get("accounts")
+        return accounts if isinstance(accounts, list) else []
+
     def offer_state_payload(self, account_hash: str) -> dict | None:
         payload = self._call("GET", f"/v1/state?account_hash={_safe_hash(account_hash)}")
         if not isinstance(payload, dict):
