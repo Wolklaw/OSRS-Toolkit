@@ -351,9 +351,7 @@ class WhatsNewDialog(QDialog):
         layout.addWidget(body)
         footer = QHBoxLayout()
         changelog_button = QPushButton("Full changelog", objectName="secondary")
-        changelog_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(CHANGELOG_URL))
-        )
+        changelog_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(CHANGELOG_URL)))
         footer.addWidget(changelog_button)
         footer.addStretch()
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -419,9 +417,7 @@ class UpdateAvailableDialog(QDialog):
         actions = QHBoxLayout()
         self.notes_button = QPushButton("View release notes", objectName="secondary")
         self.notes_button.setEnabled(bool(release.page_url))
-        self.notes_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(release.page_url))
-        )
+        self.notes_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(release.page_url)))
         actions.addWidget(self.notes_button)
         actions.addStretch()
         self.skip_button = QPushButton("Skip this version", objectName="secondary")
@@ -459,9 +455,7 @@ class UpdateAvailableDialog(QDialog):
         worker = UpdateDownloadWorker(self.release)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(
-            lambda value: self._report(f"Downloading update… {value}%")
-        )
+        worker.progress.connect(lambda value: self._report(f"Downloading update… {value}%"))
         worker.finished.connect(self._downloaded)
         worker.failed.connect(self._download_failed)
         worker.finished.connect(worker.deleteLater)
@@ -504,9 +498,7 @@ class UpdateAvailableDialog(QDialog):
         # A download in flight writes to a temp file and verifies its digest; let it
         # finish rather than leaving a half-written installer behind.
         if self._download_thread is not None and self._download_thread.isRunning():
-            self._report(
-                "Finishing the download — this window closes when the update starts."
-            )
+            self._report("Finishing the download — this window closes when the update starts.")
             event.ignore()
             return
         super().closeEvent(event)
@@ -528,7 +520,9 @@ class AccountDialog(QDialog):
         note.setWordWrap(True)
         note.setObjectName("muted")
         layout.addWidget(note)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok
+        )
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Connect")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -777,7 +771,9 @@ class SettingsDialog(QDialog):
         )
         about_text.setOpenExternalLinks(True)
         about_layout.addWidget(about_text)
-        self.update_status = QLabel("Check GitHub for a newer official release.", objectName="muted")
+        self.update_status = QLabel(
+            "Check GitHub for a newer official release.", objectName="muted"
+        )
         self.update_status.setWordWrap(True)
         about_layout.addWidget(self.update_status)
         about_actions = QHBoxLayout()
@@ -956,9 +952,7 @@ class RuneLiteConnectionDialog(QDialog):
         layout.addWidget(privacy)
         actions = QHBoxLayout()
         plugin_button = QPushButton("View RuneLite plugin")
-        plugin_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(QUrl(self.PLUGIN_URL))
-        )
+        plugin_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.PLUGIN_URL)))
         self.folder_button = QPushButton("Open sync folder", objectName="secondary")
         self.folder_button.clicked.connect(self._open_folder)
         check_button = QPushButton("Check connection", objectName="secondary")
@@ -1287,9 +1281,7 @@ class UpdateTrackedTradeDialog(QDialog):
         acquired = self.quantity_acquired.value()
         remaining = max(0, acquired - bought)
         average = (
-            round(sum(quantity * price for quantity, price in fills) / bought)
-            if bought
-            else None
+            round(sum(quantity * price for quantity, price in fills) / bought) if bought else None
         )
         average_text = f" • weighted average {_gp(average)}" if average is not None else ""
         self.buy_fill_summary.setText(
@@ -1341,11 +1333,7 @@ class UpdateTrackedTradeDialog(QDialog):
         sold = sum(quantity for quantity, _price in fills)
         acquired = self.quantity_acquired.value()
         remaining = max(0, acquired - sold)
-        average = (
-            round(sum(quantity * price for quantity, price in fills) / sold)
-            if sold
-            else None
-        )
+        average = round(sum(quantity * price for quantity, price in fills) / sold) if sold else None
         average_text = f" • weighted average {_gp(average)}" if average is not None else ""
         self.sale_fill_summary.setText(
             f"Sold {sold:,} of {acquired:,} • {remaining:,} remaining{average_text}"
@@ -1407,9 +1395,7 @@ class ClickableCard(QLabel):
         if live == self._live:
             return
         self._live = live
-        self.setCursor(
-            Qt.CursorShape.PointingHandCursor if live else Qt.CursorShape.ArrowCursor
-        )
+        self.setCursor(Qt.CursorShape.PointingHandCursor if live else Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if (
@@ -1852,9 +1838,7 @@ class GEOfferSlotCard(QFrame):
         # Terminal offers are done but still sitting in the slot until collected in-game,
         # which is the state worth spotting from across the room — so it gets its own tone
         # rather than reading as just another offer in progress.
-        self.setProperty(
-            "slotState", "collect" if slot.is_terminal else slot.side or "empty"
-        )
+        self.setProperty("slotState", "collect" if slot.is_terminal else slot.side or "empty")
         self._item_id = slot.item_id
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._number.setText(f"{self._slot_index + 1}  {side}".strip())
@@ -2402,7 +2386,18 @@ class MainWindow(QMainWindow):
         recommendation_actions.addStretch()
         layout.addLayout(recommendation_actions)
         self.flip_table = self._table(
-            ["Item", "Buy", "Sell", "Safe max", "Profit ea.", "ROI", "1h volume", "Limit", "Max potential", "Confidence"],
+            [
+                "Item",
+                "Buy",
+                "Sell",
+                "Safe max",
+                "Profit ea.",
+                "ROI",
+                "1h volume",
+                "Limit",
+                "Max potential",
+                "Confidence",
+            ],
             minimum_widths={0: 220},
         )
         self._open_rows_with(
@@ -2446,9 +2441,12 @@ class MainWindow(QMainWindow):
             minimum_widths={0: 220},
         )
         self._open_rows_with(
-            self.watchlist_table, lambda row, _column: self._open_market_item(self.watchlist_table, row)
+            self.watchlist_table,
+            lambda row, _column: self._open_market_item(self.watchlist_table, row),
         )
-        self._install_row_menu(self.watchlist_table, self._build_market_row_menu(self.watchlist_table))
+        self._install_row_menu(
+            self.watchlist_table, self._build_market_row_menu(self.watchlist_table)
+        )
         layout.addWidget(self.watchlist_table, 1)
         page.setLayout(layout)
         return page
@@ -2469,9 +2467,7 @@ class MainWindow(QMainWindow):
             "counts only the part that has sold; the rest is money still in the trade, not "
             "money it has traded with. Matches the Performance page card of the same name."
         )
-        self.journal_attention = ClickableCard(
-            "Needs attention\n0", objectName="summaryCard"
-        )
+        self.journal_attention = ClickableCard("Needs attention\n0", objectName="summaryCard")
         self.journal_attention.clicked.connect(self._reveal_attention_positions)
         self.journal_attention.setToolTip(
             "Listed for sale / Partially sold positions whose asking price is at least 2%\n"
@@ -2500,9 +2496,7 @@ class MainWindow(QMainWindow):
             "Limit the summary cards and completed/cancelled rows below to this window. "
             "Trades still in progress always stay visible."
         )
-        self.journal_period_filter.currentTextChanged.connect(
-            self._journal_period_filter_changed
-        )
+        self.journal_period_filter.currentTextChanged.connect(self._journal_period_filter_changed)
         summary.addWidget(self.journal_period_filter)
         layout.addLayout(summary)
 
@@ -2544,9 +2538,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.ge_slot_hint)
 
         self.journal_tabs = QTabWidget()
-        self.journal_tabs.currentChanged.connect(
-            lambda _index: self._release_pending_flashes()
-        )
+        self.journal_tabs.currentChanged.connect(lambda _index: self._release_pending_flashes())
         plans_tab = QWidget()
         plans_layout = QVBoxLayout(plans_tab)
         actions = QHBoxLayout()
@@ -2571,9 +2563,7 @@ class MainWindow(QMainWindow):
         actions.addWidget(QLabel("Status", objectName="muted"))
         self.journal_status_filter = QComboBox()
         self.journal_status_filter.addItems(JOURNAL_STATUS_FILTERS)
-        saved_filter = str(
-            QSettings().value("journal/status_filter", JOURNAL_STATUS_FILTERS[0])
-        )
+        saved_filter = str(QSettings().value("journal/status_filter", JOURNAL_STATUS_FILTERS[0]))
         self.journal_status_filter.setCurrentText(
             saved_filter if saved_filter in JOURNAL_STATUS_FILTERS else JOURNAL_STATUS_FILTERS[0]
         )
@@ -2583,9 +2573,7 @@ class MainWindow(QMainWindow):
             "are quest or skilling buys marked out of your flip totals — select 'Update "
             "selected trade' and set the status to Supplies to move one there."
         )
-        self.journal_status_filter.currentTextChanged.connect(
-            self._journal_status_filter_changed
-        )
+        self.journal_status_filter.currentTextChanged.connect(self._journal_status_filter_changed)
         actions.addWidget(self.journal_status_filter)
         plans_layout.addLayout(actions)
         self.journal_filter_empty = QLabel(
@@ -2593,7 +2581,17 @@ class MainWindow(QMainWindow):
         )
         plans_layout.addWidget(self.journal_filter_empty)
         self.journal_table = self._table(
-            ["Date", "Status", "Item", "Qty", "Buy suggestion", "Actual buy", "Sell suggestion", "Actual sell", "P/L"],
+            [
+                "Date",
+                "Status",
+                "Item",
+                "Qty",
+                "Buy suggestion",
+                "Actual buy",
+                "Sell suggestion",
+                "Actual sell",
+                "P/L",
+            ],
             minimum_widths={0: 105, 1: 155, 2: 230, 8: 130},
             text_columns={1, 2},
         )
@@ -2875,9 +2873,7 @@ class MainWindow(QMainWindow):
         summary = summarize(results)
         self.performance_profit.setText(f"Realized profit\n{_signed_gp(summary.realized_profit)}")
         self._set_money_state(self.performance_profit, summary.realized_profit)
-        self.performance_return.setText(
-            f"Return on capital\n{_percent(summary.return_on_capital)}"
-        )
+        self.performance_return.setText(f"Return on capital\n{_percent(summary.return_on_capital)}")
         self._set_money_state(
             self.performance_return,
             0 if summary.return_on_capital is None else summary.return_on_capital,
@@ -3064,9 +3060,7 @@ class MainWindow(QMainWindow):
         self.alch_safety = QComboBox()
         self.alch_safety.addItems(list(ALCH_POLICIES))
         saved_policy = str(QSettings().value("alch/safety", "Safer"))
-        self.alch_safety.setCurrentText(
-            saved_policy if saved_policy in ALCH_POLICIES else "Safer"
-        )
+        self.alch_safety.setCurrentText(saved_policy if saved_policy in ALCH_POLICIES else "Safer")
         self.alch_safety.currentTextChanged.connect(self._alch_settings_changed)
         controls.addWidget(QLabel("Budget"))
         controls.addWidget(self.alch_budget)
@@ -3158,9 +3152,12 @@ class MainWindow(QMainWindow):
         self.skill_table.rowActivated.connect(
             lambda row, _column: self._open_skill_guide(row, _SKILL_GUIDE_COLUMN)
         )
-        self._install_row_menu(self.skill_table, self._build_guide_row_menu(
-            self.skill_table, _SKILL_GUIDE_COLUMN, self._open_skill_guide
-        ))
+        self._install_row_menu(
+            self.skill_table,
+            self._build_guide_row_menu(
+                self.skill_table, _SKILL_GUIDE_COLUMN, self._open_skill_guide
+            ),
+        )
         layout.addWidget(self.skill_table, 1)
         page.setLayout(layout)
         return page
@@ -3177,7 +3174,15 @@ class MainWindow(QMainWindow):
         self.pvm_status.setWordWrap(True)
         layout.addWidget(self.pvm_status)
         self.pvm_table = self._table(
-            ["Activity", "Status", "Missing skills", "Missing gear", "Est. GP/hr", "Notes", "Guide"],
+            [
+                "Activity",
+                "Status",
+                "Missing skills",
+                "Missing gear",
+                "Est. GP/hr",
+                "Notes",
+                "Guide",
+            ],
             minimum_widths={0: 200, 2: 220, 3: 260, 5: 260, 6: 110},
             maximum_widths={5: 380},
             text_columns={1, 2, 3, 5, 6},
@@ -3186,9 +3191,10 @@ class MainWindow(QMainWindow):
         self.pvm_table.rowActivated.connect(
             lambda row, _column: self._open_pvm_guide(row, _PVM_GUIDE_COLUMN)
         )
-        self._install_row_menu(self.pvm_table, self._build_guide_row_menu(
-            self.pvm_table, _PVM_GUIDE_COLUMN, self._open_pvm_guide
-        ))
+        self._install_row_menu(
+            self.pvm_table,
+            self._build_guide_row_menu(self.pvm_table, _PVM_GUIDE_COLUMN, self._open_pvm_guide),
+        )
         layout.addWidget(self.pvm_table, 1)
         page.setLayout(layout)
         self._render_pvm()
@@ -3280,9 +3286,7 @@ class MainWindow(QMainWindow):
                 shutil.copy2(old_path, new_path)
             new_repository = JournalRepository(new_path)
         except OSError as exc:
-            QMessageBox.warning(
-                self, "Could not change database location", f"{exc}"
-            )
+            QMessageBox.warning(self, "Could not change database location", f"{exc}")
             return
         self._journal = new_repository
         QSettings().setValue("journal/database_path", str(new_path))
@@ -3343,7 +3347,9 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Could not connect character", message)
             self.account_label.setText("No character connected")
-        self.account_button.setText("Connect character" if self._profile is None else "Change character")
+        self.account_button.setText(
+            "Connect character" if self._profile is None else "Change character"
+        )
         self.account_button.setEnabled(True)
 
     def _account_worker_stopped(self) -> None:
@@ -3471,7 +3477,9 @@ class MainWindow(QMainWindow):
         if not self._points:
             return
         remaining = [
-            candidate for candidate in self._flips if candidate.item_id not in self._excluded_item_ids
+            candidate
+            for candidate in self._flips
+            if candidate.item_id not in self._excluded_item_ids
         ]
         alternative = plan_flip_portfolio(
             remaining,
@@ -3503,7 +3511,21 @@ class MainWindow(QMainWindow):
     def _render_flips(self) -> None:
         query = self.search.text().strip().casefold()
         rows = [item for item in self._flips if query in item.name.casefold()][:250]
-        values = [[item.name, _gp(item.buy_price), _gp(item.sell_price), f"{item.suggested_quantity:,}", _gp(item.profit_each), f"{item.roi:.2f}%", f"{item.hourly_volume:,}", f"{item.buy_limit:,}" if item.buy_limit else "—", _gp(item.potential_profit), f"{item.confidence}%"] for item in rows]
+        values = [
+            [
+                item.name,
+                _gp(item.buy_price),
+                _gp(item.sell_price),
+                f"{item.suggested_quantity:,}",
+                _gp(item.profit_each),
+                f"{item.roi:.2f}%",
+                f"{item.hourly_volume:,}",
+                f"{item.buy_limit:,}" if item.buy_limit else "—",
+                _gp(item.potential_profit),
+                f"{item.confidence}%",
+            ]
+            for item in rows
+        ]
         floor = int(STRATEGIES[self.strategy.currentText()]["min_confidence"])
 
         def decorate_flip(row_index: int) -> None:
@@ -3695,7 +3717,9 @@ class MainWindow(QMainWindow):
         now = int(datetime.now().astimezone().timestamp())
         for item_id in sorted(
             self._watchlist,
-            key=lambda saved_id: self._mappings.get(saved_id, ItemMapping(saved_id, "", False, None, None)).name,
+            key=lambda saved_id: (
+                self._mappings.get(saved_id, ItemMapping(saved_id, "", False, None, None)).name
+            ),
         ):
             item, point = self._mappings.get(item_id), point_by_id.get(item_id)
             if item is None or point is None:
@@ -3704,15 +3728,17 @@ class MainWindow(QMainWindow):
             profit = sell_price - buy_price - ge_tax(sell_price)
             roi = profit / buy_price * 100 if buy_price else 0
             age = max(0, now - min(point.high_time, point.low_time))
-            rows.append([
-                item.name,
-                _gp(buy_price),
-                _gp(sell_price),
-                _gp(profit),
-                f"{roi:.2f}%",
-                f"{point.volume_1h:,}",
-                f"{age // 60} min",
-            ])
+            rows.append(
+                [
+                    item.name,
+                    _gp(buy_price),
+                    _gp(sell_price),
+                    _gp(profit),
+                    f"{roi:.2f}%",
+                    f"{point.volume_1h:,}",
+                    f"{age // 60} min",
+                ]
+            )
             row_ids.append(item_id)
         self.watchlist_empty.setVisible(not rows)
         self._fill_table(self.watchlist_table, rows, green_columns={3, 4}, row_ids=row_ids)
@@ -3910,9 +3936,7 @@ class MainWindow(QMainWindow):
             # would light each other's row; and nothing ever happens to a manual entry on
             # its own anyway, since it records an outcome rather than an open trade.
             if row.raw_status in UpdateTrackedTradeDialog.STATUSES:
-                self.journal_table.item(row_index, 0).setData(
-                    _FLASH_KEY_ROLE, row.record_id
-                )
+                self.journal_table.item(row_index, 0).setData(_FLASH_KEY_ROLE, row.record_id)
             status_cell = self.journal_table.item(row_index, 1)
             status_cell.setData(Qt.ItemDataRole.UserRole, row.raw_status)
             status_cell.setToolTip(
@@ -3942,9 +3966,7 @@ class MainWindow(QMainWindow):
                 ask_font = ask_cell.font()
                 ask_font.setBold(True)
                 ask_cell.setFont(ask_font)
-                _ask_price_value, ask_is_sound = ask_detail.get(
-                    row.record_id, (None, True)
-                )
+                _ask_price_value, ask_is_sound = ask_detail.get(row.record_id, (None, True))
                 if ask_is_sound:
                     ask_cell.setForeground(QColor(self._warning_color))
                     ask_cell.setToolTip("Ready to list.\nThis is the price to ask for it.")
@@ -3962,9 +3984,7 @@ class MainWindow(QMainWindow):
 
             attention = attention_detail.get(row.record_id) if row.needs_attention else None
             if row.needs_attention:
-                self.journal_table.item(row_index, 2).setForeground(
-                    QColor(self._warning_color)
-                )
+                self.journal_table.item(row_index, 2).setForeground(QColor(self._warning_color))
             if attention is not None:
                 # Every cell, not just the ⚠ one. The flag is about the row, so hunting for
                 # the single cell that explains it — while the neighbours answer with their
@@ -4252,9 +4272,7 @@ class MainWindow(QMainWindow):
             return
         slots = self._sync_importer.read_offer_state(account_hash)
         states = {slot_index: slot.state for slot_index, slot in slots.items()}
-        self._flash_ge_slots(
-            newly_reached(self._ge_slot_states, states, TERMINAL_OFFER_STATES)
-        )
+        self._flash_ge_slots(newly_reached(self._ge_slot_states, states, TERMINAL_OFFER_STATES))
         self._ge_slot_states = states
         terminal_items = frozenset(
             slot.item_id for slot in slots.values() if slot.is_terminal and slot.item_id > 0
@@ -4293,11 +4311,7 @@ class MainWindow(QMainWindow):
         if screen.focused:
             return offer_screen_positions(screen.item_id, screen.side, candidates)
         return live_offer_positions(
-            [
-                (slot.item_id, slot.side)
-                for slot in (slots or {}).values()
-                if slot.item_id > 0
-            ],
+            [(slot.item_id, slot.side) for slot in (slots or {}).values() if slot.item_id > 0],
             candidates,
         )
 
@@ -4444,7 +4458,7 @@ class MainWindow(QMainWindow):
         nav_item.setToolTip(
             "An offer finished while you were elsewhere — open the journal to see which. "
             "If it still doesn't show, it may have finished the flip: widen Status to "
-            "\"All statuses\" to find it."
+            '"All statuses" to find it.'
             if waiting
             else f"{title}  (Ctrl+{self._journal_page_index() + 1})"
         )
@@ -4584,11 +4598,7 @@ class MainWindow(QMainWindow):
         """
         matches = [trade for trade in self._journal.list_tracked() if trade.item_id == item_id]
         chosen = next(
-            (
-                trade
-                for trade in matches
-                if journal_status_matches(trade.status, "Active trades")
-            ),
+            (trade for trade in matches if journal_status_matches(trade.status, "Active trades")),
             matches[0] if matches else None,
         )
         return chosen.position_id if chosen is not None else None
@@ -4649,7 +4659,9 @@ class MainWindow(QMainWindow):
         offer_row_index: dict[str, int] = {}
         for trade in trades:
             offer_id = trade.metadata.get("offer_id") if trade.event_type == "ge_fill" else None
-            index = offer_row_index.get(offer_id) if isinstance(offer_id, str) and offer_id else None
+            index = (
+                offer_row_index.get(offer_id) if isinstance(offer_id, str) and offer_id else None
+            )
             if index is None:
                 if isinstance(offer_id, str) and offer_id:
                     offer_row_index[offer_id] = len(rows)
@@ -4700,7 +4712,9 @@ class MainWindow(QMainWindow):
     def _open_selected_synced_trade(self) -> None:
         selected = self._selected_synced_trade()
         if selected is None:
-            QMessageBox.information(self, "No activity selected", "Select a RuneLite activity row first.")
+            QMessageBox.information(
+                self, "No activity selected", "Select a RuneLite activity row first."
+            )
             return
         trade, _event_ids = selected
         SyncedTradeDetailsDialog(trade, self).exec()
@@ -4708,7 +4722,9 @@ class MainWindow(QMainWindow):
     def _delete_selected_synced_trade(self) -> None:
         selected = self._selected_synced_trade()
         if selected is None:
-            QMessageBox.information(self, "No activity selected", "Select a RuneLite activity row first.")
+            QMessageBox.information(
+                self, "No activity selected", "Select a RuneLite activity row first."
+            )
             return
         _trade, event_ids = selected
         prompt = (
@@ -4901,9 +4917,7 @@ class MainWindow(QMainWindow):
             link_font.setUnderline(True)
             guide_cell.setFont(link_font)
 
-        self._fill_table(
-            self.skill_table, values, green_columns={5, 7}, decorate=decorate_row
-        )
+        self._fill_table(self.skill_table, values, green_columns={5, 7}, decorate=decorate_row)
         if not already_sorted:
             self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
         profile_text = (
@@ -4922,9 +4936,7 @@ class MainWindow(QMainWindow):
         if column != _SKILL_GUIDE_COLUMN:
             return
         guide_url = self.skill_table.item(row, column).data(Qt.ItemDataRole.UserRole)
-        if isinstance(guide_url, str) and guide_url.startswith(
-            "https://oldschool.runescape.wiki/"
-        ):
+        if isinstance(guide_url, str) and guide_url.startswith("https://oldschool.runescape.wiki/"):
             QDesktopServices.openUrl(QUrl(guide_url))
 
     def _render_pvm(self) -> None:
@@ -4942,7 +4954,8 @@ class MainWindow(QMainWindow):
             )
         results = assess_all(snapshot)
         estimates = [
-            estimate_gp_per_hour(result.activity, self._mappings, self._points) for result in results
+            estimate_gp_per_hour(result.activity, self._mappings, self._points)
+            for result in results
         ]
         order = sorted(
             range(len(results)),
@@ -4992,7 +5005,9 @@ class MainWindow(QMainWindow):
             )
             guide_cell = self.pvm_table.item(row_index, 6)
             guide_cell.setData(Qt.ItemDataRole.UserRole, result.activity.wiki_url)
-            guide_cell.setToolTip(f"{result.activity.notes}\nDouble-click to open the OSRS Wiki page.")
+            guide_cell.setToolTip(
+                f"{result.activity.notes}\nDouble-click to open the OSRS Wiki page."
+            )
             link_font = guide_cell.font()
             link_font.setUnderline(True)
             guide_cell.setFont(link_font)
@@ -5087,7 +5102,9 @@ class MainWindow(QMainWindow):
         if item_id is None:
             return
         mapping = self._mappings.get(item_id)
-        point = next((candidate for candidate in self._points if candidate.item_id == item_id), None)
+        point = next(
+            (candidate for candidate in self._points if candidate.item_id == item_id), None
+        )
         if mapping is None or point is None:
             return
         flip = next((candidate for candidate in self._flips if candidate.item_id == item_id), None)
