@@ -57,12 +57,46 @@
       run the same jar. Your settings and your journal are untouched by a rebuild.</p>
 
     <h3>If you play on a Jagex account</h3>
-    <p>RuneLite normally starts from the Jagex Launcher, which hands it your login. A copy
-      started from the command line does not get that automatically, and shows the older
-      login screen instead. RuneLite documents how it expects to be launched — that is the
-      place to check, since it is their side of the problem, not this plugin's:
-      <a href="https://github.com/runelite/runelite/wiki" target="_blank" rel="noopener">the
-      RuneLite wiki</a>.</p>
+    <p>The Jagex Launcher hands RuneLite your login, and a client started from the command
+      line does not get it — you would land on the old username-and-password screen with no
+      way through. RuneLite has a supported way around this: tell the launcher to write its
+      credentials to a file, which any RuneLite on that machine can then read. These steps are
+      from RuneLite's own
+      <a href="https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts" target="_blank" rel="noopener">Using
+      Jagex Accounts</a> guide.</p>
+    <ol class="steps">
+      <li><strong>Check your RuneLite launcher is 2.6.3 or newer.</strong> The launcher, not
+        the client — older ones cannot do this.</li>
+      <li><strong>Open the launcher's configuration.</strong> On Windows that is <strong>RuneLite
+        (configure)</strong> in the Start menu. On macOS, run
+        <code>/Applications/RuneLite.app/Contents/MacOS/RuneLite --configure</code>; on Linux,
+        pass <code>--configure</code> to the launcher the same way.</li>
+      <li><strong>Add the flag.</strong> In the <strong>Client arguments</strong> box put:
+        <div class="code-box cmd">
+          <code id="jagex-flag">--insecure-write-credentials</code>
+          <button class="button secondary small" onclick="copyValue('jagex-flag', this)">Copy</button>
+        </div>
+        Save, and close the configuration window.
+      </li>
+      <li><strong>Launch RuneLite through the Jagex Launcher once</strong>, the way you
+        normally play. It writes your credentials to
+        <code>.runelite/credentials.properties</code>.</li>
+      <li><strong>Now run the jar from step 4 above.</strong> It reads that file and signs in
+        as your Jagex account, plugin and all.</li>
+    </ol>
+
+    <div class="callout">
+      <strong>That file is a login bypass — treat it like a password.</strong>
+      <p>Anyone holding <code>credentials.properties</code> can sign into your account without
+        knowing your password, which is why the flag has "insecure" in its name. Do not share
+        it, and keep it out of screenshots and support posts.</p>
+      <p>When you are done, delete the file and take
+        <code>--insecure-write-credentials</code> back out of the launcher's client arguments,
+        or it is written again on every launch. If you think the file has been seen by anyone
+        else, use <strong>End sessions</strong> in your account settings on
+        <a href="https://secure.runescape.com/m=account-settings/" target="_blank" rel="noopener">runescape.com</a>
+        to invalidate it.</p>
+    </div>
   </div>
 </div>
 

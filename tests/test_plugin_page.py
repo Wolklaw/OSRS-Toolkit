@@ -35,6 +35,29 @@ def test_it_does_not_promise_the_plugin_lands_in_an_existing_runelite(client: Te
     assert "starts its own copy of RuneLite" in client.get("/plugin").text
 
 
+def test_it_gives_real_steps_for_a_jagex_account(client: TestClient):
+    """A command-line client gets no login from the Jagex Launcher, which is a dead end for
+    most players. Naming the flag and where it writes is the whole answer."""
+    page = client.get("/plugin").text
+
+    assert "--insecure-write-credentials" in page
+    assert ".runelite/credentials.properties" in page
+    assert "2.6.3" in page
+
+
+def test_it_credits_runelites_own_guide_for_those_steps(client: TestClient):
+    assert "runelite/wiki/Using-Jagex-Accounts" in client.get("/plugin").text
+
+
+def test_it_warns_that_the_credentials_file_bypasses_a_password(client: TestClient):
+    """The flag is called "insecure" for a reason, and the page has to say why before
+    somebody pastes the file into a support thread."""
+    page = client.get("/plugin").text
+
+    assert "login bypass" in page
+    assert "End sessions" in page
+
+
 def test_both_setup_pages_are_reachable_from_the_navigation(signed_in: TestClient):
     page = signed_in.get("/").text
 

@@ -408,6 +408,10 @@
     .prose h3 { color: var(--text); font-size: 0.96rem; margin: 1.2rem 0 0.3rem; }
     .prose > :first-child { margin-top: 0; }
     .prose p, .prose li { font-size: 0.91rem; }
+    /* A file path or a flag written inline is one long unbreakable token; without this it
+       runs off the side of the panel on a phone instead of wrapping. The command boxes are
+       unaffected -- they set `white-space: pre` and scroll on purpose. */
+    .prose code { overflow-wrap: anywhere; }
     .prose ul, .prose ol { padding-left: 1.2rem; }
     .prose li { margin-bottom: 0.3rem; }
     .prose ol.steps { counter-reset: step; list-style: none; padding-left: 0; }
@@ -502,6 +506,9 @@
       .market-pill .text { display: none; }
     }
     @media (max-width: 560px) {
+      /* The signed-out header runs brand + two links + theme + Sign in, which is one item too
+         many for a phone. Help is in the footer of every page, so it is the one that goes. */
+      .hide-sm { display: none; }
       .stats { grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); }
       select.character-switcher { max-width: 118px; }
       .page-actions { margin-left: 0; }
@@ -616,7 +623,7 @@
       <a class="brand" href="/"><span class="mark">RS</span>Rune<em>Scope</em></a>
       <div class="spacer"></div>
       <a href="/download" class="button ghost small">Get the app</a>
-      <a href="/help" class="button ghost small">Help</a>
+      <a href="/help" class="button ghost small hide-sm">Help</a>
       <button class="icon-button" onclick="cycleTheme()" aria-label="Switch theme">{{ icon("theme") }}</button>
       {% if path != "/" %}<a href="/" class="button small">Sign in</a>{% endif %}
       {% endif %}
