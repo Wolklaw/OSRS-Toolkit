@@ -45,14 +45,42 @@ def stored_journal(settings: Settings, account: Account) -> JournalRepository:
     return JournalRepository(settings.journal_path(account.discord_user_id))
 
 
+#: How long the list of characters a pairing has played is trusted before it is asked for
+#: again. A character joins this list the first time it is ever played and never leaves, so it
+#: is close to immutable — while the dashboard polls the route that wants it every few seconds,
+#: which made "who has ever played here" the single most repeated question this app asks.
+_CHARACTERS_TTL_SECONDS = 60
+
+_characters_cache: dict[str, tuple[float, list[dict]]] = {}
+_characters_lock = threading.Lock()
+
+
 def known_characters(settings: Settings, account: Account) -> list[dict]:
     """Every RuneLite character the sync service has seen play through this account's token,
     for a character switcher. Empty for an account with no pairing token — there is nothing to
     ask the sync service about."""
     if not account.pairing_token:
         return []
+    key = _activity_key(account.pairing_token)
+    now = time.monotonic()
+    with _characters_lock:
+        cached = _characters_cache.get(key)
+        if cached is not None and now - cached[0] < _CHARACTERS_TTL_SECONDS:
+            return cached[1]
     source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
-    return source.known_accounts()
+    characters = source.known_accounts()
+    if not characters:
+        # Never cache "nobody". An empty list is what a pairing looks like in the seconds
+        # between the token being pasted and the plugin's first heartbeat, and it is also what
+        # an unreachable service looks like -- remembering either for a minute would hide a
+        # character that has just appeared from the person watching for it to appear.
+        return characters
+    with _characters_lock:
+        for stale, (stamp, _list) in list(_characters_cache.items()):
+            if now - stamp >= _CHARACTERS_TTL_SECONDS:
+                del _characters_cache[stale]
+        _characters_cache[key] = (now, characters)
+    return characters
 
 
 #: How long one account's plugin status is trusted before it is asked for again. This is a
@@ -120,18 +148,28 @@ def raw_sync_state(
     window, which already owns tested parsers for exactly these shapes -- handing it the raw
     payload lets it keep using them, and keeps this app from becoming a second place where the
     meaning of a Grand Exchange slot is decided.
+
+    One request, not three. The sync service answers all of this together precisely so that a
+    page drawing status, slots and the offer box shows one moment rather than three, and this
+    is the route the dashboard polls every few seconds -- so asking three times was both the
+    slowest way to get the answer and the only way to get an inconsistent one.
     """
     if not account.pairing_token:
         return None, False, None, None
     source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
-    _detected, status, fresh = source.status_payload()
-    if not account_hash:
+    target = account_hash or ""
+    status = source.state_payload(target)
+    fresh = bool(status.get("active")) if status else False
+    if not target:
         return status, fresh, None, None
+    # Slices of the fetch above rather than fetches of their own: the source memoises one
+    # ``/v1/state`` for long enough to serve a render, and ``offer_screen_payload`` is worth
+    # going through for the timestamp it stamps onto a screen that arrives without one.
     return (
         status,
         fresh,
-        source.offer_state_payload(account_hash),
-        source.offer_screen_payload(account_hash),
+        source.offer_state_payload(target),
+        source.offer_screen_payload(target),
     )
 
 

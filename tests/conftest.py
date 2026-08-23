@@ -10,6 +10,20 @@ from toolkit_web.app import create_app
 from toolkit_web.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def _clear_process_caches():
+    """The plugin-activity and character-list caches are keyed by pairing token and live for
+    the process, not the app, so tests that reuse a token would otherwise read each other's
+    answers — and pass or fail depending on the order they happened to run in."""
+    from toolkit_web import importing
+
+    importing._activity_cache.clear()
+    importing._characters_cache.clear()
+    yield
+    importing._activity_cache.clear()
+    importing._characters_cache.clear()
+
+
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
     return Settings(

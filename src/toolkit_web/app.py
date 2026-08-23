@@ -64,8 +64,8 @@ PLUGIN_REPO_URL = "https://github.com/Wolklaw/osrs-toolkit-runelite"
 #: Which branch the install instructions build from. Named explicitly rather than left to the
 #: repository's default, because a source ZIP URL has to carry a branch either way and because
 #: this went wrong once already: until 2026-08-23 that repo's default branch was still the
-#: pre-web plugin -- no ``SyncClient``, and none of the Service address, Pairing token or
-#: master-switch settings the guide tells people to fill in -- so "download it from the front
+#: pre-web plugin -- no ``SyncClient``, and neither the Pairing token nor the master-switch
+#: setting the guide tells people to fill in -- so "download it from the front
 #: page" handed somebody a build that could not reach this site at all. ``main`` was
 #: fast-forwarded to the web-era plugin that day and is now the one to build. Anything that
 #: leaves this branch behind again breaks the guide silently, which is the failure worth
