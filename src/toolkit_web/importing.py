@@ -9,6 +9,10 @@ trade for a service sized for a handful of users rather than one that needs to s
 
 from __future__ import annotations
 
+import hashlib
+import threading
+import time
+
 from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.runelite_sync import GEOfferScreen, GEOfferSlot, RuneLiteSyncImporter
 from osrs_toolkit.sync_source import HttpSyncSource
@@ -51,6 +55,27 @@ def known_characters(settings: Settings, account: Account) -> list[dict]:
     return source.known_accounts()
 
 
+#: How long one account's plugin status is trusted before it is asked for again. This is a
+#: badge saying whether the game is running, so a few seconds of lag costs nothing -- while
+#: the call behind it carries a 20-second timeout, which a dashboard render pays in full every
+#: time the sync service is unreachable. Caching the unreachable answer as well as the good
+#: ones is the point: an outage then costs one slow page per window rather than every page.
+_ACTIVITY_TTL_SECONDS = 30
+
+_activity_cache: dict[str, tuple[float, str]] = {}
+_activity_lock = threading.Lock()
+
+
+def _activity_key(token: str) -> str:
+    """Hashed, so a long-lived process-wide dict is not where pairing tokens accumulate.
+
+    Keying on the token rather than on the account is also what makes this need no explicit
+    invalidation: pasting a different token is a different key and so a guaranteed miss, which
+    matters because that is exactly when somebody is watching the badge to see if it worked.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def plugin_activity(settings: Settings, account: Account) -> str:
     """What the plugin is actually doing, as one of four words the UI can render.
 
@@ -67,11 +92,23 @@ def plugin_activity(settings: Settings, account: Account) -> str:
     """
     if not account.pairing_token:
         return "none"
+    key = _activity_key(account.pairing_token)
+    now = time.monotonic()
+    with _activity_lock:
+        cached = _activity_cache.get(key)
+        if cached is not None and now - cached[0] < _ACTIVITY_TTL_SECONDS:
+            return cached[1]
     source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
     _detected, payload, active = source.status_payload()
-    if payload is None:
-        return "unreachable"
-    return "live" if active else "idle"
+    state = "unreachable" if payload is None else ("live" if active else "idle")
+    with _activity_lock:
+        # Expired entries for accounts nobody is looking at any more would otherwise sit here
+        # forever; there is never more than one per account, but no reason to keep the dead.
+        for stale, (stamp, _state) in list(_activity_cache.items()):
+            if now - stamp >= _ACTIVITY_TTL_SECONDS:
+                del _activity_cache[stale]
+        _activity_cache[key] = (now, state)
+    return state
 
 
 def raw_sync_state(

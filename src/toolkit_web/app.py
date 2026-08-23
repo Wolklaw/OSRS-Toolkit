@@ -60,6 +60,19 @@ STATE_COOKIE = "oauth_state"
 #: The companion plugin's own repository — where the build-it-yourself instructions point
 #: while the Plugin Hub submission is still in review.
 PLUGIN_REPO_URL = "https://github.com/Wolklaw/osrs-toolkit-runelite"
+
+#: Which branch those instructions must name, and the reason they cannot simply say "the
+#: repository". That repo's default branch is still the pre-web plugin: no ``SyncClient``, and
+#: no Service address or Pairing token settings for the guide to point at. Somebody who
+#: downloads the default ZIP gets a plugin that writes files to disk and never speaks to the
+#: sync service at all, then goes hunting for settings that are not there. The Plugin Hub
+#: submission pins a commit on this branch for the same reason.
+PLUGIN_BRANCH = "web-sync"
+PLUGIN_SOURCE_URL = f"{PLUGIN_REPO_URL}/tree/{PLUGIN_BRANCH}"
+PLUGIN_ZIP_URL = f"{PLUGIN_REPO_URL}/archive/refs/heads/{PLUGIN_BRANCH}.zip"
+
+#: What the built jar is called, from ``rootProject.name`` and ``version`` in its build.gradle.
+PLUGIN_JAR_NAME = "osrs-toolkit-sync-1.0.0-all.jar"
 #: Which synced character's data to show. Plain, not signed: it names nothing but an
 #: account_hash the caller's own pairing token already has full read access to, so there is
 #: nothing here worth protecting from the browser that couldn't already be read straight from
@@ -503,6 +516,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "account": account,
                 "plugin_repo_url": PLUGIN_REPO_URL,
+                "plugin_branch": PLUGIN_BRANCH,
+                "plugin_source_url": PLUGIN_SOURCE_URL,
+                "plugin_zip_url": PLUGIN_ZIP_URL,
+                "plugin_jar_name": PLUGIN_JAR_NAME,
                 **_optional_switcher(account, active),
             },
         )

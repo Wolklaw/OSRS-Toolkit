@@ -21,10 +21,25 @@
       <li><strong>Install Java 11 or newer.</strong> If you are not sure you have it, get
         <a href="https://adoptium.net/" target="_blank" rel="noopener">Temurin</a> — the
         default options are fine.</li>
-      <li><strong>Download the plugin.</strong> On
-        <a href="{{ plugin_repo_url }}" target="_blank" rel="noopener">the repository</a>,
-        press the green <strong>Code</strong> button and choose <strong>Download ZIP</strong>,
-        then unzip it. (Or <code>git clone {{ plugin_repo_url }}.git</code> if you have git.)</li>
+      {#
+        Both of these name the branch on purpose. The repository's default branch is still the
+        older, file-based plugin — no service address, no pairing token — so "press Code and
+        download the ZIP" would hand somebody a plugin that cannot reach this site, and send
+        them looking for settings it does not have.
+      #}
+      <li><strong>Download the plugin.</strong>
+        <a href="{{ plugin_zip_url }}"><strong>Download the ZIP</strong></a> and unzip it —
+        that gives you a folder called
+        <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. With git instead:
+        <div class="code-box cmd">
+          <code id="clone-cmd">git clone -b {{ plugin_branch }} {{ plugin_repo_url }}.git</code>
+          <button class="button secondary small" onclick="copyValue('clone-cmd', this)">Copy</button>
+        </div>
+        <p class="hint">Take the <code>{{ plugin_branch }}</code> branch, not the repository's
+          front page — that one is the older version, from before this site existed, and it
+          cannot connect to it. <a href="{{ plugin_source_url }}" target="_blank" rel="noopener">Browse
+          the source</a>.</p>
+      </li>
       <li><strong>Build it.</strong> Open a terminal in that folder and run:
         <div class="code-box cmd">
           <code id="build-cmd">gradlew shadowJar</code>
@@ -36,12 +51,12 @@
       </li>
       <li><strong>Run it.</strong>
         <div class="code-box cmd">
-          <code id="run-cmd">java -jar build/libs/osrs-toolkit-sync-unspecified-all.jar</code>
+          <code id="run-cmd">java -jar build/libs/{{ plugin_jar_name }}</code>
           <button class="button secondary small" onclick="copyValue('run-cmd', this)">Copy</button>
         </div>
         <p class="hint">RuneLite opens with the plugin already loaded — <strong>OSRS Toolkit
-          Sync</strong> is in the plugin list, no hub install needed. "unspecified" really is
-          part of the filename; check <code>build/libs</code> if yours differs.</p>
+          Sync</strong> is in the plugin list, no hub install needed. Check
+          <code>build/libs</code> if your filename differs.</p>
       </li>
     </ol>
 
@@ -53,8 +68,9 @@
     </div>
 
     <h3>Updating it later</h3>
-    <p>Download the ZIP again (or <code>git pull</code>), run the build command once more, and
-      run the same jar. Your settings and your journal are untouched by a rebuild.</p>
+    <p><a href="{{ plugin_zip_url }}">Download the ZIP again</a> (or <code>git pull</code> in
+      that folder), run the build command once more, and run the jar. Your settings and your
+      journal are untouched by a rebuild.</p>
 
     <h3>If you play on a Jagex account</h3>
     <p>The Jagex Launcher hands RuneLite your login, and a client started from the command

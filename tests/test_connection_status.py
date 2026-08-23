@@ -10,10 +10,21 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from toolkit_web import importing
 from toolkit_web.app import _desktop_activity
 from toolkit_web.importing import plugin_activity
+
+
+@pytest.fixture(autouse=True)
+def _clear_activity_cache():
+    """The status cache is keyed by pairing token and lives for the process, so tests that
+    reuse a token would otherwise read each other's answers and pass in the wrong order."""
+    importing._activity_cache.clear()
+    yield
+    importing._activity_cache.clear()
 
 
 class _Token:
@@ -97,6 +108,74 @@ def test_an_unreachable_sync_service_says_so_rather_than_blaming_the_plugin(
 
     assert "No answer" in page
     assert "Nothing is lost" in page
+
+
+def test_the_status_is_not_re_fetched_on_every_render(settings):
+    """A dashboard render used to pay the sync call every time, and that call carries a
+    20-second timeout — so an unreachable service cost every page load, not just the first."""
+
+    class Paired:
+        pairing_token = "cache-me"
+
+    with patch(
+        "toolkit_web.importing.HttpSyncSource.status_payload",
+        return_value=(True, {"active": True}, True),
+    ) as status:
+        assert importing.plugin_activity(settings, Paired()) == "live"
+        assert importing.plugin_activity(settings, Paired()) == "live"
+
+    status.assert_called_once()
+
+
+def test_an_unreachable_answer_is_cached_too(settings):
+    """Otherwise the outage case — the expensive one — is the one that caches nothing."""
+
+    class Paired:
+        pairing_token = "cache-the-outage"
+
+    with patch(
+        "toolkit_web.importing.HttpSyncSource.status_payload", return_value=(True, None, False)
+    ) as status:
+        assert importing.plugin_activity(settings, Paired()) == "unreachable"
+        assert importing.plugin_activity(settings, Paired()) == "unreachable"
+
+    status.assert_called_once()
+
+
+def test_a_different_token_is_never_served_another_tokens_verdict(settings):
+    """Keyed on the token, so pasting a new one is a guaranteed miss — which is the moment
+    somebody is staring at the badge to see whether what they pasted worked."""
+
+    class First:
+        pairing_token = "first-token"
+
+    class Second:
+        pairing_token = "second-token"
+
+    with patch(
+        "toolkit_web.importing.HttpSyncSource.status_payload",
+        return_value=(True, {"active": True}, True),
+    ):
+        assert importing.plugin_activity(settings, First()) == "live"
+
+    with patch(
+        "toolkit_web.importing.HttpSyncSource.status_payload",
+        return_value=(True, {"active": False}, False),
+    ):
+        assert importing.plugin_activity(settings, Second()) == "idle"
+
+
+def test_the_cache_does_not_hold_pairing_tokens_in_the_clear(settings):
+    class Paired:
+        pairing_token = "secret-pairing-token"
+
+    with patch(
+        "toolkit_web.importing.HttpSyncSource.status_payload",
+        return_value=(True, {"active": True}, True),
+    ):
+        importing.plugin_activity(settings, Paired())
+
+    assert "secret-pairing-token" not in importing._activity_cache
 
 
 # -- the desktop app ----------------------------------------------------------------------

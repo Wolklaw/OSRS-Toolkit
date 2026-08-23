@@ -22,11 +22,30 @@ def test_it_carries_the_build_and_run_commands(client: TestClient):
     page = client.get("/plugin").text
 
     assert "gradlew shadowJar" in page
-    assert "java -jar build/libs/osrs-toolkit-sync-unspecified-all.jar" in page
+    assert "java -jar build/libs/osrs-toolkit-sync-1.0.0-all.jar" in page
 
 
 def test_it_links_the_plugin_repository(client: TestClient):
     assert "https://github.com/Wolklaw/osrs-toolkit-runelite" in client.get("/plugin").text
+
+
+def test_every_way_of_getting_the_source_names_the_branch(client: TestClient):
+    """The repository's default branch is the older, file-based plugin — no service address,
+    no pairing token. An unqualified "download the ZIP" hands somebody a build that cannot
+    reach this site at all, so neither route here is allowed to omit the branch."""
+    page = client.get("/plugin").text
+
+    assert "archive/refs/heads/web-sync.zip" in page
+    assert "git clone -b web-sync" in page
+    assert "/tree/web-sync" in page
+
+
+def test_it_never_offers_a_default_branch_download(client: TestClient):
+    page = client.get("/plugin").text
+
+    assert "archive/refs/heads/main.zip" not in page
+    # A bare clone takes the default branch, which is exactly the wrong one here.
+    assert "git clone https://github.com/Wolklaw/osrs-toolkit-runelite" not in page
 
 
 def test_it_does_not_promise_the_plugin_lands_in_an_existing_runelite(client: TestClient):
