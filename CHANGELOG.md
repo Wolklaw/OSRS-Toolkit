@@ -4,13 +4,23 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-23
+
+### Highlights
+
+- The app has a proper icon in the taskbar again. It always had one — Explorer's preview pane
+  drew it fine — but the file held a single 256x256 image, and everything that asks for a
+  smaller one drew a blank square instead.
+- Live RuneLite state works. The website could not tell this app that the plugin was
+  connected, so Grand Exchange slots and the offer box stayed empty however long the game had
+  been running.
+
 ### Fixed
 
-- The taskbar showed a blank square instead of the app's icon. The icon was there all along —
-  Explorer's preview pane drew it — but it contained only a single 256x256 image stored as an
-  uncompressed bitmap, and the taskbar, Alt-Tab and Explorer's list views all want something
-  around 16-48px. It now carries seven sizes from 16 to 256, each PNG-compressed.
-
+- The taskbar showed a blank square instead of the app's icon. The icon contained only a
+  single 256x256 image stored as an uncompressed bitmap, and the taskbar, Alt-Tab and
+  Explorer's list views all want something around 16-48px. It now carries seven sizes from 16
+  to 256, each PNG-compressed.
 - The website could never tell this app that the RuneLite plugin was connected. The shared
   sync client asked the sync service about live state without naming a character, which
   matched nothing and so answered "not connected" no matter how many heartbeats had landed.
