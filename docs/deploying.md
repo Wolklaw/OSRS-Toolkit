@@ -8,8 +8,10 @@ sitting beside it and, mostly, how to update it without breaking anything.
 
 ## The shape of it
 
-Everything runs as the `wolklaw` user — **systemd user units**, not system units, so every
-command below is `systemctl --user` and there is no `sudo` anywhere in normal operation.
+Everything the site is made of runs as the `wolklaw` user — **systemd user units**, not system
+units, so those commands are all `systemctl --user` and there is no `sudo` anywhere in normal
+operation. The one exception is the Cockpit console, which is a system unit and needs sudo for
+everything; it is nothing the site depends on, and it has its own section below.
 
 | | |
 |---|---|
@@ -17,18 +19,21 @@ command below is `systemctl --user` and there is no `sudo` anywhere in normal op
 | Domain layer | No checkout of its own — pip installs it from the commit pinned in `pyproject.toml` |
 | Sync service | `~/osrs-sync`, unit `osrs-sync.service`, listening on `127.0.0.1:8000` |
 | Tunnel | `cloudflared.service`, config at `~/.cloudflared/config.yml` |
+| Console | `cockpit.socket`, listening on `127.0.0.1:9090` — a **system** unit, see below |
 | Web app data | `~/.local/share/toolkit-web` — `accounts.db`, `journals/`, `market-cache/` |
 
 Linger is enabled for the user (`loginctl show-user wolklaw -p Linger`), which is what makes
 user units start at boot with nobody logged in. Without it none of this would come back after a
 reboot until someone signed in at the console.
 
-The tunnel already routes both hostnames, most specific first, catch-all last:
+The tunnel already routes all three hostnames, most specific first, catch-all last:
 
 ```yaml
 ingress:
   - hostname: sync.runescope.app
     service: http://127.0.0.1:8000
+  - hostname: cockpit.runescope.app
+    service: http://127.0.0.1:9090
   - hostname: runescope.app
     service: http://127.0.0.1:8100
   - service: http_status:404
@@ -165,6 +170,114 @@ falls back to a plain link at the releases page when it cannot. Unauthenticated,
 one of the 60 calls an hour this address gets — nothing else here touches that budget. A
 blocked outbound GitHub costs the page its version number and its two direct download buttons,
 nothing more.
+
+## The Cockpit console
+
+`cockpit.runescope.app` is the machine's web console — services, logs, storage, a terminal —
+added 2026-08-23. It is behind Cloudflare Access, so an unauthenticated request never reaches
+it: the edge answers with a redirect to a one-time-PIN login, and only then does the tunnel
+open a connection to 9090.
+
+It is also the one **system** service on this box. Everything else is a `systemctl --user` unit
+with no sudo anywhere, so every command in this section is the exception to that rule.
+
+| | |
+|---|---|
+| Packages | `cockpit`, `cockpit-storaged` |
+| Unit | `cockpit.socket` (system), listening on `127.0.0.1:9090` |
+| Loopback drop-in | `/etc/systemd/system/cockpit.socket.d/listen.conf` |
+| Origins config | `/etc/cockpit/cockpit.conf` |
+| Access application | Zero Trust → Access → Applications → `cockpit`, policy `Me` |
+
+Two pieces of configuration are doing real work. The socket binds to `0.0.0.0:9090` out of the
+box, which would put a root-capable login form on the LAN; the drop-in rebinds it to loopback,
+and the empty `ListenStream=` is required — without it the new address is *added* to the
+default rather than replacing it:
+
+```ini
+[Socket]
+ListenStream=
+ListenStream=127.0.0.1:9090
+```
+
+And `/etc/cockpit/cockpit.conf` tells cockpit what its public name is. Without the `Origins`
+line the page loads and then the websocket handshake fails, which surfaces as a vague internal
+error rather than anything pointing at this file. `AllowUnencrypted` is safe only because of
+the line above it: TLS terminates at Cloudflare, and nothing but the tunnel can reach 9090.
+
+```ini
+[WebService]
+Origins = https://cockpit.runescope.app wss://cockpit.runescope.app
+ProtocolHeader = X-Forwarded-Proto
+AllowUnencrypted = true
+```
+
+### Editing either of those means restarting the socket
+
+`daemon-reload` on its own is not enough, and this is not obvious, because the unit goes on
+reporting `active (listening)` on the right address while being bound to nothing at all. The
+site 502s and `systemctl status` looks fine. The tell is in the journal:
+
+```
+cockpit.socket: Unit configuration changed while unit was running, and no socket file
+descriptors are open. Unit not functional until restarted.
+```
+
+That happened on first install — `apt` starts the socket itself, before the drop-in exists. So:
+
+```bash
+sudo systemctl restart cockpit.socket
+ss -lnt | grep 9090
+```
+
+The second line is the check that means anything. `127.0.0.1:9090` must actually appear.
+
+### NetworkManager is disabled, and Cockpit is why
+
+Netplan on this machine renders to `systemd-networkd`, which owns all three interfaces and
+reports `Online state: online`. NetworkManager was installed and running but managed nothing —
+every device `unmanaged`, global state `disconnected`. Nothing cared until PackageKit did:
+Cockpit's **Software Updates** page asks PackageKit, PackageKit asks NetworkManager whether the
+system is online, and the answer was no. The page failed with `Cannot refresh cache whilst
+offline` on a machine that was plainly not offline.
+
+`sudo systemctl disable --now NetworkManager` fixed it, and cost nothing, because it was not
+managing the link this host is reached over. **PackageKit caches that answer at startup**, so
+it needs restarting too or it keeps repeating the old one:
+
+```bash
+sudo systemctl restart packagekit
+```
+
+If a future reinstall brings NetworkManager back, this is the page that will break first.
+
+### Phased updates break "Install all updates"
+
+Cockpit lists an update as available whenever the archive has a newer version, but Ubuntu
+phases some of them to a percentage of machines, and PackageKit refuses to install one this
+host is not yet eligible for:
+
+```
+Package id 'python3-software-properties;0.120.1;all;ubuntu-resolute-updates-main'
+is not available as an update candidate
+```
+
+One held-back package fails the whole batch, and the page offers no way to deselect it — the
+buttons are **Install security updates** and **Install all updates**, nothing per-package. So
+either use the security button, which is a smaller set and usually unphased, or upgrade over
+SSH, where apt handles phasing properly and lists the held-back packages under *The following
+packages have been kept back*:
+
+```bash
+sudo apt upgrade
+```
+
+`apt-cache policy <pkg>` names the reason — a phased package shows `(phased 10%)` beside its
+candidate version. Waiting is the right response; forcing it with `apt install <pkg>` opts this
+machine out of exactly the mechanism that catches regressions before they reach everyone.
+
+One package must never be upgraded from Cockpit's own terminal: `cockpit` itself, which
+restarts `cockpit-ws` and kills the session mid-transaction. Do that one over SSH.
 
 ## Cloudflare: do not turn on "Cache Everything"
 
