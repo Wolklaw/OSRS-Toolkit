@@ -150,6 +150,10 @@
       background: linear-gradient(150deg, var(--accent) 0%, var(--accent-hot) 100%);
       color: var(--accent-ink); font-size: 0.82rem; font-weight: 800; letter-spacing: -0.02em;
     }
+    /* One flex item, not two. Left bare, "Rune" and <em>Scope</em> are separate flex items
+       and the 0.6rem gap meant for the icon opens up between them, so the wordmark reads
+       "Rune Scope". */
+    .brand .wordmark { white-space: nowrap; }
     .brand em { font-style: normal; color: var(--accent); }
     .nav { padding: 0 0.6rem 0.6rem; flex: 1; }
     .nav-group { margin-bottom: 0.9rem; }
@@ -576,7 +580,7 @@
 <div class="shell">
   {% if account %}
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="/"><span class="mark">RS</span>Rune<em>Scope</em></a>
+    <a class="brand" href="/"><span class="mark">RS</span><span class="wordmark">Rune<em>Scope</em></span></a>
     <nav class="nav" aria-label="Main">
       {% for label, links in nav_groups %}
       <div class="nav-group">
@@ -620,7 +624,7 @@
         <span>{{ account.username }}</span>
       </a>
       {% else %}
-      <a class="brand" href="/"><span class="mark">RS</span>Rune<em>Scope</em></a>
+      <a class="brand" href="/"><span class="mark">RS</span><span class="wordmark">Rune<em>Scope</em></span></a>
       <div class="spacer"></div>
       <a href="/download" class="button ghost small">Get the app</a>
       <a href="/help" class="button ghost small hide-sm">Help</a>

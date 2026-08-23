@@ -198,3 +198,22 @@ def _bare_snapshot(total_value: int):
         bank=(),
         skills={},
     )
+
+
+def test_the_wordmark_is_one_flex_item_so_it_does_not_read_rune_scope(signed_in: TestClient):
+    """`.brand` is a flex row with a gap for the icon. Left bare, "Rune" and <em>Scope</em>
+    are two anonymous flex items and that gap opens between them, so the logo renders as
+    "Rune Scope". Wrapping the wordmark is what keeps it one item, and one word."""
+    page = signed_in.get("/").text
+
+    assert '<span class="wordmark">Rune<em>Scope</em></span>' in page
+    assert '<span class="mark">RS</span>Rune' not in page
+
+
+def test_the_signed_out_header_wordmark_is_wrapped_too(client: TestClient):
+    """There are two copies of the brand — sidebar and signed-out topbar — and fixing one is
+    the easy way to leave the other reading "Rune Scope"."""
+    page = client.get("/about").text
+
+    assert '<span class="wordmark">Rune<em>Scope</em></span>' in page
+    assert '<span class="mark">RS</span>Rune' not in page
