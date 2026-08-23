@@ -1,6 +1,6 @@
 # How this runs on the laptop
 
-A record of the machine as it is actually set up (`wolkhost`, reachable over SSH on the LAN),
+A record of the machine as it is actually set up (`wolkhost`, `192.168.0.172` on the LAN),
 not a clean-room recipe. The sync service's own
 [docs/deploying.md](https://github.com/Wolklaw/osrs-toolkit-sync-server/blob/main/docs/deploying.md)
 covers the Cloudflare Tunnel and the account-level settings; this covers the web front end
@@ -40,10 +40,14 @@ ingress:
 they come back running whatever code is already on disk. Nothing pulls from GitHub on boot.
 
 ```bash
-ssh wolkhost
+ssh 192.168.0.172
 cd ~/osrs-web && git pull --ff-only
 systemctl --user restart toolkit-web
 ```
+
+The hostname `wolkhost` is what the machine calls itself, not something every client resolves —
+the Windows machine only has `192.168.0.172` in its `~/.ssh/config`, so that is what works from
+there.
 
 This repo is an editable install, so a pull is normally the whole deploy. Re-run
 `~/osrs-web/.venv/bin/pip install -e .` when `pyproject.toml` changed at all — that now includes
@@ -58,15 +62,33 @@ get wrong. A domain-layer change reaches production by bumping that pin and pull
 
 ```bash
 cd ~/osrs-web && git pull --ff-only
-~/osrs-web/.venv/bin/pip install -e . --upgrade
+~/osrs-web/.venv/bin/pip uninstall -y osrs-toolkit
+~/osrs-web/.venv/bin/pip install -e .
 systemctl --user restart toolkit-web
 ```
 
-`--upgrade` matters: without it pip may keep the domain layer it already has even though the
-pinned commit in `pyproject.toml` moved.
+**The uninstall is the step that matters, and `--upgrade` is not a substitute for it.** This
+note used to say it was, and it is not: `osrs-toolkit` is a direct-URL requirement, so pip
+checks whether *something* named `osrs-toolkit` is installed, sees that something is, and
+leaves it alone — pinned commit or not. On 2026-08-23 that had left commit `d43bc56` installed
+against a pin of `e0b8f72` for two commits' worth of deploys. Uninstalling first is what forces
+the resolve.
 
-A web app pulled forward against a stale domain layer fails at import, not at runtime — the
-service enters a restart loop and no page is served at all. Worth one check before restarting:
+Confirm the pin actually took, rather than trusting pip's summary line, which happily reports
+success after changing nothing:
+
+```bash
+cat ~/osrs-web/.venv/lib/python3.14/site-packages/osrs_toolkit-*.dist-info/direct_url.json
+```
+
+The `commit_id` in there must match the pin in `pyproject.toml`.
+
+**A stale domain layer does not fail at import.** This note used to claim it did, and that the
+service would enter a restart loop and serve nothing — which would at least be obvious. What
+actually happens is that every page renders fine and one endpoint 500s on a method that is not
+there yet. The stale layer above cost `/api/journal/version` — the desktop app's once-a-minute
+mirror poll — for as long as nobody read the log. The import check is still worth running, but
+it proves less than it looks like it does:
 
 ```bash
 ~/osrs-web/.venv/bin/python -c "from toolkit_web.app import create_app; print('ok')"
@@ -79,6 +101,10 @@ systemctl --user is-active toolkit-web
 journalctl --user -u toolkit-web --since "2 min ago" --no-pager | grep -iE "error|traceback"
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8100/
 ```
+
+The `journalctl` line is not optional garnish. A 200 on `/` says nothing about the routes the
+desktop app uses, and those are the ones a half-applied domain-layer bump breaks — check the
+main PID changed too, or you will read the old process's errors and think they are new ones.
 
 and from anywhere:
 
