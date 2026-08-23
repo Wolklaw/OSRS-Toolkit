@@ -6,6 +6,11 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Fixed
 
+- The taskbar showed a blank square instead of the app's icon. The icon was there all along —
+  Explorer's preview pane drew it — but it contained only a single 256x256 image stored as an
+  uncompressed bitmap, and the taskbar, Alt-Tab and Explorer's list views all want something
+  around 16-48px. It now carries seven sizes from 16 to 256, each PNG-compressed.
+
 - The website could never tell this app that the RuneLite plugin was connected. The shared
   sync client asked the sync service about live state without naming a character, which
   matched nothing and so answered "not connected" no matter how many heartbeats had landed.
