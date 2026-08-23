@@ -4,6 +4,33 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-23
+
+### Highlights
+
+- The desktop app can now mirror its journal against your [runescope.app](https://runescope.app)
+  account. Get a desktop access token from your profile there, paste it into
+  **Settings → Website**, and a trade or tracked position recorded in either place reaches the
+  other within a minute — delete one somewhere and it disappears everywhere. Leave it
+  disconnected and the app is exactly what it always was: a local journal on your PC, nothing
+  sent anywhere.
+- RuneLite data now reaches this app through the website rather than a folder the plugin writes
+  on this PC. The RuneLite Plugin Hub does not allow a plugin that feeds an application on the
+  same machine it runs on, so the plugin posts to a small sync service instead, the website
+  collects from that, and this app reads from there. If you are still running an older version
+  of the plugin that writes to `.runelite\osrs-toolkit`, this app still reads that folder too —
+  nothing you already had stops working.
+
+### Fixed
+
+- Grand Exchange fills and offers synced from more than one RuneLite character through the same
+  pairing token could cross between them — a fill on one character's account could land on
+  another character's tracked position instead of its own.
+- The Connect RuneLite dialog stated flatly that trade history is never sent anywhere and
+  offered an "Open sync folder" button, regardless of whether the app was actually reading from
+  a local folder or from the website. Signed in, that button could open a broken location; the
+  privacy line now says which is actually true for how you have it set up.
+
 ## [1.1.3] - 2026-08-20
 
 ### Fixed
