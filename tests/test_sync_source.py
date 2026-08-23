@@ -146,6 +146,70 @@ def test_account_hash_is_sanitised_before_it_reaches_the_url():
     assert ";" not in request.full_url
 
 
+# -- one fetch per render ----------------------------------------------------------------
+
+
+def test_status_slots_and_screen_come_from_a_single_request():
+    """The whole point of ``/v1/state`` answering all three together.
+
+    The dashboard polls this every few seconds, so three requests per render was both the
+    slowest way to get the answer and the only way to get an inconsistent one: three replies
+    describing three different moments, assembled into one page as though they agreed.
+    """
+    payload = {
+        "active": True,
+        "account_name": "Lord Wolklaw",
+        "offers": {"3": {"itemId": 1}},
+        "screen": {"item_id": 2, "side": "buy"},
+        "screen_updated_at": "2026-08-23T22:00:00Z",
+    }
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response(payload)) as urlopen:
+        _detected, status, fresh = source.status_payload()
+        offers = source.offer_state_payload("abc123")
+        screen = source.offer_screen_payload("abc123")
+
+    assert fresh is True
+    assert status["account_name"] == "Lord Wolklaw"
+    assert offers == {"3": {"itemId": 1}}
+    assert screen["updated_at"] == "2026-08-23T22:00:00Z"
+    # One for the unnamed status question, one for the named character. Not three, and not
+    # one — asking about a different character has to actually ask.
+    assert urlopen.call_count == 2
+
+
+def test_asking_about_the_same_character_twice_only_fetches_once():
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response({"offers": {}})) as urlopen:
+        source.offer_state_payload("abc123")
+        source.offer_state_payload("abc123")
+
+    assert urlopen.call_count == 1
+
+
+def test_a_different_character_is_never_served_from_the_last_one_s_answer():
+    """The memo is a saving, not a source of truth — a wrong character's slots would be worse
+    than any number of round trips."""
+    source = _source()
+    first = _response({"offers": {"0": {"itemId": 1}}})
+    second = _response({"offers": {"7": {"itemId": 2}}})
+    with patch("urllib.request.urlopen", side_effect=[first, second]) as urlopen:
+        assert source.offer_state_payload("main") == {"0": {"itemId": 1}}
+        assert source.offer_state_payload("alt") == {"7": {"itemId": 2}}
+
+    assert urlopen.call_count == 2
+
+
+def test_an_unreachable_service_is_not_remembered_as_an_empty_answer():
+    """A failed fetch caches ``None``, which every caller reads as "could not ask" rather than
+    as "asked, and there is nothing" — the two need different words on screen."""
+    source = _source()
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("down")):
+        assert source.state_payload("abc123") is None
+        assert source.offer_state_payload("abc123") is None
+        assert source.status_payload() == (True, None, False)
+
+
 # -- pending / collected / quarantine --------------------------------------------------------
 
 

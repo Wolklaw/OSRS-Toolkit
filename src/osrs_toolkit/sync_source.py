@@ -42,6 +42,10 @@ USER_AGENT = "OSRS-Toolkit/1.0 (+https://runescope.app)"
 
 HTTP_TIMEOUT_SECONDS = 20
 
+#: How long one fetch of ``/v1/state`` is reused for. Long enough that the several slices of it
+#: one page wants cost a single request, short enough that it cannot outlive the render asking.
+STATE_CACHE_SECONDS = 2.0
+
 
 @dataclass(frozen=True, slots=True)
 class RuneLiteConnectionStatus:
@@ -211,6 +215,7 @@ class HttpSyncSource:
     def __init__(self, base_url: str, token: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
+        self._cached: tuple[float, str, dict | None] | None = None
 
     def _call(self, method: str, path: str, body: object | None = None) -> object | None:
         data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -225,11 +230,33 @@ class HttpSyncSource:
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
             return None
 
+    def state_payload(self, account_hash: str = "") -> dict | None:
+        """Everything the service knows about one character, in one request.
+
+        Memoised for a moment because the callers below each want a different slice of the same
+        answer, and a page that draws status, slots and the offer box together used to fetch
+        the identical response three times. The window is short enough that nothing here can go
+        stale within a render, and it is keyed by hash so asking about a different character is
+        a guaranteed miss rather than a wrong answer.
+        """
+        if not self.base_url or not self.token:
+            return None
+        now = time.monotonic()
+        cached = self._cached
+        if cached is not None:
+            cached_at, cached_hash, payload = cached
+            if cached_hash == account_hash and now - cached_at < STATE_CACHE_SECONDS:
+                return payload
+        fetched = self._call("GET", f"/v1/state?account_hash={_safe_hash(account_hash)}")
+        payload = fetched if isinstance(fetched, dict) else None
+        self._cached = (now, account_hash, payload)
+        return payload
+
     def status_payload(self) -> tuple[bool, dict | None, bool]:
         if not self.base_url or not self.token:
             return (False, None, False)
-        payload = self._call("GET", "/v1/state?account_hash=")
-        if not isinstance(payload, dict):
+        payload = self.state_payload()
+        if payload is None:
             # Configured but unreachable. Detected stays true so the app can say "cannot reach
             # the service" rather than "no plugin", which are different problems to fix.
             return (True, None, False)
@@ -251,15 +278,15 @@ class HttpSyncSource:
         return accounts if isinstance(accounts, list) else []
 
     def offer_state_payload(self, account_hash: str) -> dict | None:
-        payload = self._call("GET", f"/v1/state?account_hash={_safe_hash(account_hash)}")
-        if not isinstance(payload, dict):
+        payload = self.state_payload(account_hash)
+        if payload is None:
             return None
         offers = payload.get("offers")
         return offers if isinstance(offers, dict) else None
 
     def offer_screen_payload(self, account_hash: str) -> dict | None:
-        payload = self._call("GET", f"/v1/state?account_hash={_safe_hash(account_hash)}")
-        if not isinstance(payload, dict):
+        payload = self.state_payload(account_hash)
+        if payload is None:
             return None
         screen = payload.get("screen")
         if not isinstance(screen, dict):

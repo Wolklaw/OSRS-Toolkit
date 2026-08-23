@@ -108,6 +108,12 @@ Plugin → service. `{ "account_hash": "...", "account_name": "...", "player_tra
 
 ### `PUT /v1/state/offers` and `PUT /v1/state/screen`
 
+**`PUT`, not `POST`** — these replace the one copy the service keeps, rather than adding to
+something it collects, and the service answers a `POST` here with `405`. Worth stating plainly
+because the plugin got it wrong once and the failure was silent: a `405` is a 4xx, the client
+drops 4xx payloads rather than retrying them, and the heartbeat on the same client kept
+reporting a healthy connection while no live state arrived at all.
+
 Plugin → service. `{ "account_hash": "...", "payload": { ... } }`, replacing `state/<hash>.json`
 and `state/<hash>-screen.json`. Last write wins.
 
@@ -116,8 +122,18 @@ closed — absence is the message, exactly as a deleted file was.
 
 ### `GET /v1/state?account_hash=...`
 
-Desktop app → service. Slots, offer box and connection status in one call, because the desktop
-app wants all three to draw one page.
+Website and desktop app → service. Slots, offer box and connection status in one call, because
+a caller wants all three to draw one page — and because three separate calls return three
+different moments assembled as though they agreed.
+
+`account_hash` may be **left off**, meaning "whichever character this pairing was last seen
+playing". That is the question a caller has before it knows any character to name — a dashboard
+drawing a connection badge, most of all — and answering it here is what keeps that from costing
+a `GET /v1/accounts` first. The hash actually used comes back as `account_hash`, and the slots
+and offer box are that same character's.
+
+It used to match no status row at all, so an omitted hash answered "not connected" with total
+confidence no matter how many heartbeats had landed.
 
 ```json
 {

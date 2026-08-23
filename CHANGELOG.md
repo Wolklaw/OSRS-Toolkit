@@ -4,6 +4,19 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- The website could never tell this app that the RuneLite plugin was connected. The shared
+  sync client asked the sync service about live state without naming a character, which
+  matched nothing and so answered "not connected" no matter how many heartbeats had landed.
+  Live Grand Exchange slots and the offer box were empty for the same reason.
+
+### Changed
+
+- Reading live plugin state costs one request to the sync service instead of three. The
+  service answers status, slots and the offer box together precisely so a page shows one
+  moment; asking three times was both slower and the only way to get an inconsistent answer.
+
 ## [1.2.1] - 2026-08-23
 
 ### Fixed
