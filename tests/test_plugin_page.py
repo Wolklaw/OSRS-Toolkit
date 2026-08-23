@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from toolkit_web.app import PLUGIN_BRANCH, PLUGIN_SOURCE_URL, PLUGIN_ZIP_URL
+
 
 def test_the_plugin_page_reads_signed_out(client: TestClient):
     """Somebody deciding whether this is worth signing up for is exactly who needs it."""
@@ -29,23 +31,20 @@ def test_it_links_the_plugin_repository(client: TestClient):
     assert "https://github.com/Wolklaw/osrs-toolkit-runelite" in client.get("/plugin").text
 
 
-def test_every_way_of_getting_the_source_names_the_branch(client: TestClient):
-    """The repository's default branch is the older, file-based plugin — no service address,
-    no pairing token. An unqualified "download the ZIP" hands somebody a build that cannot
-    reach this site at all, so neither route here is allowed to omit the branch."""
+def test_the_download_the_browse_link_and_the_folder_agree_on_a_branch(client: TestClient):
+    """These three drifting apart is what broke this page once already: the ZIP came from one
+    branch and the instructions described another, so people built a plugin with none of the
+    settings the next section told them to fill in. All three are derived from one constant."""
     page = client.get("/plugin").text
 
-    assert "archive/refs/heads/web-sync.zip" in page
-    assert "git clone -b web-sync" in page
-    assert "/tree/web-sync" in page
+    assert PLUGIN_ZIP_URL in page
+    assert PLUGIN_SOURCE_URL in page
+    assert f"osrs-toolkit-runelite-{PLUGIN_BRANCH}" in page
 
 
-def test_it_never_offers_a_default_branch_download(client: TestClient):
-    page = client.get("/plugin").text
-
-    assert "archive/refs/heads/main.zip" not in page
-    # A bare clone takes the default branch, which is exactly the wrong one here.
-    assert "git clone https://github.com/Wolklaw/osrs-toolkit-runelite" not in page
+def test_the_source_urls_are_built_from_the_branch_rather_than_written_out():
+    assert PLUGIN_ZIP_URL.endswith(f"/archive/refs/heads/{PLUGIN_BRANCH}.zip")
+    assert PLUGIN_SOURCE_URL.endswith(f"/tree/{PLUGIN_BRANCH}")
 
 
 def test_it_does_not_promise_the_plugin_lands_in_an_existing_runelite(client: TestClient):

@@ -61,13 +61,16 @@ STATE_COOKIE = "oauth_state"
 #: while the Plugin Hub submission is still in review.
 PLUGIN_REPO_URL = "https://github.com/Wolklaw/osrs-toolkit-runelite"
 
-#: Which branch those instructions must name, and the reason they cannot simply say "the
-#: repository". That repo's default branch is still the pre-web plugin: no ``SyncClient``, and
-#: no Service address or Pairing token settings for the guide to point at. Somebody who
-#: downloads the default ZIP gets a plugin that writes files to disk and never speaks to the
-#: sync service at all, then goes hunting for settings that are not there. The Plugin Hub
-#: submission pins a commit on this branch for the same reason.
-PLUGIN_BRANCH = "web-sync"
+#: Which branch the install instructions build from. Named explicitly rather than left to the
+#: repository's default, because a source ZIP URL has to carry a branch either way and because
+#: this went wrong once already: until 2026-08-23 that repo's default branch was still the
+#: pre-web plugin -- no ``SyncClient``, and none of the Service address, Pairing token or
+#: master-switch settings the guide tells people to fill in -- so "download it from the front
+#: page" handed somebody a build that could not reach this site at all. ``main`` was
+#: fast-forwarded to the web-era plugin that day and is now the one to build. Anything that
+#: leaves this branch behind again breaks the guide silently, which is the failure worth
+#: remembering: the page still renders, the build still succeeds, and the settings are absent.
+PLUGIN_BRANCH = "main"
 PLUGIN_SOURCE_URL = f"{PLUGIN_REPO_URL}/tree/{PLUGIN_BRANCH}"
 PLUGIN_ZIP_URL = f"{PLUGIN_REPO_URL}/archive/refs/heads/{PLUGIN_BRANCH}.zip"
 

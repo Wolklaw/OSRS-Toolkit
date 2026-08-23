@@ -22,23 +22,20 @@
         <a href="https://adoptium.net/" target="_blank" rel="noopener">Temurin</a> — the
         default options are fine.</li>
       {#
-        Both of these name the branch on purpose. The repository's default branch is still the
-        older, file-based plugin — no service address, no pairing token — so "press Code and
-        download the ZIP" would hand somebody a plugin that cannot reach this site, and send
-        them looking for settings it does not have.
+        Every link here is built from PLUGIN_BRANCH rather than written out, so the ZIP, the
+        clone and the folder name cannot drift apart -- see the note beside that constant for
+        the time they did, and what it cost.
       #}
       <li><strong>Download the plugin.</strong>
         <a href="{{ plugin_zip_url }}"><strong>Download the ZIP</strong></a> and unzip it —
         that gives you a folder called
         <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. With git instead:
         <div class="code-box cmd">
-          <code id="clone-cmd">git clone -b {{ plugin_branch }} {{ plugin_repo_url }}.git</code>
+          <code id="clone-cmd">git clone {{ plugin_repo_url }}.git</code>
           <button class="button secondary small" onclick="copyValue('clone-cmd', this)">Copy</button>
         </div>
-        <p class="hint">Take the <code>{{ plugin_branch }}</code> branch, not the repository's
-          front page — that one is the older version, from before this site existed, and it
-          cannot connect to it. <a href="{{ plugin_source_url }}" target="_blank" rel="noopener">Browse
-          the source</a>.</p>
+        <p class="hint"><a href="{{ plugin_source_url }}" target="_blank" rel="noopener">Browse
+          the source</a> first if you would rather see what you are building.</p>
       </li>
       <li><strong>Build it.</strong> Open a terminal in that folder and run:
         <div class="code-box cmd">
