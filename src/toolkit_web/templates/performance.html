@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Performance" %}
-{% set page_sub = "Grades the plans in your journal against what actually happened. Every figure is realized from recorded fills — a projection never counts as a result." %}
+{% set page_sub = "Grades the plans in your journal against what actually happened. Every figure comes from fills you recorded, never from a projection." %}
 
 {% block page_actions %}
 <form method="get" class="row">
@@ -96,7 +96,7 @@
   <div class="panel-head">
     <div class="grow">
       <h2>By item</h2>
-      <p class="hint tight">Items you have finished more than once, so the number means something.</p>
+      <p class="hint tight">Items you have finished more than once.</p>
     </div>
     {% if by_item %}
     <input type="search" class="filter-input" placeholder="Filter items…"

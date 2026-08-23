@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "GE Flipper" %}
-{% set page_sub = "Possible margins from recent trades, volume, Grand Exchange tax and risk checks — sized to the cash and slots you actually have." %}
+{% set page_sub = "Margins from recent trades, weighed against volume and Grand Exchange tax, sized to the cash and slots you have." %}
 
 {% block content %}
 
@@ -28,8 +28,7 @@
     </div>
     <button class="button" type="submit">Update</button>
   </form>
-  <p class="hint">Prices shown are completed transactions, not outstanding offers — a fill is
-    never guaranteed at them.</p>
+  <p class="hint">Prices are completed transactions, not offers sitting on the book.</p>
 </div>
 
 {% if market_unavailable %}
@@ -45,8 +44,8 @@
   <div class="panel-head">
     <div class="grow">
       <h2>Suggested portfolio</h2>
-      <p class="hint tight">One diversified plan for that cash stack, sized to stay inside safe
-        buy limits. Track a row to put it in your journal.</p>
+      <p class="hint tight">One spread-out plan for that cash stack, sized to stay inside buy
+        limits. Track a row to put it in your journal.</p>
     </div>
   </div>
   {% if portfolio %}

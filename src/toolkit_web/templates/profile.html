@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Profile" %}
-{% set page_sub = "Your account, the plugin it reads from, and everything RuneScope is holding for you." %}
+{% set page_sub = "Your account, the plugin it reads from, and the data it holds." %}
 
 {% block content %}
 
@@ -36,13 +36,12 @@
   <div class="status-msg" id="name-status"></div>
   <div class="callout" style="margin-top:0.9rem">
     <strong>Your recovery code is the only way back in.</strong>
-    <p>It was shown once, when this account was created, and there is no copy of it here —
-      only a hash of it. Lose it and this journal cannot be reached again from another device.
-      Sign in with Discord instead if you would rather not carry that risk.</p>
+    <p>It was shown once, when this account was created, and only a hash of it is kept here.
+      Lose it and this journal cannot be reached from another device.</p>
   </div>
   {% else %}
-  <p class="hint">Your name and avatar come from Discord and refresh on every sign-in. RuneScope
-    asks Discord for nothing else — no email address, no servers, no messages.</p>
+  <p class="hint">Your name and avatar come from Discord and refresh on every sign-in. That is
+    all RuneScope asks Discord for.</p>
   {% endif %}
 </div>
 
@@ -50,8 +49,8 @@
   <div class="panel-head">
     <div class="grow">
       <h2>RuneLite plugin</h2>
-      <p class="hint tight">The companion plugin is what sends your fills, live offer slots,
-        bank and gear. Everything works without it — you just type more.</p>
+      <p class="hint tight">The companion plugin sends your fills, live offer slots, bank and
+        gear. Everything works without it; you just type more.</p>
     </div>
     {% if account.paired %}<span class="badge ok">Connected</span>{% else %}<span class="badge">Not connected</span>{% endif %}
   </div>
@@ -90,9 +89,9 @@
     <div class="grow">
       <h2>Desktop app</h2>
       <p class="hint tight">Points the Windows app at this account, so its journal mirrors
-        this one and it reads your live Grand Exchange state from here instead of the plugin
-        directly. Not the plugin's own pairing token above — this is a separate credential,
-        because leaking it should not hand over write access to the sync pipeline.</p>
+        this one and it reads your live Grand Exchange state from here. This is its own token,
+        separate from the plugin's above. Don't have the app?
+        <a href="/download">Download it</a>.</p>
     </div>
   </div>
 
@@ -130,8 +129,8 @@
 <div class="grid-2">
   <div class="panel">
     <h2>Synced characters</h2>
-    <p class="hint tight">Every RuneLite account the sync service has seen play through your
-      token. Switch between them in the header.</p>
+    <p class="hint tight">Every RuneLite account seen playing through your token. Switch
+      between them in the header.</p>
     {% if synced_characters %}
     <div class="row" style="margin-top:0.8rem">
       {% for character in synced_characters %}
@@ -197,9 +196,9 @@
       <div class="foot"><a href="/savings-goal">{{ "Review it" if account.has_goal else "Set one" }}</a></div>
     </div>
   </div>
-  <p class="hint">Your journal is a database file on this server, one per account, shared with
-    nobody. The CSV export is the whole thing — positions and manual trades both — in a format
-    a spreadsheet will open. <a href="/about">What is and isn't stored</a>.</p>
+  <p class="hint">One database file on this server per account. The CSV export is the whole
+    journal — positions and manual trades both — in a format a spreadsheet opens.
+    <a href="/about">What is stored</a>.</p>
 </div>
 
 <div class="panel">

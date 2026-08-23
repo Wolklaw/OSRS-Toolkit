@@ -30,6 +30,7 @@ and none of which need PySide6 installed to run headless on a server.
 | `/pvm` `/savings-goal` | Boss checklists against your synced loadout; one savings target. |
 | `/item/{id}` | One item's full market breakdown and price history. |
 | `/profile` | Account, pairing token, desktop access tokens, characters, data export, theme. |
+| `/download` | The Windows desktop app: current version and both builds, read from the GitHub release. **Renders signed out** — whether to use the site or the app is a question asked before signing up. |
 | `/about` `/help` | What this is and what it holds; setup, FAQ, and how to get in touch. **Both render signed out** — they answer the questions asked before signing in. |
 
 Every page shares one shell (`templates/base.html`): sidebar navigation, a price-freshness
@@ -75,7 +76,29 @@ domain layer moves.
 | `TOOLKIT_SESSION_SECRET` | random on every start | Set this in production, or every restart signs everyone out |
 | `TOOLKIT_DATA_DIR` | `data` | Where the accounts database and every user's journal live |
 | `TOOLKIT_SYNC_BASE_URL` | `https://sync.runescope.app` | The plugin's sync service |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | unset | Cloudflare Turnstile — see below |
 | `TOOLKIT_DEV_LOGIN` | `false` | See below |
+
+### The captcha on account creation
+
+Creating an account without Discord costs nothing — no login somewhere else, no mailbox, no
+confirmation step — so that one route is gated on a
+[Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) challenge. Discord sign-in
+is already somebody else's identity check, and signing back in with a recovery code needs a
+code that was issued to a real person, so neither is gated.
+
+Get the keys from **dash.cloudflare.com → Turnstile → Add widget**, hostname `runescope.app`.
+The widget is drawn only where `TURNSTILE_SITE_KEY` is set, and the token is demanded only
+where `TURNSTILE_SECRET_KEY` is set — the two are read independently, so an environment with
+neither (local, tests) skips the challenge on both sides rather than drawing a box that can
+never be satisfied. Set both together in production.
+
+Cloudflare publishes [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/)
+for exercising this by hand: site key `1x00000000000000000000AA` and secret
+`1x0000000000000000000000000000000AA` pass everything, and the `2x...` pair fails everything.
+
+If Cloudflare cannot be reached at all, creation answers 503 rather than either minting an
+account on an answer that never arrived or telling somebody they failed a check they passed.
 
 ### Signing in without a Discord application yet
 
@@ -99,6 +122,14 @@ Only the account holder can do this part — it needs a login at
 
 No other scopes or bot permissions are needed — this only ever asks Discord for `identify`, a
 user id, a username and an avatar hash.
+
+## Outbound calls
+
+Three, all of them read-only and none of them on the hot path of a signed-in page:
+the OSRS Wiki for prices, the sync service for pending plugin events, and — for `/download`
+only — `api.github.com` for the latest desktop release, cached for an hour. Turnstile adds a
+fourth, on account creation only. A failure of any of them costs a page its freshness or one
+button, never the page itself.
 
 ## How a page stays current
 

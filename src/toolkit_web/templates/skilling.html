@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Skilling Profit" %}
-{% set page_sub = "Processing and gathering methods across ten skills, priced off the live market. Rates are community estimates, not a promise of what an hour will pay." %}
+{% set page_sub = "Processing and gathering methods across ten skills, priced off the live market. Rates are community estimates." %}
 
 {% block content %}
 
@@ -18,8 +18,7 @@
   {% elif has_skills %}
   <div class="status-msg ok">Levels found — methods you don't have the level for are marked below.</div>
   {% else %}
-  <p class="hint">Read from the public OSRS hiscores. Nothing is stored, and no password is
-    ever asked for.</p>
+  <p class="hint">Read from the public OSRS hiscores. Nothing is stored.</p>
   {% endif %}
 </div>
 

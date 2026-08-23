@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set page_title = "Desktop app" %}
+{% set page_sub = "OSRS Toolkit for Windows — the same tools in their own window, sharing one journal with this site." %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>OSRS Toolkit for Windows</h2>
+      <p class="hint tight">
+        {% if release %}Version {{ release.version }}{% if release.published_on %} · released {{ release.published_on }}{% endif %}
+        {% else %}Windows 10 and 11, 64-bit.{% endif %}
+      </p>
+    </div>
+    {% if release %}<span class="badge accent">Free</span>{% endif %}
+  </div>
+
+  <div class="row" style="margin-top:0.9rem">
+    {% if release and release.installer %}
+    <a class="button" href="{{ release.installer.url }}">Download installer{% if release.installer.size_mb %} · {{ release.installer.size_mb }} MB{% endif %}</a>
+    {% endif %}
+    {% if release and release.portable %}
+    <a class="button secondary" href="{{ release.portable.url }}">Portable zip{% if release.portable.size_mb %} · {{ release.portable.size_mb }} MB{% endif %}</a>
+    {% endif %}
+    {% if not release or not release.installer %}
+    <a class="button" href="{{ releases_url }}" target="_blank" rel="noopener">Downloads on GitHub</a>
+    {% endif %}
+  </div>
+
+  <p class="hint">
+    Windows 10 or 11, 64-bit. The portable zip runs from a folder without installing anything.
+    <a href="{{ releases_url }}" target="_blank" rel="noopener">All versions and release notes</a>.
+  </p>
+  <p class="hint">Windows shows a "don't run this" prompt for apps it hasn't seen before — choose
+    More info, then Run anyway. The build isn't signed yet.</p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Do I need it?</h2>
+    <p class="hint tight">No. Everything on this site works in the browser, on any device, with
+      nothing installed. The desktop app is for people who would rather have a window beside
+      the game than a tab.</p>
+  </div>
+  <div class="panel">
+    <h2>One journal, both places</h2>
+    <p class="hint tight">Paste a desktop token from your <a href="/profile">profile</a> and the
+      two stay level: a trade recorded in either shows up in the other within a minute.
+      <a href="/help">How to connect it</a>.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">What it does differently</h2>
+    <ul>
+      <li>Runs in its own window, so it sits beside the game rather than behind a browser tab.</li>
+      <li>Keeps its journal in a file on your PC, mirrored here while it is connected.</li>
+      <li>Works offline with the prices it last fetched.</li>
+      <li>Same calculations as this site — the two share the code that does the maths.</li>
+    </ul>
+    <p>Open source, GPLv3:
+      <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">github.com/Wolklaw/OSRS-Toolkit</a>.</p>
+  </div>
+</div>
+
+{% endblock %}

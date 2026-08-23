@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "About RuneScope" %}
-{% set page_sub = "What this is, what it does with your data, and what it deliberately does not do." %}
+{% set page_sub = "What this is, who runs it, and what it does with your data." %}
 {% set main_class = "narrow" %}
 
 {% block content %}
@@ -11,48 +11,40 @@
       RuneScape.</strong> Grand Exchange research, profit calculators, and a trade journal that
       remembers what you actually did — so that later it can tell you which of your plans were
       worth following.</p>
-    <p>It is the web version of <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">OSRS
-      Toolkit</a>, the Windows desktop app, and shares the same calculations. There is nothing
-      to install and nothing to keep updated — and if you do have the desktop app, it can point
-      at your account here and keep its own journal level with this one, so a trade recorded
-      in either place shows up in both.</p>
+    <p>It shares its calculations with <a href="/download">OSRS Toolkit for Windows</a>, the
+      desktop app it grew out of. Run either, or both: connect the desktop app to your account
+      here and a trade recorded in one shows up in the other.</p>
   </div>
 </div>
 
 <div class="panel">
   <div class="prose">
     <h2>Game interaction</h2>
-    <p>RuneScope does not play the game. It generates no game input, communicates with no game
-      world, alters no network traffic, and modifies no game client. The optional RuneLite
-      plugin only reports trade events that already happened on your screen — it never acts.</p>
-    <p>Nothing here asks for, wants, or has any use for a Jagex password, bank PIN, or
-      authenticator code. Never enter one anywhere that asks on RuneScope's behalf.</p>
+    <p>RuneScope does not play the game. It sends no input, changes no network traffic, and
+      modifies no game client. The optional RuneLite plugin reports trades after they have
+      happened; it never acts.</p>
+    <p>It never asks for a Jagex password, bank PIN, or authenticator code.</p>
 
     <h2>Your data</h2>
-    <p>This is a hosted service, so being straight about this matters: <strong>your journal
-      lives on the server that runs RuneScope</strong>, not only on your own machine. That is
-      the trade you make for reaching it from any device. If the desktop app is pointed at
-      this account, its journal is a mirror of the same one — recording a trade there sends it
-      here, and vice versa. Point nothing at it and the desktop app stays exactly as before:
-      everything on your PC and nothing leaves it.</p>
+    <p><strong>Your journal lives on the server that runs RuneScope</strong>, which is what
+      lets you reach it from any device. Connect the desktop app and it mirrors the same
+      journal both ways. Leave it disconnected and it keeps everything on your PC.</p>
     <ul>
       <li><strong>What is stored:</strong> your trade journal, tracked positions, imported
-        RuneLite events, watchlist, savings goal, the names you have given your characters, and
-        — if the desktop app is connected — a digest of its access token, never the token
-        itself. One database file per account, shared with nobody.</li>
-      <li><strong>Sign-in:</strong> a Discord user id, username and avatar, or nothing but the
-        hash of a recovery code. No password is ever held. No email address is ever asked for.</li>
-      <li><strong>Prices</strong> come from the OSRS Wiki real-time price API. Character lookup
-        reads the public hiscores. Neither knows who asked.</li>
+        RuneLite events, watchlist, savings goal, and your character names. One database file
+        per account. Tokens are kept as hashes, never as the token itself.</li>
+      <li><strong>Sign-in:</strong> a Discord user id, username and avatar — or, without
+        Discord, the hash of a recovery code. No passwords, no email addresses.</li>
+      <li><strong>Prices</strong> come from the OSRS Wiki real-time price API. Character
+        lookup reads the public hiscores. Neither knows who asked.</li>
       <li><strong>Taking it with you:</strong> the CSV export on your
-        <a href="/profile">profile</a> is your whole journal, any time you want it.</li>
+        <a href="/profile">profile</a> is your whole journal, any time.</li>
     </ul>
 
-    <h2>Estimates, not promises</h2>
-    <p>Every price shown is a completed transaction, not an outstanding offer — an item can
-      fail to fill at a price it traded at moments ago. Margins, GP/hour figures and boss
-      requirements are estimates drawn from market data and community sources. They are worth
-      reading and they are not guarantees.</p>
+    <h2>Where the numbers come from</h2>
+    <p>Prices are completed transactions, so an item can fail to fill at a price it traded at
+      minutes ago. Margins, GP/hour and boss requirements are estimates built from market data
+      and community sources.</p>
 
     <h2>Unofficial fan project</h2>
     <p>RuneScope is not affiliated with, sponsored by, or endorsed by Jagex. Jagex, RuneScape,
@@ -73,7 +65,7 @@
       <a href="https://oldschool.runescape.wiki/" target="_blank" rel="noopener">OSRS Wiki</a>.
       Source under the GPLv3 on
       <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">GitHub</a>.</p>
-    <p>Something wrong, missing, or just annoying? <a href="/help">Here is how to reach me</a>.</p>
+    <p>Something wrong or missing? <a href="/help">Here is how to reach me</a>.</p>
   </div>
 </div>
 

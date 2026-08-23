@@ -37,7 +37,7 @@ from osrs_toolkit.savings_goal import (
 )
 from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 
-from toolkit_web import discord_oauth
+from toolkit_web import discord_oauth, turnstile
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.charting import net_worth_history_svg, price_history_svg
 from toolkit_web.config import Settings
@@ -49,6 +49,7 @@ from toolkit_web.importing import (
     stored_journal,
 )
 from toolkit_web.market_cache import MarketCache
+from toolkit_web.releases import RELEASES_URL, ReleaseCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
 from toolkit_web.token_probe import mint_pairing_token, probe_token
@@ -187,6 +188,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     accounts = AccountsDB(settings.accounts_db_path)
     signer = SessionSigner(settings.session_secret)
     market = MarketCache(settings.data_dir / "market-cache")
+    releases = ReleaseCache()
     templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
     app = FastAPI(
@@ -285,7 +287,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active: str | None = ActiveCharacter,
     ) -> HTMLResponse:
         if account is None:
-            return templates.TemplateResponse(request, "landing.html")
+            return templates.TemplateResponse(
+                request,
+                "landing.html",
+                {"turnstile_site_key": settings.turnstile_site_key},
+            )
         switcher = character_switcher_context(account, active)
         filter_hash = switcher["active_character"]
         repository = journal_for(settings, account)
@@ -438,6 +444,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> HTMLResponse:
         return templates.TemplateResponse(
             request, "help.html", {"account": account, **_optional_switcher(account, active)}
+        )
+
+    @app.get("/download", response_class=HTMLResponse)
+    def download_page(
+        request: Request,
+        account: Account | None = OptionalAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        """The Windows app, offered from the site that replaced it.
+
+        Signed out as well as in: somebody who has not made an account yet is exactly who is
+        deciding between the two, and making them sign up first to find out the desktop app
+        exists gets that backwards.
+        """
+        return templates.TemplateResponse(
+            request,
+            "download.html",
+            {
+                "account": account,
+                "release": releases.latest(),
+                "releases_url": RELEASES_URL,
+                **_optional_switcher(account, active),
+            },
         )
 
     @app.get("/api/export.csv")
@@ -974,8 +1003,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         once, here, because there is nowhere on the server that could ever show it again: a
         lost code has no recovery of its own, which is the whole reason it works with no
         email address behind it.
+
+        Which also makes this the cheapest account in the system to create — no Discord
+        login, no mailbox, nothing to confirm — so it is the one door that gets a captcha.
         """
-        display_name = (payload or {}).get("display_name")
+        payload = payload or {}
+        if settings.turnstile_secret_key:
+            token = payload.get("turnstile_token")
+            verdict = turnstile.verify(
+                settings.turnstile_secret_key, token if isinstance(token, str) else ""
+            )
+            if verdict is None:
+                raise HTTPException(
+                    status_code=503, detail="Could not check the box just now — try again."
+                )
+            if not verdict:
+                raise HTTPException(
+                    status_code=400, detail="Tick the box to show you are human, then try again."
+                )
+        display_name = payload.get("display_name")
         display_name = display_name.strip() if isinstance(display_name, str) else ""
         code = _generate_recovery_code()
         account_id = _recovery_account_id(code)

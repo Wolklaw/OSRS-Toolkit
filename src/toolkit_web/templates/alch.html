@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Alch Finder" %}
-{% set page_sub = "Liquid High Alchemy candidates using conservative recent prices, buy limits and your available cash. Profit is after the nature rune." %}
+{% set page_sub = "High Alchemy candidates priced off recent trades, within buy limits and your cash. Profit is after the nature rune." %}
 
 {% block content %}
 
@@ -25,8 +25,8 @@
     </div>
     <button class="button" type="submit">Update</button>
   </form>
-  <p class="hint">High Alchemy needs Magic 55. Give your level and anything you cannot cast yet
-    is marked, rather than quietly ranked above what you can.</p>
+  <p class="hint">High Alchemy needs Magic 55. Give your level and anything you cannot cast
+    yet is marked.</p>
 </div>
 
 {% if market_unavailable %}

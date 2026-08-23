@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Dashboard" %}
-{% set page_sub = "Where your money is right now: what is open, what it cost, and what the plugin is seeing in game." %}
+{% set page_sub = "Where your money is right now: what is open, what it cost, and what the plugin sees in game." %}
 
 {% block page_actions %}
 <a class="button secondary small" href="/flips">Find a flip</a>
@@ -153,7 +153,7 @@
   <div class="panel-head">
     <div class="grow">
       <h2>Positions</h2>
-      <p class="hint tight">Every flip you are part-way through. Update one to record what it
+      <p class="hint tight">Every flip you are part-way through. Update one with what it
         actually filled at — that is what Performance grades later.</p>
     </div>
     {% if positions %}
@@ -191,7 +191,7 @@
           <td>
             <span class="badge {{ 'ok' if position.status == 'Completed' else ('bad' if position.status == 'Cancelled' else 'accent') }}">{{ position.status }}</span>
             {% if position.needs_attention %}
-            <span class="badge bad" title="Your ask is at least 2% above what the market now suggests, so it is unlikely to fill. Relisting nearer the suggestion clears this.">Stale ask</span>
+            <span class="badge bad" title="Your ask is at least 2% above what the market now suggests. Relist nearer the suggestion to clear this.">Stale ask</span>
             {% endif %}
           </td>
           <td class="num">{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>

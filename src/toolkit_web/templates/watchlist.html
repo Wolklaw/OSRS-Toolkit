@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Watchlist" %}
-{% set page_sub = "Items you are keeping an eye on, whether or not they clear the GE Flipper's bar. Margin is after tax; age is how long ago the item last traded." %}
+{% set page_sub = "Items you are keeping an eye on, whether or not they clear the GE Flipper's bar. Margin is after tax; age is how long since the item last traded." %}
 
 {% block content %}
 
@@ -14,8 +14,8 @@
     <button class="button" onclick="addWatchlistItem()">Add</button>
   </div>
   <div class="status-msg" id="watchlist-status"></div>
-  <p class="hint">Spelled as the game spells it — "Rune platebody", not "plate". You can also
-    add items straight from the <a href="/flips">GE Flipper</a>.</p>
+  <p class="hint">Spell it as the game does — "Rune platebody", not "plate". You can also add
+    items straight from the <a href="/flips">GE Flipper</a>.</p>
 </div>
 
 {% if market_unavailable %}

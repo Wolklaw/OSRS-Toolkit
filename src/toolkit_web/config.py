@@ -1,8 +1,10 @@
 """Runtime settings, all overridable from the environment.
 
-Nothing here has a usable default for the pieces that need a real Discord application — those
-are None until set, and the app refuses to start the OAuth routes without them rather than
-silently accepting a login nobody could ever complete.
+Nothing here has a usable default for the pieces that need an account somewhere else — a
+Discord application, a Cloudflare Turnstile widget. Those are None until set, and the app
+turns the feature off rather than half-running it: no Discord keys means the OAuth routes
+refuse instead of accepting a login nobody could complete, and no Turnstile secret means no
+challenge is drawn and none is demanded.
 """
 
 from __future__ import annotations
@@ -38,6 +40,12 @@ class Settings:
     #: application exists to authenticate against. Must never be true where the service is
     #: reachable by anyone but the person developing it.
     dev_login_enabled: bool
+    #: Cloudflare Turnstile, which guards account creation without Discord. Both unset means
+    #: no challenge is drawn and none is demanded -- the local and test setups, where there is
+    #: no Cloudflare account to get keys from and nothing to protect. Set the secret in
+    #: production: the check is enforced exactly when a secret exists to check against.
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -58,6 +66,8 @@ class Settings:
             sync_base_url=os.environ.get("TOOLKIT_SYNC_BASE_URL", "https://sync.runescope.app"),
             sync_invite_code=os.environ.get("TOOLKIT_SYNC_INVITE_CODE") or None,
             dev_login_enabled=_bool("TOOLKIT_DEV_LOGIN", False),
+            turnstile_site_key=os.environ.get("TURNSTILE_SITE_KEY") or None,
+            turnstile_secret_key=os.environ.get("TURNSTILE_SECRET_KEY") or None,
         )
 
     def journal_path(self, discord_user_id: str) -> Path:

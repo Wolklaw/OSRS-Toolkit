@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Help" %}
-{% set page_sub = "Getting set up, what each page is for, and how to reach a human when something is wrong." %}
+{% set page_sub = "Getting set up, what each page is for, and how to reach me." %}
 {% set main_class = "narrow" %}
 
 {% block content %}
@@ -9,8 +9,8 @@
   <div class="prose">
     <h2 style="margin-top:0">Getting started</h2>
     <ol class="steps">
-      <li><strong>Sign in.</strong> Discord, or a recovery code if you would rather not use
-        Discord at all. Either way there is no password and no email address.</li>
+      <li><strong>Sign in.</strong> With Discord, or with a recovery code instead. No
+        password, no email address either way.</li>
       <li><strong>Use it straight away.</strong> The GE Flipper, Alch Finder, Skilling Profit
         and Watchlist need nothing from you but a cash stack — they read live market prices.</li>
       <li><strong>Connect the plugin when you want the journal to fill itself in.</strong>
@@ -48,24 +48,22 @@
 <div class="panel">
   <div class="prose">
     <h2 style="margin-top:0">Connecting the desktop app</h2>
-    <p>Optional, and separate from the plugin above. This points the Windows app at your
-      account here so its journal — manual trades and tracked positions — mirrors this one,
-      and so it can show live Grand Exchange state without going near the plugin's files
-      directly. Signed out, the desktop app is unaffected and stays exactly as it always
-      was: a local journal on your PC.</p>
+    <p>Optional, and separate from the plugin above. <a href="/download">Download the app</a>
+      first if you have not already. Connecting it points the Windows app at your account
+      here, so its journal mirrors this one and it can show your live Grand Exchange slots.
+      Leave it disconnected and it keeps its journal on your PC, as it always has.</p>
     <ol class="steps">
       <li>On your <a href="/profile">profile</a>, under <strong>Desktop app</strong>, choose
         <strong>Get a token</strong> and copy it. This is a different credential from the
         plugin's pairing token above — it is what proves the desktop app to your account, not
         what feeds the sync service.</li>
       <li>In the desktop app, open <strong>Settings → Website</strong> and paste it in.</li>
-      <li>Leave the website address as it is unless you are running your own copy of
-        RuneScope.</li>
+      <li>Leave the website address alone unless you run your own copy of RuneScope.</li>
       <li>A trade recorded in either place reaches the other within a minute, sooner if the
         desktop window is the one in front. Deleting a trade in one removes it from both.</li>
     </ol>
-    <p>Lost a token, or replacing a PC? Revoke the old one from your profile and mint a new
-      one — nothing already synced is lost by doing that.</p>
+    <p>Lost a token, or replacing a PC? Revoke the old one from your profile and make a new
+      one. Nothing already synced is lost.</p>
   </div>
 </div>
 
@@ -101,9 +99,8 @@
     <details class="faq">
       <summary>Do I need the plugin?</summary>
       <p>No. Everything that reads the market — the GE Flipper, Watchlist, Alch Finder and
-        Skilling Profit — works with nothing connected. The plugin only saves you typing: it is
-        what fills the journal, the live offer slots, the buy-limit counter and PvM Readiness in
-        automatically.</p>
+        Skilling Profit — works with nothing connected. The plugin saves you typing: it fills
+        in the journal, the live offer slots, the buy-limit counter and PvM Readiness for you.</p>
     </details>
 
     <details class="faq">
@@ -115,10 +112,9 @@
 
     <details class="faq">
       <summary>A suggested flip didn't fill at the suggested price.</summary>
-      <p>Expected, unfortunately. Every price here is a completed transaction, not an offer
-        sitting on the book. Nothing can promise the next offer fills at the last one's price —
-        that is why the flipper weighs volume and recency into a confidence figure instead of
-        pretending otherwise.</p>
+      <p>Prices here are completed transactions, not offers sitting on the book, so the next
+        offer can miss the last one's price. That is what the flipper's confidence figure is
+        for: it weighs volume and how recently the item traded.</p>
     </details>
 
     <details class="faq">
@@ -138,19 +134,17 @@
 
     <details class="faq">
       <summary>What happens if I lose my recovery code?</summary>
-      <p>The account is gone. The code is never stored — only a hash of it — which is exactly
-        what makes it work with no email address behind it, and exactly why nothing can recover
-        one. If that worries you, sign in with Discord instead.</p>
+      <p>The account is gone. Only a hash of the code is stored, which is what lets the
+        account work with no email address behind it — and why nothing here can look one up.
+        Sign in with Discord if you would rather not keep track of a code.</p>
     </details>
 
     <details class="faq">
       <summary>Can I use this alongside the desktop app?</summary>
-      <p>Yes — connect it from your <a href="/profile">profile</a> under
-        <strong>Desktop app</strong> and paste the token into the desktop app's
-        <strong>Settings → Website</strong> tab. From then on the two share one journal: a
-        trade recorded in either place reaches the other within a minute. Leave it
-        disconnected and the desktop app works exactly as it always has, entirely on your
-        PC.</p>
+      <p>Yes. <a href="/download">Download it</a>, then connect it from your
+        <a href="/profile">profile</a> under <strong>Desktop app</strong> and paste the token
+        into <strong>Settings → Website</strong>. The two then share one journal: a trade
+        recorded in either reaches the other within a minute.</p>
     </details>
 
     <details class="faq">
@@ -162,10 +156,9 @@
 
     <details class="faq">
       <summary>Can this get me banned?</summary>
-      <p>It does not play the game, send input, touch the client, or read anything the game
-        does not already show you on screen. The plugin runs inside RuneLite, which Jagex
-        permits, and only reports events after they have happened. See
-        <a href="/about">About</a> for the full statement.</p>
+      <p>It does not play the game, send input, or read anything the game has not already
+        shown you. The plugin runs inside RuneLite, which Jagex permits, and reports events
+        after they happen. <a href="/about">More on that</a>.</p>
     </details>
   </div>
 </div>
@@ -173,8 +166,7 @@
 <div class="panel">
   <div class="prose">
     <h2 style="margin-top:0">Still stuck?</h2>
-    <p>Found a bug, have a feature request, or something just isn't working right? Any of these
-      reach me:</p>
+    <p>Bug, feature request, or something not working? Any of these reach me:</p>
     <ul>
       <li><strong>Project page</strong> —
         <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">github.com/Wolklaw/OSRS-Toolkit</a>
@@ -184,8 +176,7 @@
     </ul>
 
     <h3>Supporting it</h3>
-    <p>RuneScope is free and every feature stays available whether or not you ever give
-      anything. If it saves you time and you feel like it, there is an optional tip jar at
+    <p>Every feature is free and stays that way. If it saves you time, there is a tip jar at
       <a href="https://paypal.me/wolklaw" target="_blank" rel="noopener">paypal.me/wolklaw</a>.</p>
   </div>
 </div>

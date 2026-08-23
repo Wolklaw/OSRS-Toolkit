@@ -103,6 +103,11 @@ Three of them matter more than the rest:
   pairing token. Mismatched, that button returns a 502 and nothing else explains why.
 - **`TOOLKIT_DEV_LOGIN`** — must never be set here. It issues a real session for whichever
   account id the caller names, with no Discord involved.
+- **`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`** — the captcha on account creation without
+  Discord. Set both, or neither: the site key draws the widget and the secret enforces it, and
+  a site key with no secret is a box that does nothing while a secret with no site key is a
+  check nobody can pass. From **dash.cloudflare.com → Turnstile**, widget hostname
+  `runescope.app`.
 
 ### Why the sync URL is loopback
 
@@ -124,7 +129,16 @@ included: `https://runescope.app/auth/discord/callback`. Only the `identify` sco
 requested — a user id, a username and an avatar hash. Nothing else, no bot permissions.
 
 Sign-in also works with no Discord application at all: the landing page offers a recovery-code
-account, which needs no identity provider.
+account, which needs no identity provider — and is the one path a script could walk unaided,
+which is why it carries the Turnstile challenge above.
+
+### The download page needs outbound GitHub
+
+`/download` reads the latest desktop release from `api.github.com`, cached for an hour, and
+falls back to a plain link at the releases page when it cannot. Unauthenticated, so it spends
+one of the 60 calls an hour this address gets — nothing else here touches that budget. A
+blocked outbound GitHub costs the page its version number and its two direct download buttons,
+nothing more.
 
 ## Cloudflare: do not turn on "Cache Everything"
 
