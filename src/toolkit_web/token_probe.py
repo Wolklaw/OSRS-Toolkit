@@ -42,6 +42,32 @@ def mint_pairing_token(base_url: str, invite_code: str | None) -> str | None:
     return token if isinstance(token, str) and token else None
 
 
+def revoke_pairing_token(base_url: str, token: str) -> bool:
+    """Retire a pairing token at the sync service. True if it is now gone.
+
+    Called when a replacement has already been minted, which is what makes "get a token" mean
+    one token rather than one more. Without it every old token stayed valid forever, and a
+    plugin still holding one went on syncing perfectly into a pairing this app had stopped
+    reading — the failure was silent on both ends, and minting another token to fix it only
+    ever added a third.
+
+    Revoked, the same plugin gets a 401 and says so in the chatbox, which is the difference
+    between a confusing evening and a one-line instruction to paste the new token.
+    """
+    request = urllib.request.Request(f"{base_url.rstrip('/')}/v1/pair", method="DELETE")
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("User-Agent", USER_AGENT)
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            response.read()
+    except urllib.error.HTTPError as error:
+        # Already unknown to the service is the state we were trying to reach.
+        return error.code in (401, 403)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+    return True
+
+
 def probe_token(base_url: str, token: str) -> bool | None:
     """True if the token works, False if the service rejected it outright, ``None`` if
     nothing useful could be determined — the service could not be reached at all, which is a

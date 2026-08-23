@@ -48,7 +48,13 @@ def test_generating_a_token_pairs_the_account(signed_in: TestClient):
         response = signed_in.post("/api/pairing-token/generate")
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "token": "fresh-token-abc"}
+    # previous_revoked says whether an older token was retired on the way. Nothing to retire
+    # on a first pairing, so False here rather than absent — see the group at the bottom.
+    assert response.json() == {
+        "ok": True,
+        "token": "fresh-token-abc",
+        "previous_revoked": False,
+    }
     assert signed_in.get("/api/me").json()["paired"] is True
 
 
@@ -107,3 +113,69 @@ def test_a_paired_account_can_still_generate_a_replacement_token(signed_in: Test
         response = signed_in.post("/api/pairing-token/generate")
 
     assert response.json()["token"] == "second-token"
+
+
+# -- one token at a time -------------------------------------------------------------------
+
+
+def test_generating_a_token_retires_the_one_it_replaces(signed_in: TestClient):
+    """The whole point. Every old token used to stay valid forever, so a plugin still holding
+    one went on syncing into a pairing this app had stopped reading — silently, on both ends,
+    and minting another to fix it only added a third."""
+    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+        signed_in.post("/api/pairing-token/generate")
+
+    with (
+        patch("toolkit_web.app.mint_pairing_token", return_value="second-token"),
+        patch("toolkit_web.app.revoke_pairing_token", return_value=True) as revoke,
+        patch("toolkit_web.importing.RuneLiteSyncImporter"),
+    ):
+        body = signed_in.post("/api/pairing-token/generate").json()
+
+    assert body["token"] == "second-token"
+    assert body["previous_revoked"] is True
+    revoke.assert_called_once()
+    assert revoke.call_args[0][1] == "first-token"
+
+
+def test_the_first_token_has_nothing_to_retire(signed_in: TestClient):
+    with (
+        patch("toolkit_web.app.mint_pairing_token", return_value="first-token"),
+        patch("toolkit_web.app.revoke_pairing_token") as revoke,
+    ):
+        body = signed_in.post("/api/pairing-token/generate").json()
+
+    assert body["previous_revoked"] is False
+    revoke.assert_not_called()
+
+
+def test_the_old_token_survives_a_mint_that_failed(signed_in: TestClient):
+    """Revoking before the replacement exists would strand an account with no working token
+    at all, for a service outage that changed nothing else."""
+    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+        signed_in.post("/api/pairing-token/generate")
+
+    with (
+        patch("toolkit_web.app.mint_pairing_token", return_value=None),
+        patch("toolkit_web.app.revoke_pairing_token") as revoke,
+        patch("toolkit_web.importing.RuneLiteSyncImporter"),
+    ):
+        assert signed_in.post("/api/pairing-token/generate").status_code == 502
+
+    revoke.assert_not_called()
+
+
+def test_what_the_plugin_already_sent_is_drained_before_the_token_dies(signed_in: TestClient):
+    """Events still queued under the old token become unreachable the moment it is revoked —
+    no credential will ever name them again — so they are imported first."""
+    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+        signed_in.post("/api/pairing-token/generate")
+
+    with (
+        patch("toolkit_web.app.mint_pairing_token", return_value="second-token"),
+        patch("toolkit_web.app.revoke_pairing_token", return_value=True),
+        patch("toolkit_web.importing.RuneLiteSyncImporter") as importer,
+    ):
+        signed_in.post("/api/pairing-token/generate")
+
+    importer.return_value.import_pending.assert_called_once()

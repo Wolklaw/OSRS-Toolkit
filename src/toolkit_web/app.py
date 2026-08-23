@@ -53,7 +53,7 @@ from toolkit_web.market_cache import MarketCache
 from toolkit_web.releases import RELEASES_URL, ReleaseCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
-from toolkit_web.token_probe import mint_pairing_token, probe_token
+from toolkit_web.token_probe import mint_pairing_token, probe_token, revoke_pairing_token
 
 STATE_COOKIE = "oauth_state"
 
@@ -1204,13 +1204,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         here is what stands in for it: an account that reached this page already proved it,
         the same way it already proved enough to read its own journal.
         """
+        previous = account.pairing_token
+        if previous:
+            # Whatever the plugin has already sent but this app has not imported yet is about
+            # to become unreachable: nothing will be able to authenticate for that queue once
+            # the token is gone. Draining it first is the difference between replacing a
+            # credential and losing the trades that were still in flight behind it.
+            journal_for(settings, account)
         token = mint_pairing_token(settings.sync_base_url, settings.sync_invite_code)
         if token is None:
             raise HTTPException(
                 status_code=502, detail="Could not reach the sync service — try again shortly."
             )
         accounts.set_pairing_token(account.discord_user_id, token)
-        return {"ok": True, "token": token}
+        # Only once the replacement is safely minted and saved. Revoking first would leave an
+        # account with no working token at all if the service went away in between.
+        retired = bool(previous) and revoke_pairing_token(settings.sync_base_url, previous)
+        return {"ok": True, "token": token, "previous_revoked": retired}
 
     # -- desktop access --------------------------------------------------------------------
 

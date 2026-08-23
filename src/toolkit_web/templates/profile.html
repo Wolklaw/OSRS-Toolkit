@@ -64,7 +64,7 @@
 
   <div class="row">
     <button class="button {{ 'secondary' if account.paired else '' }}" onclick="generatePairingToken()">
-      {{ "Get a new token" if account.paired else "Get a token" }}
+      {{ "Replace token" if account.paired else "Get a token" }}
     </button>
     {% if account.paired %}
     <button class="button danger small" onclick="disconnectPlugin()">Disconnect</button>
@@ -252,6 +252,19 @@
   }
 
   async function generatePairingToken() {
+    // Replacing retires the old token, which is what keeps exactly one working at a time --
+    // and it means the plugin stops syncing the moment this is pressed, until the new token
+    // is pasted in. Worth one confirm: pressing it and walking away used to look identical
+    // to it having worked.
+    if ({{ 'true' if account.paired else 'false' }}) {
+      const ok = confirm(
+        'This replaces your current token and switches the old one off.
+
+'
+        + 'RuneLite will stop syncing until you paste the new one into the plugin. Continue?'
+      );
+      if (!ok) { return; }
+    }
     setStatus('generate-status', 'Generating…');
     const result = await api('POST', '/api/pairing-token/generate');
     if (!result.ok) {
@@ -260,7 +273,11 @@
     }
     document.getElementById('generated-token').textContent = result.data.token;
     document.getElementById('generated-token-box').style.display = 'block';
-    setStatus('generate-status', "Paste this into the plugin's settings.", 'ok');
+    const retired = result.data.previous_revoked
+      ? ' Your previous token no longer works.'
+      : '';
+    setStatus(
+      'generate-status', "Paste this into the plugin's settings." + retired, 'ok');
   }
 
   async function savePairingToken() {
