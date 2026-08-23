@@ -4,6 +4,14 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-23
+
+### Fixed
+
+- The app crashed on launch with a saved window state that restored as maximized or
+  fullscreen: restoring that geometry fires a window-state-change event before the journal
+  mirror timer it reaches for existed yet.
+
 ## [1.2.0] - 2026-08-23
 
 ### Highlights

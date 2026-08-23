@@ -2132,6 +2132,12 @@ class MainWindow(QMainWindow):
         self._cash_debounce.setSingleShot(True)
         self._cash_debounce.setInterval(200)
         self._cash_debounce.timeout.connect(self._cash_changed)
+        # Built before _restore_window_geometry, like the flashers above: restoreGeometry can
+        # fire changeEvent synchronously (a saved maximized/fullscreen state re-applying counts
+        # as a window state change), and changeEvent reaches for this timer.
+        self._mirror_timer = QTimer(self)
+        self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
+        self._mirror_timer.timeout.connect(self._mirror_journal)
         self._build_ui()
         self._apply_theme(self._theme)
         self._restore_window_geometry()
@@ -2146,9 +2152,6 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(250, self, self.load_market)
         # Let the window paint before anything modal appears in front of it.
         QTimer.singleShot(600, self, self._run_startup_notices)
-        self._mirror_timer = QTimer(self)
-        self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
-        self._mirror_timer.timeout.connect(self._mirror_journal)
         self._mirror_timer.start()
         # Not on the same tick as the first import: a fresh launch has a window to paint and
         # a market to load, and the journal exchange is the one thing here nobody is waiting on.
