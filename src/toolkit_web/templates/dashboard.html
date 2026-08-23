@@ -8,54 +8,87 @@
 
 {% block content %}
 
-{% if not account.paired %}
-<div class="panel">
-  <h2>Connect your RuneLite plugin</h2>
-  <p class="hint">Get a token, paste it into the plugin's settings under "Pairing token", and
-    switch on "Send to OSRS Toolkit Sync". Your Journal starts filling in from there.
-    <a href="/help">Step-by-step instructions</a>.</p>
-
-  <div class="row" style="margin-top:0.9rem">
-    <button class="button" onclick="generatePairingToken()">Get a token</button>
-  </div>
-  <div id="generated-token-box" style="display:none">
-    <div class="code-box">
-      <code id="generated-token"></code>
-      <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
-    </div>
-  </div>
-  <div class="status-msg" id="generate-status"></div>
-
-  <p class="hint">Already have a token from somewhere else?</p>
-  <div class="row">
-    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off" style="max-width:280px">
-    <button class="button secondary" onclick="savePairingToken()">Connect</button>
-  </div>
-  <div class="status-msg" id="pairing-status"></div>
-</div>
-{% else %}
 {#
-  A one-line reassurance rather than the full pairing panel, which lives on the profile: the
-  question a paired account still asks from this page is "is it actually still on?", and the
-  answer belongs where they would notice it had stopped being true.
+  Two connections, each reporting what is actually happening rather than what has been
+  configured. "A token is saved" and "something is arriving" are different facts, and the old
+  panel showed the first while claiming the second -- so a dashboard read "Plugin connected"
+  with the game shut. `plugin_state` and `desktop_state` are the honest versions.
 #}
-<div class="panel" style="padding:0.7rem 1.2rem">
-  <div class="panel-head" style="margin-bottom:0">
-    <span class="badge ok">Plugin connected</span>
-    <span class="grow hint tight">Fills, offer slots and gear are arriving on their own.</span>
-    <button class="button ghost small" onclick="generatePairingToken()">Get a new token</button>
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow"><h2>Connections</h2></div>
     <a class="button ghost small" href="/profile">Manage</a>
   </div>
+
+  <div class="conn-row">
+    {% if plugin_state == "live" %}<span class="badge ok">Sending now</span>
+    {% elif plugin_state == "idle" %}<span class="badge">Idle</span>
+    {% elif plugin_state == "unreachable" %}<span class="badge bad">No answer</span>
+    {% else %}<span class="badge">Not set up</span>{% endif %}
+    <div class="grow">
+      <strong>RuneLite plugin</strong>
+      <div class="hint tight">
+        {% if plugin_state == "live" %}Fills, offer slots and gear are arriving on their own.
+        {% elif plugin_state == "idle" %}Set up, but nothing is arriving right now — RuneLite is
+          closed, or the plugin is switched off.
+        {% elif plugin_state == "unreachable" %}The sync service did not answer. Nothing is lost:
+          the plugin holds events until it is back.
+        {% else %}Get a token, paste it into the plugin, and your journal starts filling itself in.
+        {% endif %}
+      </div>
+    </div>
+    <div class="conn-actions">
+      {% if plugin_state == "none" %}
+      <button class="button small" onclick="generatePairingToken()">Get a token</button>
+      <a class="button ghost small" href="/plugin">Install it</a>
+      {% else %}
+      <a class="button ghost small" href="/plugin">Setup guide</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if plugin_state == "none" %}
   <div id="generated-token-box" style="display:none">
     <div class="code-box">
       <code id="generated-token"></code>
       <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
     </div>
-    <p class="hint">Replacing the old one — the plugin needs this re-pasted wherever it is connected.</p>
   </div>
   <div class="status-msg" id="generate-status" style="min-height:0"></div>
+  <div class="row" style="margin-top:0.5rem">
+    <input type="text" id="pairing-token" placeholder="Or paste a token you already have" autocomplete="off" style="max-width:280px">
+    <button class="button secondary small" onclick="savePairingToken()">Connect</button>
+  </div>
+  <div class="status-msg" id="pairing-status"></div>
+  {% endif %}
+
+  <div class="conn-row">
+    {% if desktop_state == "live" %}<span class="badge ok">Connected</span>
+    {% elif desktop_state == "idle" %}<span class="badge">Not running</span>
+    {% elif desktop_state == "waiting" %}<span class="badge">Token unused</span>
+    {% else %}<span class="badge">Not set up</span>{% endif %}
+    <div class="grow">
+      <strong>Windows app</strong>
+      <div class="hint tight">
+        {% if desktop_state == "live" %}Mirroring this journal — a trade recorded in either place
+          reaches the other within a minute.
+        {% elif desktop_state == "idle" %}Connected, but not running. Last checked in
+          {{ desktop_last_seen[:16].replace("T", " ") }} UTC.
+        {% elif desktop_state == "waiting" %}A token was created but the app has not used it yet.
+          Paste it into <strong>Settings → Website</strong>.
+        {% else %}Optional. The same tools in their own window, sharing this journal.
+        {% endif %}
+      </div>
+    </div>
+    <div class="conn-actions">
+      {% if desktop_state == "none" %}
+      <a class="button ghost small" href="/download">Get the app</a>
+      {% else %}
+      <a class="button ghost small" href="/download">Setup guide</a>
+      {% endif %}
+    </div>
+  </div>
 </div>
-{% endif %}
 
 <div class="stats">
   <div class="stat">

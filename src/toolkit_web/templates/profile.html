@@ -52,7 +52,14 @@
       <p class="hint tight">The companion plugin sends your fills, live offer slots, bank and
         gear. Everything works without it; you just type more.</p>
     </div>
-    {% if account.paired %}<span class="badge ok">Connected</span>{% else %}<span class="badge">Not connected</span>{% endif %}
+    {#
+      Three states, not two. "A token is saved" is not "something is arriving", and showing
+      the first as the second is what let the dashboard claim a live plugin with the game shut.
+    #}
+    {% if plugin_state == "live" %}<span class="badge ok">Sending now</span>
+    {% elif plugin_state == "idle" %}<span class="badge">Idle — nothing arriving</span>
+    {% elif plugin_state == "unreachable" %}<span class="badge bad">Sync service not answering</span>
+    {% else %}<span class="badge">Not connected</span>{% endif %}
   </div>
 
   <div class="row">
@@ -81,7 +88,14 @@
     <button class="button secondary" onclick="savePairingToken()">Connect</button>
   </div>
   <div class="status-msg" id="pairing-status"></div>
-  <p class="hint"><a href="/help">Step-by-step plugin setup</a></p>
+  {% if plugin_state == "idle" %}
+  <p class="hint">A token is saved, but nothing is being sent — RuneLite is closed, or
+    <strong>Send to OSRS Toolkit Sync</strong> is switched off.</p>
+  {% elif plugin_state == "unreachable" %}
+  <p class="hint">The sync service did not answer just now. Nothing is lost: the plugin holds
+    events until it is back.</p>
+  {% endif %}
+  <p class="hint"><a href="/plugin">How to install and switch on the plugin</a></p>
 </div>
 
 <div class="panel">
@@ -123,7 +137,7 @@
   </table>
   {% endif %}
   <p class="hint">Paste it into the desktop app's <strong>Settings → Website</strong> tab.
-    <a href="/help">Step-by-step desktop setup</a></p>
+    <a href="/download">Get the app and set it up</a></p>
 </div>
 
 <div class="grid-2">

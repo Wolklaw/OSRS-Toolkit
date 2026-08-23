@@ -24,13 +24,14 @@ def test_the_root_page_shows_the_dashboard_once_signed_in(signed_in: TestClient)
     assert "Wolklaw" in response.text
 
 
-def test_an_unpaired_account_sees_the_connect_panel(signed_in: TestClient):
+def test_an_unpaired_account_is_offered_the_connect_flow(signed_in: TestClient):
     response = signed_in.get("/")
 
-    assert "Connect your RuneLite plugin" in response.text
+    assert "Not set up" in response.text
+    assert "Get a token" in response.text
 
 
-def test_a_paired_account_does_not_see_the_connect_panel(signed_in: TestClient):
+def test_a_paired_account_is_not_asked_to_connect_again(signed_in: TestClient):
     from unittest.mock import patch
 
     with patch("toolkit_web.app.probe_token", return_value=True):
@@ -38,7 +39,7 @@ def test_a_paired_account_does_not_see_the_connect_panel(signed_in: TestClient):
 
     response = signed_in.get("/")
 
-    assert "Connect your RuneLite plugin" not in response.text
+    assert "Get a token" not in response.text
 
 
 def test_an_empty_journal_shows_the_empty_state(signed_in: TestClient):

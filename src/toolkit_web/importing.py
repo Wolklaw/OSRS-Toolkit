@@ -51,6 +51,29 @@ def known_characters(settings: Settings, account: Account) -> list[dict]:
     return source.known_accounts()
 
 
+def plugin_activity(settings: Settings, account: Account) -> str:
+    """What the plugin is actually doing, as one of four words the UI can render.
+
+    ``paired`` only ever meant "a token is saved", which is why a dashboard could say
+    "Plugin connected" at a keyboard with the game shut. The sync service knows better --
+    it reports whether anything is currently arriving -- so that is what gets asked here.
+
+    - ``"none"`` — no token saved; nothing has been set up.
+    - ``"live"`` — the service says the plugin is sending right now.
+    - ``"idle"`` — set up and reachable, but nothing is arriving. RuneLite is closed, or the
+      plugin is switched off. Not an error, and not "connected" either.
+    - ``"unreachable"`` — the service could not be asked. Distinct from ``idle`` because the
+      fix is different: nothing is lost, the plugin queues events until it comes back.
+    """
+    if not account.pairing_token:
+        return "none"
+    source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
+    _detected, payload, active = source.status_payload()
+    if payload is None:
+        return "unreachable"
+    return "live" if active else "idle"
+
+
 def raw_sync_state(
     settings: Settings, account: Account, account_hash: str | None
 ) -> tuple[dict | None, bool, dict | None, dict | None]:

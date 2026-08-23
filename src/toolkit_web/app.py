@@ -45,6 +45,7 @@ from toolkit_web.importing import (
     journal_for,
     known_characters,
     live_offer_state,
+    plugin_activity,
     raw_sync_state,
     stored_journal,
 )
@@ -55,6 +56,10 @@ from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
 from toolkit_web.token_probe import mint_pairing_token, probe_token
 
 STATE_COOKIE = "oauth_state"
+
+#: The companion plugin's own repository — where the build-it-yourself instructions point
+#: while the Plugin Hub submission is still in review.
+PLUGIN_REPO_URL = "https://github.com/Wolklaw/osrs-toolkit-runelite"
 #: Which synced character's data to show. Plain, not signed: it names nothing but an
 #: account_hash the caller's own pairing token already has full read access to, so there is
 #: nothing here worth protecting from the browser that couldn't already be read straight from
@@ -150,6 +155,33 @@ def _fill_list(value: object, field: str) -> list[tuple[int, int]] | None:
                 status_code=422, detail=f"{field} quantities and prices must be whole numbers"
             ) from error
     return fills
+
+
+#: How long after a desktop token was last used the desktop app still counts as connected.
+#: It polls once a minute and ``last_used_at`` is only rewritten once a minute, so the window
+#: has to be several times that or a perfectly healthy app would blink out between writes.
+DESKTOP_CONNECTED_SECONDS = 5 * 60
+
+
+def _desktop_activity(tokens: list) -> tuple[str, str | None]:
+    """(state, last_seen) for the desktop app, from the tokens issued to this account.
+
+    The same distinction the plugin gets: a token that exists is not an app that is running.
+    ``"waiting"`` is a token that was minted and never used — almost always somebody who
+    copied it and has not pasted it in yet, which is worth saying rather than showing them a
+    connected badge for an app that has never once called.
+    """
+    if not tokens:
+        return "none", None
+    seen = [token.last_used_at for token in tokens if token.last_used_at]
+    if not seen:
+        return "waiting", None
+    last = max(seen)
+    try:
+        age = (datetime.now(UTC) - datetime.fromisoformat(last)).total_seconds()
+    except ValueError:
+        return "waiting", None
+    return ("live" if age <= DESKTOP_CONNECTED_SECONDS else "idle"), last
 
 
 def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
@@ -333,6 +365,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         open_positions = [
             position for position in positions if position.status not in CLOSED_STATUSES
         ]
+        desktop_state, desktop_last_seen = _desktop_activity(
+            accounts.list_desktop_tokens(account.discord_user_id)
+        )
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -349,6 +384,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
                 "net_worth_chart": net_worth_chart,
                 "live_character_selected": live_hash is not None,
+                "plugin_state": plugin_activity(settings, account),
+                "desktop_state": desktop_state,
+                "desktop_last_seen": desktop_last_seen,
                 "offer_rows": offer_rows,
                 "offer_screen": serialize(offer_screen) if offer_screen else None,
                 **switcher,
@@ -403,6 +441,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "profile.html",
             {
                 "account": account,
+                "plugin_state": plugin_activity(settings, account),
                 "is_recovery_account": account.discord_user_id.startswith(_RECOVERY_ID_PREFIX),
                 "characters": [
                     serialize(character)
@@ -444,6 +483,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> HTMLResponse:
         return templates.TemplateResponse(
             request, "help.html", {"account": account, **_optional_switcher(account, active)}
+        )
+
+    @app.get("/plugin", response_class=HTMLResponse)
+    def plugin_page(
+        request: Request,
+        account: Account | None = OptionalAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        """How to actually get the RuneLite plugin, including the way that works today.
+
+        Signed out as well as in. The Plugin Hub submission is not approved yet and reviews
+        run long, so the honest answer to "how do I install this" is currently "build it
+        yourself", and a page that only listed the hub would be a page that helps nobody.
+        """
+        return templates.TemplateResponse(
+            request,
+            "plugin.html",
+            {
+                "account": account,
+                "plugin_repo_url": PLUGIN_REPO_URL,
+                **_optional_switcher(account, active),
+            },
         )
 
     @app.get("/download", response_class=HTMLResponse)

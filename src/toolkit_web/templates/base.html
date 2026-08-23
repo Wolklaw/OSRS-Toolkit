@@ -365,12 +365,32 @@
     .callout strong { color: var(--text); }
     .callout p { margin: 0.4rem 0 0; }
 
+    /* One row per connection: badge, what it means, what to do about it. Wraps rather
+       than truncates, because the middle column is the part worth reading. */
+    .conn-row {
+      display: flex; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;
+      padding: 0.8rem 0; border-top: 1px solid var(--border);
+    }
+    .conn-row:first-of-type { border-top: none; padding-top: 0.2rem; }
+    .conn-row:last-of-type { padding-bottom: 0.1rem; }
+    .conn-row > .badge { margin-top: 0.15rem; }
+    .conn-row > .grow { flex: 1; min-width: 11rem; }
+    .conn-row strong { font-size: 0.92rem; }
+    .conn-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: flex-start; }
+    @media (max-width: 560px) {
+      .conn-row > .badge { order: -1; }
+      .conn-actions { width: 100%; }
+    }
+
     .code-box {
       display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
       background: var(--bg-elev); border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm); padding: 0.65rem 0.9rem; margin-top: 0.7rem;
     }
     .code-box code { font-size: 0.9rem; word-break: break-all; }
+    /* A command is copied and pasted, not read a character at a time -- breaking one mid-token
+       to make it fit reads as a typo. These scroll inside the box instead. */
+    .code-box.cmd code { word-break: normal; white-space: pre; overflow-x: auto; }
 
     .progress {
       height: 9px; border-radius: 999px; background: var(--panel-2);
@@ -506,6 +526,8 @@
 {%- elif name == "pvm" -%}<path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/>
 {%- elif name == "goal" -%}<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>
 {%- elif name == "profile" -%}<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>
+{%- elif name == "download" -%}<path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 20h16"/>
+{%- elif name == "plugin" -%}<path d="M9 2v5"/><path d="M15 2v5"/><path d="M5.5 7h13v4.5a6.5 6.5 0 0 1-13 0z"/><path d="M12 18v4"/>
 {%- elif name == "help" -%}<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 1 1 3.4 2.5c-.6.2-.9.8-.9 1.4v.4"/><path d="M12 17h.01"/>
 {%- elif name == "about" -%}<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.6h.01"/>
 {%- elif name == "menu" -%}<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>
@@ -533,6 +555,10 @@
     ("/pvm", "PvM Readiness", "pvm"),
     ("/savings-goal", "Savings Goal", "goal"),
   ]),
+  ("Set up", [
+    ("/plugin", "RuneLite Plugin", "plugin"),
+    ("/download", "Windows App", "download"),
+  ]),
   ("Account", [
     ("/profile", "Profile", "profile"),
     ("/help", "Help", "help"),
@@ -557,7 +583,7 @@
       {% endfor %}
     </nav>
     <div class="sidebar-foot">
-      <a href="/download">Get the Windows app</a>
+      Unofficial fan project.<br><a href="/about">Not affiliated with Jagex.</a>
     </div>
   </aside>
   <div class="scrim" onclick="toggleNav(false)"></div>
@@ -589,7 +615,7 @@
       {% else %}
       <a class="brand" href="/"><span class="mark">RS</span>Rune<em>Scope</em></a>
       <div class="spacer"></div>
-      <a href="/about" class="button ghost small">About</a>
+      <a href="/download" class="button ghost small">Get the app</a>
       <a href="/help" class="button ghost small">Help</a>
       <button class="icon-button" onclick="cycleTheme()" aria-label="Switch theme">{{ icon("theme") }}</button>
       {% if path != "/" %}<a href="/" class="button small">Sign in</a>{% endif %}

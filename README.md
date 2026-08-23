@@ -30,12 +30,28 @@ and none of which need PySide6 installed to run headless on a server.
 | `/pvm` `/savings-goal` | Boss checklists against your synced loadout; one savings target. |
 | `/item/{id}` | One item's full market breakdown and price history. |
 | `/profile` | Account, pairing token, desktop access tokens, characters, data export, theme. |
-| `/download` | The Windows desktop app: current version and both builds, read from the GitHub release. **Renders signed out** — whether to use the site or the app is a question asked before signing up. |
+| `/plugin` | Installing the RuneLite plugin, including building it yourself while the Plugin Hub submission is in review. **Renders signed out.** |
+| `/download` | The Windows desktop app: current version and both builds, read from the GitHub release, plus how to connect it. **Renders signed out** — whether to use the site or the app is a question asked before signing up. |
 | `/about` `/help` | What this is and what it holds; setup, FAQ, and how to get in touch. **Both render signed out** — they answer the questions asked before signing in. |
 
 Every page shares one shell (`templates/base.html`): sidebar navigation, a price-freshness
 pill that also forces a refresh, the character switcher, and a light/dark/system theme toggle
 kept in the browser rather than on the server.
+
+## Connection status
+
+The Dashboard reports what each side is actually doing, not what has been configured —
+`Account.paired` only ever meant "a pairing token is saved", and rendering that as "Plugin
+connected" is how the page came to claim a live plugin with the game shut.
+
+`importing.plugin_activity` asks the sync service instead, and answers with one of four words:
+`none` (nothing set up), `live` (sending right now), `idle` (set up, nothing arriving — RuneLite
+closed or the switch off), `unreachable` (the service did not answer; nothing is lost, the
+plugin queues). `app._desktop_activity` draws the same distinction for the desktop app from its
+tokens' `last_used_at`, with `waiting` for a token that was minted and never used.
+
+The cost is one extra call to the sync service per Dashboard and Profile render for a paired
+account — loopback in the deployed setup, and skipped entirely for an account with no token.
 
 ## Running it
 

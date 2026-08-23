@@ -83,15 +83,20 @@ def test_the_dashboard_offers_generation_when_unpaired(signed_in: TestClient):
     assert "Get a token" in response.text
 
 
-def test_a_paired_account_sees_a_connected_indicator_not_the_connect_panel(signed_in: TestClient):
+def test_a_paired_account_is_not_told_it_is_connected_until_something_arrives(
+    signed_in: TestClient,
+):
+    """The bug this replaces: a saved token rendered as "Plugin connected" whether or not the
+    game was running. Saving a token is not the same fact as data arriving."""
     with patch("toolkit_web.app.mint_pairing_token", return_value="fresh-token-abc"):
         signed_in.post("/api/pairing-token/generate")
 
-    response = signed_in.get("/")
+    with patch("toolkit_web.app.plugin_activity", return_value="idle"):
+        response = signed_in.get("/")
 
-    assert "Plugin connected" in response.text
-    assert "Connect your RuneLite plugin" not in response.text
-    assert "Get a new token" in response.text
+    assert "Sending now" not in response.text
+    assert "Idle" in response.text
+    assert "Get a token" not in response.text
 
 
 def test_a_paired_account_can_still_generate_a_replacement_token(signed_in: TestClient):
