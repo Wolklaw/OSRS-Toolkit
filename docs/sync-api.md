@@ -70,6 +70,23 @@ reversed — and an offer has to open before its fills land on it.
 `{ "invite_code": "..." }` — code only needed when the service is closed.
 Returns `201 { "token": "..." }`.
 
+### `DELETE /v1/pair`
+
+Retires the token the request was made with, and deletes everything held under it. Returns
+`{ "revoked": true, "deleted": { ... } }`.
+
+Authenticated by the token being retired, because there is nothing above it to authenticate
+with — a pairing token is the only credential this service has, and holding one is the whole of
+the right to end it.
+
+**Whoever mints a replacement is expected to call this on the one it replaces.** Without that
+step every old token stays valid forever, and a plugin still holding one keeps syncing
+perfectly into a pairing nobody reads: correct requests, `200` responses, and a page that never
+shows any of it. Revoked, that plugin gets a `401` and says so.
+
+Anything still queued under the token becomes unreachable the moment it is gone, so drain it
+first if it matters.
+
 ### `POST /v1/events`
 
 Plugin → service. Up to 100 events per call, in the shape written to disk today.
