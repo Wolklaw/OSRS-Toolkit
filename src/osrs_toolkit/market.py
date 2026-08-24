@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -14,6 +15,15 @@ from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 
 class MarketDataError(RuntimeError):
     pass
+
+
+#: How long the item mapping is trusted before it is fetched again. Unlike prices, this is
+#: item metadata — name, members flag, buy limit, high-alch value — which only changes when
+#: Jagex adds or edits an item. Fetching it on the price refresh's own five-minute cycle meant
+#: re-downloading, re-parsing and re-writing ~900KB every time to learn nothing had changed;
+#: a newly added item now takes up to a day to appear, and a brand-new item has no price
+#: history to act on regardless.
+MAPPING_TTL_SECONDS = 86_400
 
 
 class WikiMarketClient:
@@ -28,6 +38,8 @@ class WikiMarketClient:
         self.cache_dir = cache_dir or local_data / "OSRSToolkit" / "cache"
         self.timeout = timeout
         self.used_cache = False
+        self._mappings: dict[int, ItemMapping] | None = None
+        self._mappings_fetched_at = 0.0
 
     def _get(
         self, route: str, *, cache_key: str | None = None
@@ -81,15 +93,18 @@ class WikiMarketClient:
             # and the next run simply falls back one step further if it needs the cache.
             pass
 
-    def fetch_snapshot(self) -> tuple[dict[int, ItemMapping], list[MarketPoint]]:
-        self.used_cache = False
+    def _fetch_mappings(self) -> dict[int, ItemMapping]:
+        """The item mapping, reused for ``MAPPING_TTL_SECONDS`` before it is fetched again.
+
+        Held as the built dict rather than the raw payload, so a reuse skips the parse and
+        the 4,600 dataclass constructions as well as the download.
+        """
+        cached = self._mappings
+        if cached is not None and time.monotonic() - self._mappings_fetched_at < MAPPING_TTL_SECONDS:
+            return cached
         mapping_raw = self._get("mapping")
-        latest_raw = self._get("latest")
-        five_raw = self._get("5m")
-        hour_raw = self._get("1h")
         if not isinstance(mapping_raw, list):
             raise MarketDataError("Unexpected item mapping response")
-
         mappings = {
             int(item["id"]): ItemMapping(
                 item_id=int(item["id"]),
@@ -100,6 +115,16 @@ class WikiMarketClient:
             )
             for item in mapping_raw
         }
+        self._mappings = mappings
+        self._mappings_fetched_at = time.monotonic()
+        return mappings
+
+    def fetch_snapshot(self) -> tuple[dict[int, ItemMapping], list[MarketPoint]]:
+        self.used_cache = False
+        mappings = self._fetch_mappings()
+        latest_raw = self._get("latest")
+        five_raw = self._get("5m")
+        hour_raw = self._get("1h")
         latest = latest_raw.get("data", {}) if isinstance(latest_raw, dict) else {}
         five = five_raw.get("data", {}) if isinstance(five_raw, dict) else {}
         hour = hour_raw.get("data", {}) if isinstance(hour_raw, dict) else {}

@@ -8,7 +8,7 @@ from typing import Self
 
 import pytest
 
-from osrs_toolkit.market import MarketDataError, WikiMarketClient
+from osrs_toolkit.market import MAPPING_TTL_SECONDS, MarketDataError, WikiMarketClient
 
 
 class _Response:
@@ -90,3 +90,76 @@ def test_a_failed_fetch_with_no_cache_reports_the_failure(
 
     with pytest.raises(MarketDataError):
         client._get("latest")
+
+
+def _serve_by_route(monkeypatch: pytest.MonkeyPatch, routes: dict[str, object], seen: list[str]):
+    """Answer each endpoint from its own payload, recording which were actually requested."""
+
+    def open_url(request: object, timeout: float | None = None) -> object:
+        url = request.full_url  # type: ignore[attr-defined]
+        route = url.rsplit("/", 1)[-1]
+        seen.append(route)
+        return _Response(routes[route])
+
+    monkeypatch.setattr("urllib.request.urlopen", open_url)
+
+
+_MAPPING = [{"id": 4151, "name": "Abyssal whip", "members": True, "limit": 70, "highalch": 72000}]
+_PRICES = {"data": {"4151": {"high": 100, "low": 90, "highTime": 1, "lowTime": 1}}}
+
+
+def test_the_item_mapping_is_reused_instead_of_refetched_every_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prices move every few minutes; item names and buy limits do not. Refetching ~900KB of
+    metadata on the price cycle was downloading, parsing and rewriting it to learn nothing."""
+    seen: list[str] = []
+    _serve_by_route(
+        monkeypatch,
+        {"mapping": _MAPPING, "latest": _PRICES, "5m": _PRICES, "1h": _PRICES},
+        seen,
+    )
+    client = WikiMarketClient(cache_dir=tmp_path / "cache")
+
+    client.fetch_snapshot()
+    client.fetch_snapshot()
+
+    assert seen.count("mapping") == 1
+    assert seen.count("latest") == 2
+
+
+def test_the_mapping_is_refetched_once_its_ttl_has_passed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    _serve_by_route(
+        monkeypatch,
+        {"mapping": _MAPPING, "latest": _PRICES, "5m": _PRICES, "1h": _PRICES},
+        seen,
+    )
+    client = WikiMarketClient(cache_dir=tmp_path / "cache")
+
+    client.fetch_snapshot()
+    client._mappings_fetched_at -= MAPPING_TTL_SECONDS + 1
+    client.fetch_snapshot()
+
+    assert seen.count("mapping") == 2
+
+
+def test_a_reused_mapping_still_carries_its_parsed_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+    _serve_by_route(
+        monkeypatch,
+        {"mapping": _MAPPING, "latest": _PRICES, "5m": _PRICES, "1h": _PRICES},
+        seen,
+    )
+    client = WikiMarketClient(cache_dir=tmp_path / "cache")
+
+    client.fetch_snapshot()
+    mappings, _points = client.fetch_snapshot()
+
+    assert mappings[4151].name == "Abyssal whip"
+    assert mappings[4151].buy_limit == 70
+    assert mappings[4151].high_alch == 72_000
