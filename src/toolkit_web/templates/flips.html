@@ -7,7 +7,7 @@
 <div class="panel">
   <form method="get" class="form-row">
     <div class="field w-md">
-      <label for="cash-stack">Cash stack</label>
+      <label for="cash-stack">Cash stack{% if cash_stack_prefilled %} <span class="hint tight">(from your synced coins)</span>{% endif %}</label>
       <input type="number" id="cash-stack" name="cash_stack" value="{{ cash_stack }}" min="10000" step="100000">
     </div>
     <div class="field w-md">
@@ -19,7 +19,7 @@
       </select>
     </div>
     <div class="field w-sm">
-      <label for="slots">Free slots</label>
+      <label for="slots">Free slots{% if slots_prefilled %} <span class="hint tight">(from your live GE)</span>{% endif %}</label>
       <select id="slots" name="slots">
         {% for count in range(1, 9) %}
         <option value="{{ count }}" {% if count == slots %}selected{% endif %}>{{ count }} slot{{ 's' if count != 1 else '' }}</option>

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% set page_title = "Death Log" %}
+{% set page_sub = "What you were carrying when a death animation started — not what was lost. Skull state, Protect Item, and wilderness rules decide the real loss." %}
+
+{% block content %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Last {{ window_days }} days</h2>
+      <p class="hint tight">{{ deaths | length }} death{{ '' if deaths | length == 1 else 's' }} recorded.</p>
+    </div>
+    {% if deaths %}
+    <input type="search" class="filter-input" placeholder="Filter deaths…"
+           oninput="filterTable(this, 'death-log-table')" aria-label="Filter deaths">
+    <span class="table-note" id="death-log-table-note"></span>
+    {% endif %}
+  </div>
+  {% if deaths %}
+  <div class="table-wrap">
+    <table id="death-log-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Character</th>
+          <th>Skulled</th>
+          <th>Carried</th>
+          <th class="num">Value</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for event in deaths %}
+        <tr>
+          <td style="white-space:nowrap">{{ event.occurred_at[:16].replace("T", " ") }}</td>
+          <td>{{ event.account_name }}</td>
+          <td><span class="badge {{ 'bad' if event.skulled else '' }}">{{ 'Skulled' if event.skulled else 'Not skulled' }}</span></td>
+          <td class="wrap">{{ event.carried_summary }}</td>
+          <td class="num">{{ "{:,}".format(event.total_value) }}</td>
+          <td class="row-actions">
+            {# tojson, not a quoted interpolation: an event id arrives from the plugin's own
+               payload, so it is external input and has no business being pasted raw into a
+               JavaScript string literal. #}
+            <a href="#" class="link-danger" onclick="deleteDeathEvent({{ event.event_id | tojson }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing recorded yet in this window</strong>
+    {% if account.paired %}
+    Good. Die with death tracking on and it appears here the next time this page loads.
+    {% else %}
+    <a href="/profile">Connect the RuneLite plugin</a> and your deaths arrive on their own.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function deleteDeathEvent(eventId) {
+    if (!confirm('Remove this entry from your journal? It will not be imported again.')) { return; }
+    const result = await api('DELETE', `/api/death-log/${encodeURIComponent(eventId)}`);
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+</script>
+{% endblock %}

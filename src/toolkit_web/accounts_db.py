@@ -19,15 +19,16 @@ from pathlib import Path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS account (
-    discord_user_id TEXT PRIMARY KEY,
-    username        TEXT NOT NULL,
-    avatar          TEXT,
-    pairing_token   TEXT,
-    created_at      TEXT NOT NULL,
-    last_login_at   TEXT NOT NULL,
-    goal_label      TEXT,
-    goal_target     INTEGER,
-    goal_created_at TEXT
+    discord_user_id    TEXT PRIMARY KEY,
+    username            TEXT NOT NULL,
+    avatar              TEXT,
+    pairing_token       TEXT,
+    created_at          TEXT NOT NULL,
+    last_login_at       TEXT NOT NULL,
+    goal_label          TEXT,
+    goal_target         INTEGER,
+    goal_created_at     TEXT,
+    discord_webhook_url TEXT
 );
 
 -- A character someone has named for themselves, for anyone without the plugin yet to have
@@ -81,6 +82,10 @@ CREATE TABLE IF NOT EXISTS watchlist_item (
     discord_user_id TEXT NOT NULL REFERENCES account(discord_user_id) ON DELETE CASCADE,
     item_id         INTEGER NOT NULL,
     added_at        TEXT NOT NULL,
+    -- An armed alert has both a target and a direction; either both are set or neither is.
+    target_price    INTEGER,
+    direction       TEXT CHECK (direction IN ('above', 'below')),
+    last_alerted_at TEXT,
     PRIMARY KEY (discord_user_id, item_id)
 );
 """
@@ -101,6 +106,7 @@ class Account:
     goal_label: str | None
     goal_target: int | None
     goal_created_at: str | None
+    discord_webhook_url: str | None
 
     @property
     def paired(self) -> bool:
@@ -129,6 +135,30 @@ class DesktopToken:
     last_used_at: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class WatchlistAlert:
+    """One watched item's price alert configuration. ``target_price``/``direction`` are
+    both ``None`` for a plain watch with no alert armed on it."""
+
+    item_id: int
+    target_price: int | None
+    direction: str | None
+    last_alerted_at: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArmedAlert:
+    """One account's alert, joined against the webhook it fires to. Only ever produced for
+    an alert that could actually fire — a target, a direction and a webhook all present."""
+
+    discord_user_id: str
+    discord_webhook_url: str
+    item_id: int
+    target_price: int
+    direction: str
+    last_alerted_at: str | None
+
+
 #: Columns added after the table's first release. A fresh database gets them from SCHEMA
 #: above; a database that already exists needs each added by hand so its one real row — a
 #: login, a pairing token — is not lost the way dropping and recreating the table would lose it.
@@ -136,6 +166,14 @@ _MIGRATION_COLUMNS = {
     "goal_label": "TEXT",
     "goal_target": "INTEGER",
     "goal_created_at": "TEXT",
+    "discord_webhook_url": "TEXT",
+}
+
+#: Same idea as ``_MIGRATION_COLUMNS``, for ``watchlist_item`` rather than ``account``.
+_WATCHLIST_MIGRATION_COLUMNS = {
+    "target_price": "INTEGER",
+    "direction": "TEXT",
+    "last_alerted_at": "TEXT",
 }
 
 
@@ -149,6 +187,14 @@ class AccountsDB:
             for column, sql_type in _MIGRATION_COLUMNS.items():
                 if column not in existing:
                     connection.execute(f"ALTER TABLE account ADD COLUMN {column} {sql_type}")
+            existing_watchlist_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(watchlist_item)")
+            }
+            for column, sql_type in _WATCHLIST_MIGRATION_COLUMNS.items():
+                if column not in existing_watchlist_columns:
+                    connection.execute(
+                        f"ALTER TABLE watchlist_item ADD COLUMN {column} {sql_type}"
+                    )
             self._rekey_trade_characters(connection)
 
     def _rekey_trade_characters(self, connection: sqlite3.Connection) -> None:
@@ -255,6 +301,19 @@ class AccountsDB:
             connection.execute(
                 "UPDATE account SET pairing_token = ? WHERE discord_user_id = ?",
                 (token, discord_user_id),
+            )
+
+    def set_discord_webhook(self, discord_user_id: str, url: str | None) -> None:
+        """Attach a Discord webhook URL for alert delivery, or remove one with ``None``.
+
+        Not validated here — the caller (``discord_webhook.is_discord_webhook_url``) is
+        expected to have already confirmed it is really a Discord webhook, for the same
+        reason a pairing token is confirmed before it reaches ``set_pairing_token``.
+        """
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE account SET discord_webhook_url = ? WHERE discord_user_id = ?",
+                (url, discord_user_id),
             )
 
     def set_savings_goal(self, discord_user_id: str, label: str, target: int) -> None:
@@ -382,6 +441,81 @@ class AccountsDB:
                 (discord_user_id, item_id),
             )
 
+    def list_watchlist_alerts(self, discord_user_id: str) -> list[WatchlistAlert]:
+        with self._transaction() as connection:
+            rows = connection.execute(
+                "SELECT item_id, target_price, direction, last_alerted_at FROM watchlist_item"
+                " WHERE discord_user_id = ? ORDER BY added_at",
+                (discord_user_id,),
+            ).fetchall()
+        return [
+            WatchlistAlert(
+                item_id=row["item_id"],
+                target_price=row["target_price"],
+                direction=row["direction"],
+                last_alerted_at=row["last_alerted_at"],
+            )
+            for row in rows
+        ]
+
+    def set_watchlist_alert(
+        self, discord_user_id: str, item_id: int, target_price: int, direction: str
+    ) -> bool:
+        """Arm an alert on an already-watched item. False if the item is not watched — the
+        caller is expected to have called ``add_watchlist_item`` first, the same order the
+        watchlist page's own "watch this item" step already requires."""
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE watchlist_item SET target_price = ?, direction = ?, last_alerted_at = NULL"
+                " WHERE discord_user_id = ? AND item_id = ?",
+                (target_price, direction, discord_user_id, item_id),
+            )
+            return cursor.rowcount > 0
+
+    def clear_watchlist_alert(self, discord_user_id: str, item_id: int) -> None:
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE watchlist_item SET target_price = NULL, direction = NULL,"
+                " last_alerted_at = NULL WHERE discord_user_id = ? AND item_id = ?",
+                (discord_user_id, item_id),
+            )
+
+    def list_armed_alerts(self) -> list[ArmedAlert]:
+        """Every alert that could actually fire right now, across every account — what
+        ``/internal/check-alerts`` evaluates each time it is triggered."""
+        with self._transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT w.discord_user_id AS discord_user_id, a.discord_webhook_url AS webhook,
+                       w.item_id AS item_id, w.target_price AS target_price,
+                       w.direction AS direction, w.last_alerted_at AS last_alerted_at
+                FROM watchlist_item w
+                JOIN account a ON a.discord_user_id = w.discord_user_id
+                WHERE w.target_price IS NOT NULL
+                  AND w.direction IS NOT NULL
+                  AND a.discord_webhook_url IS NOT NULL
+                """
+            ).fetchall()
+        return [
+            ArmedAlert(
+                discord_user_id=row["discord_user_id"],
+                discord_webhook_url=row["webhook"],
+                item_id=row["item_id"],
+                target_price=row["target_price"],
+                direction=row["direction"],
+                last_alerted_at=row["last_alerted_at"],
+            )
+            for row in rows
+        ]
+
+    def stamp_alert_sent(self, discord_user_id: str, item_id: int) -> None:
+        with self._transaction() as connection:
+            connection.execute(
+                "UPDATE watchlist_item SET last_alerted_at = ?"
+                " WHERE discord_user_id = ? AND item_id = ?",
+                (_stamp(), discord_user_id, item_id),
+            )
+
     # -- desktop tokens ------------------------------------------------------------------
 
     def create_desktop_token(self, discord_user_id: str, label: str) -> str:
@@ -475,4 +609,5 @@ def _row_to_account(row: sqlite3.Row) -> Account:
         goal_label=row["goal_label"],
         goal_target=row["goal_target"],
         goal_created_at=row["goal_created_at"],
+        discord_webhook_url=row["discord_webhook_url"],
     )

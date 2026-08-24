@@ -51,6 +51,7 @@
           <th class="num">ROI</th>
           <th class="num">1h volume</th>
           <th class="num">Age</th>
+          <th>Alert</th>
           <th></th>
         </tr>
       </thead>
@@ -64,6 +65,25 @@
           <td class="num {{ 'positive' if row.roi >= 0 else 'negative' }}">{{ "%.2f"|format(row.roi) }}%</td>
           <td class="num">{{ "{:,}".format(row.volume_1h) }}</td>
           <td class="num">{{ row.age_minutes }} min</td>
+          <td>
+            {% if webhook_configured %}
+            <div class="form-row" style="gap:0.4rem; flex-wrap:nowrap">
+              <input type="number" class="alert-target" data-item-id="{{ row.item_id }}"
+                     placeholder="Target gp" value="{{ row.target_price or '' }}" min="1"
+                     style="width:7rem">
+              <select class="alert-direction" data-item-id="{{ row.item_id }}" style="width:6rem">
+                <option value="above" {% if row.direction == "above" %}selected{% endif %}>Above</option>
+                <option value="below" {% if row.direction == "below" %}selected{% endif %}>Below</option>
+              </select>
+              <button class="button secondary small" onclick="setWatchlistAlert({{ row.item_id }})">Set</button>
+              {% if row.target_price %}
+              <button class="button secondary small" onclick="clearWatchlistAlert({{ row.item_id }})">Clear</button>
+              {% endif %}
+            </div>
+            {% else %}
+            <span class="hint tight"><a href="/profile">Add a webhook</a> to enable alerts.</span>
+            {% endif %}
+          </td>
           <td class="row-actions">
             <a href="#" class="link-danger" onclick="removeWatchlistItem({{ row.item_id }}); return false;">Remove</a>
           </td>
@@ -100,6 +120,26 @@
 
   async function removeWatchlistItem(itemId) {
     await api('DELETE', `/api/watchlist/${itemId}`);
+    location.reload();
+  }
+
+  async function setWatchlistAlert(itemId) {
+    const target = document.querySelector(`.alert-target[data-item-id="${itemId}"]`).value;
+    const direction = document.querySelector(`.alert-direction[data-item-id="${itemId}"]`).value;
+    if (!target) { return; }
+    const result = await api('PUT', `/api/watchlist/${itemId}/alert`, {
+      target_price: parseInt(target, 10),
+      direction,
+    });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function clearWatchlistAlert(itemId) {
+    await api('DELETE', `/api/watchlist/${itemId}/alert`);
     location.reload();
   }
 </script>

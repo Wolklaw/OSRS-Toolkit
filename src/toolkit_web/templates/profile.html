@@ -101,6 +101,27 @@
 <div class="panel">
   <div class="panel-head">
     <div class="grow">
+      <h2>Price alerts</h2>
+      <p class="hint tight">A Discord webhook to post to when a watched item crosses a target
+        price you set on the <a href="/watchlist">Watchlist</a>. Create one in a Discord
+        channel's Integrations settings and paste the URL here.</p>
+    </div>
+  </div>
+  <div class="row">
+    <input type="text" id="discord-webhook" placeholder="https://discord.com/api/webhooks/…"
+           autocomplete="off" style="max-width:420px"
+           value="{{ account.discord_webhook_url or '' }}">
+    <button class="button secondary" onclick="saveDiscordWebhook()">Save</button>
+    {% if account.discord_webhook_url %}
+    <button class="button danger small" onclick="clearDiscordWebhook()">Remove</button>
+    {% endif %}
+  </div>
+  <div class="status-msg" id="webhook-status"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
       <h2>Desktop app</h2>
       <p class="hint tight">Points the Windows app at this account, so its journal mirrors
         this one and it reads your live Grand Exchange state from here. This is its own token,
@@ -294,6 +315,25 @@
   async function disconnectPlugin() {
     if (!confirm('Disconnect the plugin? Nothing already imported is deleted — new events just stop arriving.')) { return; }
     await api('DELETE', '/api/pairing-token');
+    location.reload();
+  }
+
+  async function saveDiscordWebhook() {
+    const url = document.getElementById('discord-webhook').value.trim();
+    if (!url) { return; }
+    setStatus('webhook-status', 'Checking…');
+    const result = await api('PUT', '/api/discord-webhook', { url });
+    if (!result.ok) {
+      setStatus('webhook-status', result.error, 'error');
+      return;
+    }
+    setStatus('webhook-status', 'Saved.', 'ok');
+    setTimeout(() => location.reload(), 600);
+  }
+
+  async function clearDiscordWebhook() {
+    if (!confirm('Remove your Discord webhook? Any alerts you have set will stop being able to notify you until you add a new one.')) { return; }
+    await api('DELETE', '/api/discord-webhook');
     location.reload();
   }
 

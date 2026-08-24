@@ -26,7 +26,7 @@ from osrs_toolkit.journal_presentation import PERIOD_FILTERS, trade_needs_attent
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.models import ItemMapping, MarketPoint
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
-from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
+from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
 from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, plan_flip_portfolio, rank_flips
 from osrs_toolkit.runelite_sync import ge_offer_status_label
 from osrs_toolkit.savings_goal import (
@@ -41,6 +41,7 @@ from toolkit_web import discord_oauth, turnstile
 from toolkit_web.accounts_db import Account, AccountsDB
 from toolkit_web.charting import net_worth_history_svg, price_history_svg
 from toolkit_web.config import Settings
+from toolkit_web.discord_webhook import is_discord_webhook_url, send_webhook_message
 from toolkit_web.importing import (
     journal_for,
     known_characters,
@@ -86,6 +87,11 @@ ACTIVE_CHARACTER_COOKIE = "active_character"
 #: further back than this in one request — and unlike positions, synced-trade rows are never
 #: revisited once shown, so there is no correctness reason to load more.
 ACTIVITY_WINDOW_DAYS = 90
+
+#: An alert that has fired stays quiet for this long even while its condition keeps holding —
+#: otherwise a price sitting past its target would refire on every single cron tick rather
+#: than once, until the person watching it acts on it or the price moves back.
+ALERT_COOLDOWN_HOURS = 12
 
 #: Excludes 0/O and 1/I/L — characters easy to mistype or misread on a phone screen or a
 #: scrap of paper, which is where a code with no Discord app or email behind it has to
@@ -413,7 +419,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def item_history_page(
         request: Request,
         item_id: int,
-        account: Account = CurrentAccount,
+        account: Account | None = OptionalAccount,
         active: str | None = ActiveCharacter,
     ) -> HTMLResponse:
         item_name = f"Item #{item_id}"
@@ -429,6 +435,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except MarketDataError:
             pass
         history = market.timeseries(item_id)
+        watched = (
+            account is not None
+            and item_id in accounts.list_watchlist_item_ids(account.discord_user_id)
+        )
         return templates.TemplateResponse(
             request,
             "item_history.html",
@@ -437,10 +447,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "item_id": item_id,
                 "item_name": item_name,
                 "breakdown": breakdown,
-                "watched": item_id in accounts.list_watchlist_item_ids(account.discord_user_id),
+                "watched": watched,
                 "chart": price_history_svg(history),
                 "has_history": bool(history),
-                **character_switcher_context(account, active),
+                **_optional_switcher(account, active),
             },
         )
 
@@ -625,6 +635,77 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/loot-log", response_class=HTMLResponse)
+    def loot_log_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        repository = journal_for(settings, account)
+        since = datetime.now(UTC) - timedelta(days=ACTIVITY_WINDOW_DAYS)
+        events = repository.list_npc_loot_events(
+            since=since, account_hash=switcher["active_character"]
+        )
+        rows = []
+        by_npc: dict[str, list] = {}
+        for event in events:
+            row = serialize(event)
+            row["items_summary"] = compact_items(event.items)
+            rows.append(row)
+            by_npc.setdefault(event.npc_name, []).append(event)
+        rollup = [
+            {
+                "npc_name": npc_name,
+                "deliveries": len(npc_events),
+                "total_value": sum(npc_event.total_value for npc_event in npc_events),
+                "observed_gp_per_hour": observed_gp_per_hour(npc_events),
+            }
+            for npc_name, npc_events in sorted(
+                by_npc.items(),
+                key=lambda pair: sum(npc_event.total_value for npc_event in pair[1]),
+                reverse=True,
+            )
+        ]
+        return templates.TemplateResponse(
+            request,
+            "loot_log.html",
+            {
+                "account": account,
+                "loot": rows,
+                "rollup": rollup,
+                "window_days": ACTIVITY_WINDOW_DAYS,
+                **switcher,
+            },
+        )
+
+    @app.get("/death-log", response_class=HTMLResponse)
+    def death_log_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        repository = journal_for(settings, account)
+        since = datetime.now(UTC) - timedelta(days=ACTIVITY_WINDOW_DAYS)
+        rows = []
+        for event in repository.list_player_death_events(
+            since=since, account_hash=switcher["active_character"]
+        ):
+            row = serialize(event)
+            row["carried_summary"] = compact_items((*event.equipment, *event.inventory))
+            rows.append(row)
+        return templates.TemplateResponse(
+            request,
+            "death_log.html",
+            {
+                "account": account,
+                "deaths": rows,
+                "window_days": ACTIVITY_WINDOW_DAYS,
+                **switcher,
+            },
+        )
+
     @app.get("/performance", response_class=HTMLResponse)
     def performance_page(
         request: Request,
@@ -660,10 +741,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         account: Account = CurrentAccount,
         active: str | None = ActiveCharacter,
-        cash_stack: int = 10_000_000,
+        cash_stack: int | None = None,
         strategy: str = "Balanced (1–4h)",
-        slots: int = 8,
+        slots: int | None = None,
     ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        repository = journal_for(settings, account)
+        # None, not just falsy, is what "the query string left this out" means — a real
+        # 0 typed into the cash field should stay 0, not fall back to a live reading. The
+        # "prefilled" flags stay False when there was nothing live to prefill *from* —
+        # they mark that the number came from sync, not merely that the field was blank.
+        cash_stack_prefilled = False
+        slots_prefilled = False
+        if cash_stack is None or slots is None:
+            snapshot = (
+                repository.get_loadout_snapshot(filter_hash)
+                if filter_hash
+                else repository.get_latest_loadout_snapshot()
+            )
+            synced = switcher["synced_characters"]
+            live_hash = filter_hash or (
+                synced[0]["account_hash"] if len(synced) == 1 else None
+            )
+            if cash_stack is None:
+                if snapshot is not None:
+                    cash_stack = snapshot.quantity_owned(995)
+                    cash_stack_prefilled = True
+                else:
+                    cash_stack = 10_000_000
+            if slots is None:
+                if live_hash:
+                    offer_slots, _offer_screen = live_offer_state(settings, account, live_hash)
+                    slots = 8 - len(offer_slots)
+                    slots_prefilled = True
+                else:
+                    slots = 8
         # The Grand Exchange has exactly 8 slots, so anything outside that range describes a
         # game state that cannot exist — clamped rather than rejected, since a stray query
         # string should degrade to the nearest real answer instead of a 422 on a GET page.
@@ -674,8 +787,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "strategy": strategy,
             "cash_stack": cash_stack,
             "slots": slots,
+            "cash_stack_prefilled": cash_stack_prefilled,
+            "slots_prefilled": slots_prefilled,
             "watched_ids": set(accounts.list_watchlist_item_ids(account.discord_user_id)),
-            **character_switcher_context(account, active),
+            **switcher,
         }
         try:
             mappings, points = market.snapshot()
@@ -716,8 +831,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         point_by_id = {point.item_id: point for point in points}
         now = int(datetime.now(UTC).timestamp())
+        alerts_by_item = {
+            alert.item_id: alert
+            for alert in accounts.list_watchlist_alerts(account.discord_user_id)
+        }
         rows = []
-        for item_id in accounts.list_watchlist_item_ids(account.discord_user_id):
+        for item_id, alert in alerts_by_item.items():
             item, point = mappings.get(item_id), point_by_id.get(item_id)
             if item is None or point is None:
                 # Delisted, or not yet in this snapshot — nothing priceable to show for it
@@ -735,13 +854,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "roi": profit / buy_price * 100 if buy_price else 0.0,
                     "volume_1h": point.volume_1h,
                     "age_minutes": max(0, now - min(point.high_time, point.low_time)) // 60,
+                    "target_price": alert.target_price,
+                    "direction": alert.direction,
                 }
             )
         rows.sort(key=lambda row: row["name"])
         return templates.TemplateResponse(
             request,
             "watchlist.html",
-            {**context, "market_unavailable": False, "rows": rows},
+            {
+                **context,
+                "market_unavailable": False,
+                "rows": rows,
+                "webhook_configured": bool(account.discord_webhook_url),
+            },
         )
 
     @app.post("/api/watchlist", status_code=201)
@@ -788,10 +914,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         accounts.remove_watchlist_item(account.discord_user_id, item_id)
         return {"ok": True}
 
+    @app.put("/api/watchlist/{item_id}/alert")
+    def set_watchlist_alert(item_id: int, payload: dict, account: Account = CurrentAccount) -> dict:
+        target_price = payload.get("target_price")
+        direction = payload.get("direction")
+        if not isinstance(target_price, int) or isinstance(target_price, bool) or target_price <= 0:
+            raise HTTPException(status_code=422, detail="target_price must be a positive number")
+        if direction not in ("above", "below"):
+            raise HTTPException(status_code=422, detail="direction must be 'above' or 'below'")
+        if not account.discord_webhook_url:
+            raise HTTPException(
+                status_code=422, detail="Add a Discord webhook on your profile first."
+            )
+        # Watching first is idempotent (INSERT OR IGNORE) — arming an alert on an item not
+        # already watched should watch it, not fail with "item not found".
+        accounts.add_watchlist_item(account.discord_user_id, item_id)
+        accounts.set_watchlist_alert(account.discord_user_id, item_id, target_price, direction)
+        return {"ok": True}
+
+    @app.delete("/api/watchlist/{item_id}/alert")
+    def clear_watchlist_alert(item_id: int, account: Account = CurrentAccount) -> dict:
+        accounts.clear_watchlist_alert(account.discord_user_id, item_id)
+        return {"ok": True}
+
     @app.get("/alch", response_class=HTMLResponse)
     def alch_page(
         request: Request,
-        account: Account = CurrentAccount,
+        account: Account | None = OptionalAccount,
         active: str | None = ActiveCharacter,
         cash_stack: int = 10_000_000,
         policy: str = "Safer",
@@ -799,14 +948,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> HTMLResponse:
         if policy not in ALCH_POLICIES:
             policy = "Safer"
+        watched_ids = (
+            set(accounts.list_watchlist_item_ids(account.discord_user_id))
+            if account is not None
+            else set()
+        )
         context = {
             "account": account,
             "cash_stack": cash_stack,
             "policy": policy,
             "policies": list(ALCH_POLICIES),
             "magic_level": magic_level,
-            "watched_ids": set(accounts.list_watchlist_item_ids(account.discord_user_id)),
-            **character_switcher_context(account, active),
+            "watched_ids": watched_ids,
+            **_optional_switcher(account, active),
         }
         try:
             mappings, points = market.snapshot()
@@ -832,14 +986,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/skilling", response_class=HTMLResponse)
     def skilling_page(
         request: Request,
-        account: Account = CurrentAccount,
+        account: Account | None = OptionalAccount,
         active: str | None = ActiveCharacter,
         character: str = "",
     ) -> HTMLResponse:
         context = {
             "account": account,
             "character": character,
-            **character_switcher_context(account, active),
+            **_optional_switcher(account, active),
         }
         skills: dict[str, int] = {}
         if character.strip():
@@ -938,6 +1092,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "has_snapshot": snapshot is not None,
                 "supplies": [serialize(row) for row in supplies_spend_rows(tracked)],
                 "total_supplies_spend": total_supplies_spend(tracked),
+                **switcher,
+            },
+        )
+
+    @app.get("/loadout", response_class=HTMLResponse)
+    def loadout_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        repository = journal_for(settings, account)
+        snapshot = (
+            repository.get_loadout_snapshot(filter_hash)
+            if filter_hash
+            else repository.get_latest_loadout_snapshot()
+        )
+        skills_history = repository.list_skills_history(filter_hash)
+        skills_chart = net_worth_history_svg(
+            [(point.captured_at, point.total_level) for point in skills_history]
+        )
+        bank_rows: list[dict] = []
+        bank_total_value = 0
+        if snapshot is not None:
+            bank_total_value = sum(item.total_value for item in snapshot.bank)
+            bank_rows = sorted(
+                (serialize(item) for item in snapshot.bank),
+                key=lambda row: row["total_value"],
+                reverse=True,
+            )[:15]
+        return templates.TemplateResponse(
+            request,
+            "loadout.html",
+            {
+                "account": account,
+                "has_snapshot": snapshot is not None,
+                "skills": dict(snapshot.skills) if snapshot is not None else {},
+                "total_level": sum(snapshot.skills.values()) if snapshot is not None else 0,
+                "skills_chart": skills_chart,
+                "bank_rows": bank_rows,
+                "bank_total_value": bank_total_value,
+                "bank_item_count": len(snapshot.bank) if snapshot is not None else 0,
                 **switcher,
             },
         )
@@ -1193,6 +1390,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.delete("/api/pairing-token")
     def clear_pairing_token(account: Account = CurrentAccount) -> dict:
         accounts.set_pairing_token(account.discord_user_id, None)
+        return {"ok": True}
+
+    @app.put("/api/discord-webhook")
+    def set_discord_webhook(payload: dict, account: Account = CurrentAccount) -> dict:
+        url = payload.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise HTTPException(status_code=422, detail="url is required")
+        url = url.strip()
+        if not is_discord_webhook_url(url):
+            raise HTTPException(
+                status_code=422,
+                detail="That doesn't look like a Discord webhook URL "
+                "(discord.com/api/webhooks/...).",
+            )
+        accounts.set_discord_webhook(account.discord_user_id, url)
+        return {"ok": True}
+
+    @app.delete("/api/discord-webhook")
+    def clear_discord_webhook(account: Account = CurrentAccount) -> dict:
+        accounts.set_discord_webhook(account.discord_user_id, None)
         return {"ok": True}
 
     @app.post("/api/pairing-token/generate")
@@ -1534,6 +1751,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         journal_for(settings, account).delete_synced_trade(event_id)
         return {"ok": True}
 
+    @app.delete("/api/loot-log/{event_id}")
+    def remove_loot_log_event(event_id: str, account: Account = CurrentAccount) -> dict:
+        journal_for(settings, account).delete_npc_loot_event(event_id)
+        return {"ok": True}
+
+    @app.delete("/api/death-log/{event_id}")
+    def remove_death_log_event(event_id: str, account: Account = CurrentAccount) -> dict:
+        journal_for(settings, account).delete_player_death_event(event_id)
+        return {"ok": True}
+
     @app.get("/api/net-worth")
     def net_worth(account: Account = CurrentAccount, active: str | None = ActiveCharacter) -> dict:
         repository = journal_for(settings, account)
@@ -1552,6 +1779,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else repository.get_latest_loadout_snapshot()
         )
         return {"loadout": serialize(snapshot) if snapshot else None}
+
+    # -- internal: triggered by an external scheduler, not a process running inside this one --
+
+    @app.post("/internal/check-alerts")
+    def check_alerts(request: Request) -> dict:
+        """Evaluate every armed price alert and fire the ones that now trigger.
+
+        Deliberately a pull from outside rather than a scheduler living in this process — see
+        ``config.Settings.internal_task_token``. A GitHub-style "run it on a timer yourself"
+        endpoint: an OS-level scheduled task on the machine hosting this calls it every few
+        minutes with the shared-secret header below. Unset token means the route does not
+        exist as far as anyone without it can tell; wrong token means it exists but refuses.
+        """
+        if not settings.internal_task_token:
+            raise HTTPException(status_code=404)
+        provided = request.headers.get("X-Internal-Token")
+        if not provided or not secrets.compare_digest(provided, settings.internal_task_token):
+            raise HTTPException(status_code=401, detail="Invalid or missing internal token.")
+        try:
+            mappings, points = market.snapshot()
+        except MarketDataError:
+            return {"ok": True, "checked": 0, "sent": 0, "note": "market unavailable"}
+        point_by_id = {point.item_id: point for point in points}
+        now = datetime.now(UTC)
+        checked = sent = 0
+        for alert in accounts.list_armed_alerts():
+            checked += 1
+            if alert.last_alerted_at:
+                last = datetime.fromisoformat(alert.last_alerted_at)
+                if now - last < timedelta(hours=ALERT_COOLDOWN_HOURS):
+                    continue
+            item = mappings.get(alert.item_id)
+            point = point_by_id.get(alert.item_id)
+            if item is None or point is None:
+                continue
+            buy_price, sell_price = offer_targets(point)
+            if alert.direction == "above":
+                triggered, current_price = sell_price >= alert.target_price, sell_price
+            else:
+                triggered, current_price = buy_price <= alert.target_price, buy_price
+            if not triggered:
+                continue
+            message = (
+                f"**{item.name}** is now {alert.direction} your target of "
+                f"{alert.target_price:,} gp — currently {current_price:,} gp. "
+                f"https://runescope.app/item/{alert.item_id}"
+            )
+            if send_webhook_message(alert.discord_webhook_url, message):
+                accounts.stamp_alert_sent(alert.discord_user_id, alert.item_id)
+                sent += 1
+        return {"ok": True, "checked": checked, "sent": sent}
 
     app.state.settings = settings
     app.state.accounts = accounts

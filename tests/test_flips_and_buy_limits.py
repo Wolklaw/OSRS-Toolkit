@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade
+from osrs_toolkit.journal import JournalRepository, LoadoutItem, LoadoutSnapshot, SyncedItem, SyncedTrade
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.models import ItemMapping, MarketPoint
 
@@ -217,6 +217,66 @@ def test_a_zero_slot_count_is_clamped_up_rather_than_producing_no_offers(signed_
 
     assert response.status_code == 200
     assert '<option value="1" selected>' in response.text
+
+
+# -- prefilling from synced state --------------------------------------------------------------
+
+
+def test_flips_page_defaults_to_ten_million_with_no_synced_state(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips")
+
+    assert response.status_code == 200
+    assert 'value="10000000"' in response.text
+    assert "from your synced coins" not in response.text
+
+
+def test_flips_page_prefills_cash_stack_from_synced_coins(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.save_loadout_snapshot(
+        LoadoutSnapshot(
+            account_hash="char-1",
+            account_name="Wolklaw",
+            captured_at=datetime.now(UTC).isoformat(),
+            equipment=(),
+            inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),),
+            bank=(),
+            skills={},
+        )
+    )
+
+    with _patched_market():
+        response = signed_in.get("/flips")
+
+    assert response.status_code == 200
+    assert 'value="42000000"' in response.text
+    assert "from your synced coins" in response.text
+
+
+def test_an_explicitly_typed_cash_stack_is_not_overridden_by_synced_coins(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.save_loadout_snapshot(
+        LoadoutSnapshot(
+            account_hash="char-1",
+            account_name="Wolklaw",
+            captured_at=datetime.now(UTC).isoformat(),
+            equipment=(),
+            inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),),
+            bank=(),
+            skills={},
+        )
+    )
+
+    with _patched_market():
+        response = signed_in.get("/flips", params={"cash_stack": 5_000_000})
+
+    assert response.status_code == 200
+    assert 'value="5000000"' in response.text
+    assert "from your synced coins" not in response.text
 
 
 # -- watching straight from a ranked row -----------------------------------------------------

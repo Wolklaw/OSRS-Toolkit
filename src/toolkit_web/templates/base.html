@@ -535,6 +535,9 @@
 {%- elif name == "limits" -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
 {%- elif name == "performance" -%}<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
 {%- elif name == "pvm" -%}<path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/>
+{%- elif name == "loot" -%}<path d="M6 9l6-6 6 6"/><path d="M6 9l6 12 6-12"/><path d="M6 9h12"/>
+{%- elif name == "death" -%}<path d="M7 21V11a5 5 0 0 1 10 0v10"/><path d="M7 21h10"/><path d="M10 21v-3"/><path d="M14 21v-3"/>
+{%- elif name == "loadout" -%}<path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M6 8h12l-1 12H7z"/><path d="M9 12h6"/>
 {%- elif name == "goal" -%}<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>
 {%- elif name == "profile" -%}<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>
 {%- elif name == "download" -%}<path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 20h16"/>
@@ -561,6 +564,11 @@
     ("/activity", "RuneLite Activity", "activity"),
     ("/buy-limits", "Buy Limits", "limits"),
     ("/performance", "Performance", "performance"),
+  ]),
+  ("Companion", [
+    ("/loot-log", "Loot Log", "loot"),
+    ("/death-log", "Death Log", "death"),
+    ("/loadout", "Skills & Bank", "loadout"),
   ]),
   ("Progress", [
     ("/pvm", "PvM Readiness", "pvm"),

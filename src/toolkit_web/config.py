@@ -46,6 +46,11 @@ class Settings:
     #: production: the check is enforced exactly when a secret exists to check against.
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
+    #: Shared secret for ``POST /internal/check-alerts``, called by an external scheduler
+    #: (Task Scheduler, cron) rather than a scheduler living inside this process — see
+    #: ``app.py``'s alert-checking route. Unset means the route refuses entirely, the same
+    #: "no key means the feature turns off" rule the Discord and Turnstile settings follow.
+    internal_task_token: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -68,6 +73,7 @@ class Settings:
             dev_login_enabled=_bool("TOOLKIT_DEV_LOGIN", False),
             turnstile_site_key=os.environ.get("TURNSTILE_SITE_KEY") or None,
             turnstile_secret_key=os.environ.get("TURNSTILE_SECRET_KEY") or None,
+            internal_task_token=os.environ.get("TOOLKIT_INTERNAL_TASK_TOKEN") or None,
         )
 
     def journal_path(self, discord_user_id: str) -> Path:

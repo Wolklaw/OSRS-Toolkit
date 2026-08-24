@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% set page_title = "Loot Log" %}
+{% set page_sub = "Everything the plugin has seen you loot, priced at the moment it landed." %}
+
+{% block content %}
+
+{% if rollup %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>By NPC</h2>
+      <p class="hint tight">Your own observed rate, from the deliveries below — not a community estimate.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>NPC</th>
+          <th class="num">Deliveries</th>
+          <th class="num">Total value</th>
+          <th class="num">Observed gp/hr</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rollup %}
+        <tr>
+          <td class="name">{{ row.npc_name }}</td>
+          <td class="num">{{ row.deliveries }}</td>
+          <td class="num">{{ "{:,}".format(row.total_value) }}</td>
+          <td class="num">{{ "{:,}".format(row.observed_gp_per_hour) if row.observed_gp_per_hour is not none else "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Last {{ window_days }} days</h2>
+      <p class="hint tight">{{ loot | length }} deliver{{ 'y' if loot | length == 1 else 'ies' }} recorded.</p>
+    </div>
+    {% if loot %}
+    <input type="search" class="filter-input" placeholder="Filter loot…"
+           oninput="filterTable(this, 'loot-log-table')" aria-label="Filter loot">
+    <span class="table-note" id="loot-log-table-note"></span>
+    {% endif %}
+  </div>
+  {% if loot %}
+  <div class="table-wrap">
+    <table id="loot-log-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>NPC</th>
+          <th>Character</th>
+          <th>Items</th>
+          <th class="num">Value</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for event in loot %}
+        <tr>
+          <td style="white-space:nowrap">{{ event.occurred_at[:16].replace("T", " ") }}</td>
+          <td class="name">{{ event.npc_name }}</td>
+          <td>{{ event.account_name }}</td>
+          <td class="wrap">{{ event.items_summary }}</td>
+          <td class="num">{{ "{:,}".format(event.total_value) }}</td>
+          <td class="row-actions">
+            {# tojson, not a quoted interpolation: an event id arrives from the plugin's own
+               payload, so it is external input and has no business being pasted raw into a
+               JavaScript string literal. #}
+            <a href="#" class="link-danger" onclick="deleteLootEvent({{ event.event_id | tojson }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing recorded yet in this window</strong>
+    {% if account.paired %}
+    Kill something with loot tracking on and it appears here the next time this page loads.
+    {% else %}
+    <a href="/profile">Connect the RuneLite plugin</a> and your loot arrives on its own.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function deleteLootEvent(eventId) {
+    if (!confirm('Remove this entry from your journal? It will not be imported again.')) { return; }
+    const result = await api('DELETE', `/api/loot-log/${encodeURIComponent(eventId)}`);
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+</script>
+{% endblock %}
