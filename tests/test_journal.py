@@ -9,6 +9,8 @@ from osrs_toolkit.journal import (
     JournalRepository,
     LoadoutItem,
     LoadoutSnapshot,
+    NpcLootRecord,
+    PlayerDeathRecord,
     SyncedItem,
     SyncedTrade,
 )
@@ -1032,6 +1034,95 @@ def test_add_synced_trades_batches_inserts_and_reports_duplicates(tmp_path: Path
     assert len(repository.list_synced_trades()) == 2
 
 
+def _npc_loot_event(event_id: str, npc_name: str = "Vorkath") -> NpcLootRecord:
+    return NpcLootRecord(
+        event_id=event_id,
+        occurred_at="2026-08-14T12:00:00+00:00",
+        account_hash="hash",
+        account_name="Player",
+        npc_name=npc_name,
+        items=(LoadoutItem(item_id=995, item_name="Coins", quantity=10_000, unit_value=1),),
+    )
+
+
+def _player_death_event(event_id: str, skulled: bool = False) -> PlayerDeathRecord:
+    return PlayerDeathRecord(
+        event_id=event_id,
+        occurred_at="2026-08-14T12:05:00+00:00",
+        account_hash="hash",
+        account_name="Player",
+        skulled=skulled,
+        equipment=(
+            LoadoutItem(item_id=4151, item_name="Whip", quantity=1, unit_value=1_500_000),
+        ),
+        inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=500, unit_value=1),),
+    )
+
+
+def test_add_npc_loot_event_dedupes_on_event_id(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    event = _npc_loot_event("11111111-1111-1111-1111-111111111111")
+
+    assert repository.add_npc_loot_event(event) is True
+    assert repository.add_npc_loot_event(event) is False
+
+    rows = repository.list_npc_loot_events()
+    assert len(rows) == 1
+    assert rows[0].npc_name == "Vorkath"
+    assert rows[0].total_value == 10_000
+    assert rows[0].items[0].item_name == "Coins"
+
+
+def test_list_npc_loot_events_filters_by_account_hash_and_npc_name(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    repository.add_npc_loot_event(_npc_loot_event("a", npc_name="Vorkath"))
+    other = _npc_loot_event("b", npc_name="Zulrah")
+    repository.add_npc_loot_event(replace(other, account_hash="other-hash"))
+
+    assert [row.npc_name for row in repository.list_npc_loot_events(account_hash="hash")] == [
+        "Vorkath"
+    ]
+    assert [row.npc_name for row in repository.list_npc_loot_events(npc_name="Zulrah")] == [
+        "Zulrah"
+    ]
+    assert repository.list_npc_loot_events(account_hash="hash", npc_name="Zulrah") == []
+
+
+def test_delete_npc_loot_event_removes_its_items_too(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    event = _npc_loot_event("11111111-1111-1111-1111-111111111111")
+    repository.add_npc_loot_event(event)
+
+    repository.delete_npc_loot_event(event.event_id)
+
+    assert repository.list_npc_loot_events() == []
+
+
+def test_add_player_death_event_dedupes_on_event_id(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    event = _player_death_event("22222222-2222-2222-2222-222222222222", skulled=True)
+
+    assert repository.add_player_death_event(event) is True
+    assert repository.add_player_death_event(event) is False
+
+    rows = repository.list_player_death_events()
+    assert len(rows) == 1
+    assert rows[0].skulled is True
+    assert rows[0].total_value == 1_500_500
+    assert rows[0].equipment[0].item_name == "Whip"
+    assert rows[0].inventory[0].item_name == "Coins"
+
+
+def test_delete_player_death_event_removes_its_items_too(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    event = _player_death_event("22222222-2222-2222-2222-222222222222")
+    repository.add_player_death_event(event)
+
+    repository.delete_player_death_event(event.event_id)
+
+    assert repository.list_player_death_events() == []
+
+
 def test_default_journal_recovers_from_version_independent_backup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1187,6 +1278,78 @@ def test_net_worth_history_is_pruned_per_account(
     history = repository.list_net_worth_history()
     assert len(history) == 3
     assert [point.total_value for point in history] == [3_000, 4_000, 5_000]
+
+
+def _snapshot_with_skills(
+    account_hash: str, captured_at: str, skills: dict[str, int]
+) -> LoadoutSnapshot:
+    return LoadoutSnapshot(
+        account_hash=account_hash,
+        account_name="Tester",
+        captured_at=captured_at,
+        equipment=(),
+        inventory=(),
+        bank=(),
+        skills=skills,
+    )
+
+
+def test_save_loadout_snapshot_records_skills_history(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash", "2026-08-15T00:00:00+00:00", {"Attack": 75})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash", "2026-08-16T00:00:00+00:00", {"Attack": 76})
+    )
+
+    history = repository.list_skills_history()
+    assert [point.skills["Attack"] for point in history] == [75, 76]
+    assert [point.total_level for point in history] == [75, 76]
+
+
+def test_skills_history_survives_the_latest_snapshot_being_overwritten(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash", "2026-08-15T00:00:00+00:00", {"Attack": 75})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash", "2026-08-16T00:00:00+00:00", {"Attack": 76})
+    )
+
+    assert repository.get_latest_loadout_snapshot().skills["Attack"] == 76
+    assert len(repository.list_skills_history()) == 2
+
+
+def test_skills_history_is_pruned_per_account(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("osrs_toolkit.journal.MAX_SKILLS_HISTORY_PER_ACCOUNT", 3)
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    for day in range(1, 6):
+        repository.save_loadout_snapshot(
+            _snapshot_with_skills("hash", f"2026-08-{day:02d}T00:00:00+00:00", {"Attack": day})
+        )
+
+    history = repository.list_skills_history()
+    assert len(history) == 3
+    assert [point.skills["Attack"] for point in history] == [3, 4, 5]
+
+
+def test_skills_history_scopes_by_account_hash(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash-a", "2026-08-15T00:00:00+00:00", {"Attack": 75})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot_with_skills("hash-b", "2026-08-15T00:00:00+00:00", {"Attack": 50})
+    )
+
+    assert [point.skills["Attack"] for point in repository.list_skills_history("hash-a")] == [75]
 
 
 def test_cancelling_a_buy_keeps_the_plan_the_offer_adopted(tmp_path: Path) -> None:

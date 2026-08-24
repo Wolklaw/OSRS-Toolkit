@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from osrs_toolkit.calculators import conservative_buy_price
-from osrs_toolkit.journal import LoadoutSnapshot
+from osrs_toolkit.journal import LoadoutSnapshot, NpcLootRecord
 from osrs_toolkit.models import ItemMapping, MarketPoint
 
 # Potions and some other consumables carry a trailing dose count in their real in-game name
@@ -66,6 +67,10 @@ class GpEstimate:
     net_gp_per_hour: int
     priced: bool
     price_age_seconds: int
+    #: The account's own recorded rate for this activity, from Loot Log history — set by the
+    #: caller via ``dataclasses.replace`` once it has loot events to compute from, not by
+    #: ``estimate_gp_per_hour`` itself. ``None`` means no observed data, not a rate of zero.
+    observed_gp_per_hour: int | None = None
 
 
 def estimate_gp_per_hour(
@@ -104,6 +109,28 @@ def estimate_gp_per_hour(
         priced=priced and bool(activity.supplies),
         price_age_seconds=max(ages, default=0),
     )
+
+
+def observed_gp_per_hour(events: list[NpcLootRecord]) -> int | None:
+    """This account's own gp/hr, from the loot it actually received for one NPC.
+
+    Spans the earliest to the latest event given — deliberately not "value divided by kill
+    count", since a loot delivery isn't always exactly one kill. ``None`` with fewer than two
+    events (no elapsed time to divide by) or when they all landed at the same instant.
+    """
+    if len(events) < 2:
+        return None
+    timestamps = sorted(_as_instant(event.occurred_at) for event in events)
+    elapsed_hours = (timestamps[-1] - timestamps[0]).total_seconds() / 3600
+    if elapsed_hours <= 0:
+        return None
+    total_value = sum(event.total_value for event in events)
+    return round(total_value / elapsed_hours)
+
+
+def _as_instant(raw: str) -> datetime:
+    parsed = datetime.fromisoformat(raw)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)

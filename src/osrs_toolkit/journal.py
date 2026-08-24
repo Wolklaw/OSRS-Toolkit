@@ -19,6 +19,10 @@ from osrs_toolkit.ranking import ge_tax
 # cannot grow this table without limit. Plenty for a readable net-worth chart either way.
 MAX_NET_WORTH_HISTORY_PER_ACCOUNT = 2_000
 
+# Same reasoning, same cadence — one row per snapshot, capped the same way — for skill
+# levels over time rather than total value.
+MAX_SKILLS_HISTORY_PER_ACCOUNT = 2_000
+
 # ``occurred_at`` is stored as the plugin wrote it, and comparing those as text is only
 # roughly comparing them as instants: the writer omits fields that are zero (so "05:00Z"
 # sorts after "05:00:30Z"), and a value could carry a zone offset rather than UTC. A SQL
@@ -289,6 +293,43 @@ class LoadoutSnapshot:
 
 
 @dataclass(frozen=True, slots=True)
+class NpcLootRecord:
+    """One delivery of loot from an NPC kill, as the plugin observed it in the moment — not a
+    full drop-table simulation, just what actually landed in the inventory."""
+
+    event_id: str
+    occurred_at: str
+    account_hash: str
+    account_name: str
+    npc_name: str
+    items: tuple[LoadoutItem, ...]
+
+    @property
+    def total_value(self) -> int:
+        return sum(item.total_value for item in self.items)
+
+
+@dataclass(frozen=True, slots=True)
+class PlayerDeathRecord:
+    """What was equipped and carried at the moment a death animation started — not what was
+    lost. Skull state, Protect Item, and wilderness rules decide the real loss and aren't
+    simulated here; a caller wanting that has this snapshot plus whatever loadout snapshot
+    landed after it to diff against."""
+
+    event_id: str
+    occurred_at: str
+    account_hash: str
+    account_name: str
+    skulled: bool
+    equipment: tuple[LoadoutItem, ...]
+    inventory: tuple[LoadoutItem, ...]
+
+    @property
+    def total_value(self) -> int:
+        return sum(item.total_value for item in (*self.equipment, *self.inventory))
+
+
+@dataclass(frozen=True, slots=True)
 class NetWorthPoint:
     """One historical net-worth reading, recorded the moment a loadout snapshot arrived."""
 
@@ -296,6 +337,20 @@ class NetWorthPoint:
     account_name: str
     captured_at: str
     total_value: int
+
+
+@dataclass(frozen=True, slots=True)
+class SkillsPoint:
+    """One historical skills reading, recorded the moment a loadout snapshot arrived."""
+
+    account_hash: str
+    account_name: str
+    captured_at: str
+    skills: dict[str, int]
+
+    @property
+    def total_level(self) -> int:
+        return sum(self.skills.values())
 
 
 @dataclass(frozen=True, slots=True)
@@ -781,6 +836,71 @@ class JournalRepository:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS npc_loot_events (
+                    event_id TEXT PRIMARY KEY,
+                    occurred_at TEXT NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    account_hash TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    npc_name TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS npc_loot_items (
+                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL REFERENCES npc_loot_events(event_id) ON DELETE CASCADE,
+                    item_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS npc_loot_events_occurred "
+                "ON npc_loot_events(occurred_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS npc_loot_items_event ON npc_loot_items(event_id)"
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS player_death_events (
+                    event_id TEXT PRIMARY KEY,
+                    occurred_at TEXT NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    account_hash TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    skulled INTEGER NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS player_death_items (
+                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL
+                        REFERENCES player_death_events(event_id) ON DELETE CASCADE,
+                    flow TEXT NOT NULL CHECK (flow IN ('equipment', 'inventory')),
+                    item_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS player_death_events_occurred "
+                "ON player_death_events(occurred_at)"
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS player_death_items_event "
+                "ON player_death_items(event_id)"
+            )
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS loadout_snapshots (
                     account_hash TEXT PRIMARY KEY,
                     account_name TEXT NOT NULL,
@@ -806,6 +926,21 @@ class JournalRepository:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS net_worth_history_captured "
                 "ON net_worth_history(captured_at)"
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS skills_history (
+                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_hash TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    captured_at TEXT NOT NULL,
+                    skills_json TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS skills_history_captured "
+                "ON skills_history(captured_at)"
             )
             connection.execute(
                 """
@@ -1881,6 +2016,216 @@ class JournalRepository:
         with self._connect() as connection:
             connection.execute("DELETE FROM synced_trades WHERE event_id = ?", (event_id,))
 
+    def add_npc_loot_event(self, event: NpcLootRecord) -> bool:
+        """Insert one loot delivery, returning False if its event_id already landed."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO npc_loot_events (
+                    event_id, occurred_at, imported_at, account_hash, account_name, npc_name
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.occurred_at,
+                    datetime.now(UTC).isoformat(timespec="seconds"),
+                    event.account_hash,
+                    event.account_name,
+                    event.npc_name,
+                ),
+            )
+            if cursor.rowcount == 0:
+                return False
+            connection.executemany(
+                """
+                INSERT INTO npc_loot_items (
+                    event_id, item_id, item_name, quantity, unit_value
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (event.event_id, item.item_id, item.item_name, item.quantity, item.unit_value)
+                    for item in event.items
+                ],
+            )
+            return True
+
+    def list_npc_loot_events(
+        self,
+        *,
+        since: datetime | None = None,
+        account_hash: str | None = None,
+        npc_name: str | None = None,
+    ) -> list[NpcLootRecord]:
+        """Imported loot deliveries, newest first — same filter/window shape as
+        ``list_synced_trades``."""
+        conditions: list[str] = []
+        parameters: list[str] = []
+        if account_hash is not None:
+            conditions.append("account_hash = ?")
+            parameters.append(account_hash)
+        if npc_name is not None:
+            conditions.append("npc_name = ?")
+            parameters.append(npc_name)
+        if since is not None:
+            conditions.append("occurred_at >= ?")
+            parameters.append(
+                (since - NOT_BEFORE_SAFETY_MARGIN).astimezone(UTC).isoformat(timespec="seconds")
+            )
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM npc_loot_events{where} ORDER BY occurred_at DESC, event_id DESC",
+                parameters,
+            ).fetchall()
+            item_rows = connection.execute(
+                f"""
+                SELECT * FROM npc_loot_items
+                WHERE event_id IN (SELECT event_id FROM npc_loot_events{where})
+                ORDER BY item_row_id ASC
+                """,
+                parameters,
+            ).fetchall()
+        items_by_event: dict[str, list[LoadoutItem]] = {}
+        for row in item_rows:
+            items_by_event.setdefault(str(row["event_id"]), []).append(
+                LoadoutItem(
+                    item_id=int(row["item_id"]),
+                    item_name=str(row["item_name"]),
+                    quantity=int(row["quantity"]),
+                    unit_value=int(row["unit_value"]),
+                )
+            )
+        return [
+            NpcLootRecord(
+                event_id=str(row["event_id"]),
+                occurred_at=str(row["occurred_at"]),
+                account_hash=str(row["account_hash"]),
+                account_name=str(row["account_name"]),
+                npc_name=str(row["npc_name"]),
+                items=tuple(items_by_event.get(str(row["event_id"]), [])),
+            )
+            for row in rows
+        ]
+
+    def delete_npc_loot_event(self, event_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute("DELETE FROM npc_loot_events WHERE event_id = ?", (event_id,))
+
+    def add_player_death_event(self, event: PlayerDeathRecord) -> bool:
+        """Insert one death snapshot, returning False if its event_id already landed."""
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO player_death_events (
+                    event_id, occurred_at, imported_at, account_hash, account_name, skulled
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.occurred_at,
+                    datetime.now(UTC).isoformat(timespec="seconds"),
+                    event.account_hash,
+                    event.account_name,
+                    1 if event.skulled else 0,
+                ),
+            )
+            if cursor.rowcount == 0:
+                return False
+            connection.executemany(
+                """
+                INSERT INTO player_death_items (
+                    event_id, flow, item_id, item_name, quantity, unit_value
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        event.event_id,
+                        "equipment",
+                        item.item_id,
+                        item.item_name,
+                        item.quantity,
+                        item.unit_value,
+                    )
+                    for item in event.equipment
+                ]
+                + [
+                    (
+                        event.event_id,
+                        "inventory",
+                        item.item_id,
+                        item.item_name,
+                        item.quantity,
+                        item.unit_value,
+                    )
+                    for item in event.inventory
+                ],
+            )
+            return True
+
+    def list_player_death_events(
+        self,
+        *,
+        since: datetime | None = None,
+        account_hash: str | None = None,
+    ) -> list[PlayerDeathRecord]:
+        """Imported death snapshots, newest first — same filter/window shape as
+        ``list_synced_trades``."""
+        conditions: list[str] = []
+        parameters: list[str] = []
+        if account_hash is not None:
+            conditions.append("account_hash = ?")
+            parameters.append(account_hash)
+        if since is not None:
+            conditions.append("occurred_at >= ?")
+            parameters.append(
+                (since - NOT_BEFORE_SAFETY_MARGIN).astimezone(UTC).isoformat(timespec="seconds")
+            )
+        where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM player_death_events{where} "
+                "ORDER BY occurred_at DESC, event_id DESC",
+                parameters,
+            ).fetchall()
+            item_rows = connection.execute(
+                f"""
+                SELECT * FROM player_death_items
+                WHERE event_id IN (SELECT event_id FROM player_death_events{where})
+                ORDER BY item_row_id ASC
+                """,
+                parameters,
+            ).fetchall()
+        equipment_by_event: dict[str, list[LoadoutItem]] = {}
+        inventory_by_event: dict[str, list[LoadoutItem]] = {}
+        for row in item_rows:
+            bucket = equipment_by_event if row["flow"] == "equipment" else inventory_by_event
+            bucket.setdefault(str(row["event_id"]), []).append(
+                LoadoutItem(
+                    item_id=int(row["item_id"]),
+                    item_name=str(row["item_name"]),
+                    quantity=int(row["quantity"]),
+                    unit_value=int(row["unit_value"]),
+                )
+            )
+        return [
+            PlayerDeathRecord(
+                event_id=str(row["event_id"]),
+                occurred_at=str(row["occurred_at"]),
+                account_hash=str(row["account_hash"]),
+                account_name=str(row["account_name"]),
+                skulled=bool(row["skulled"]),
+                equipment=tuple(equipment_by_event.get(str(row["event_id"]), [])),
+                inventory=tuple(inventory_by_event.get(str(row["event_id"]), [])),
+            )
+            for row in rows
+        ]
+
+    def delete_player_death_event(self, event_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM player_death_events WHERE event_id = ?", (event_id,)
+            )
+
     def save_loadout_snapshot(self, snapshot: LoadoutSnapshot) -> None:
         """Replace any previous snapshot for this account — only the latest full state
         matters for that — and append its total value to the net-worth history, which is
@@ -1950,6 +2295,31 @@ class JournalRepository:
                 """,
                 (snapshot.account_hash, snapshot.account_hash, MAX_NET_WORTH_HISTORY_PER_ACCOUNT),
             )
+            connection.execute(
+                """
+                INSERT INTO skills_history (
+                    account_hash, account_name, captured_at, skills_json
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    snapshot.account_hash,
+                    snapshot.account_name,
+                    snapshot.captured_at,
+                    json.dumps(snapshot.skills, separators=(",", ":")),
+                ),
+            )
+            connection.execute(
+                """
+                DELETE FROM skills_history
+                WHERE account_hash = ? AND entry_id NOT IN (
+                    SELECT entry_id FROM skills_history
+                    WHERE account_hash = ?
+                    ORDER BY captured_at DESC, entry_id DESC
+                    LIMIT ?
+                )
+                """,
+                (snapshot.account_hash, snapshot.account_hash, MAX_SKILLS_HISTORY_PER_ACCOUNT),
+            )
 
     def list_net_worth_history(self, account_hash: str | None = None) -> list[NetWorthPoint]:
         with self._connect() as connection:
@@ -1972,6 +2342,31 @@ class JournalRepository:
                 account_name=str(row["account_name"]),
                 captured_at=str(row["captured_at"]),
                 total_value=int(row["total_value"]),
+            )
+            for row in rows
+        ]
+
+    def list_skills_history(self, account_hash: str | None = None) -> list[SkillsPoint]:
+        with self._connect() as connection:
+            if account_hash is None:
+                rows = connection.execute(
+                    "SELECT * FROM skills_history ORDER BY captured_at ASC, entry_id ASC"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM skills_history
+                    WHERE account_hash = ?
+                    ORDER BY captured_at ASC, entry_id ASC
+                    """,
+                    (account_hash,),
+                ).fetchall()
+        return [
+            SkillsPoint(
+                account_hash=str(row["account_hash"]),
+                account_name=str(row["account_name"]),
+                captured_at=str(row["captured_at"]),
+                skills=json.loads(str(row["skills_json"])),
             )
             for row in rows
         ]

@@ -10,8 +10,10 @@ from osrs_toolkit.journal import (
     JournalRepository,
     LoadoutItem,
     LoadoutSnapshot,
+    NpcLootRecord,
     OfferCancelled,
     OfferOpened,
+    PlayerDeathRecord,
     SyncedItem,
     SyncedTrade,
 )
@@ -52,7 +54,14 @@ _SELL_OFFER_STATES = frozenset({"SELLING", "SOLD", "CANCELLED_SELL"})
 #: the offer is over and its goods are still in the slot, waiting to be collected.
 TERMINAL_OFFER_STATES = frozenset({"BOUGHT", "SOLD", "CANCELLED_BUY", "CANCELLED_SELL"})
 
-ParsedEvent = SyncedTrade | LoadoutSnapshot | OfferOpened | OfferCancelled
+ParsedEvent = (
+    SyncedTrade
+    | LoadoutSnapshot
+    | OfferOpened
+    | OfferCancelled
+    | NpcLootRecord
+    | PlayerDeathRecord
+)
 
 
 class SyncEventError(ValueError):
@@ -366,6 +375,16 @@ class RuneLiteSyncImporter:
             elif isinstance(event, LoadoutSnapshot):
                 repository.save_loadout_snapshot(event)
                 imported += 1
+            elif isinstance(event, NpcLootRecord):
+                if repository.add_npc_loot_event(event):
+                    imported += 1
+                else:
+                    duplicates += 1
+            elif isinstance(event, PlayerDeathRecord):
+                if repository.add_player_death_event(event):
+                    imported += 1
+                else:
+                    duplicates += 1
             elif not repository.claim_offer_event(event.event_id):
                 duplicates += 1
             else:
@@ -487,6 +506,8 @@ def parse_sync_event(payload: object) -> ParsedEvent:
         "loadout_snapshot",
         "ge_offer_opened",
         "ge_offer_cancelled",
+        "npc_loot",
+        "player_death",
     }:
         raise UnsupportedEventError("Unsupported event type")
     occurred_at = _timestamp(payload.get("occurred_at"))
@@ -510,6 +531,10 @@ def parse_sync_event(payload: object) -> ParsedEvent:
         return _parse_offer_lifecycle(
             OfferCancelled, event_id, occurred_at, account_hash, account_name, body
         )
+    if event_type == "npc_loot":
+        return _parse_npc_loot(event_id, occurred_at, account_hash, account_name, body)
+    if event_type == "player_death":
+        return _parse_player_death(event_id, occurred_at, account_hash, account_name, body)
     return _parse_loadout_snapshot(occurred_at, account_hash, account_name, body)
 
 
@@ -686,6 +711,48 @@ def _loadout_items(value: object, field: str) -> list[LoadoutItem]:
             )
         )
     return result
+
+
+def _parse_npc_loot(
+    event_id: str,
+    occurred_at: str,
+    account_hash: str,
+    account_name: str,
+    body: dict[str, object],
+) -> NpcLootRecord:
+    npc_name = _text(body.get("npc_name"), "npc name", 128)
+    items = _loadout_items(body.get("items"), "items")
+    if not items:
+        raise SyncEventError("NPC loot is empty")
+    return NpcLootRecord(
+        event_id=event_id,
+        occurred_at=occurred_at,
+        account_hash=account_hash,
+        account_name=account_name,
+        npc_name=npc_name,
+        items=tuple(items),
+    )
+
+
+def _parse_player_death(
+    event_id: str,
+    occurred_at: str,
+    account_hash: str,
+    account_name: str,
+    body: dict[str, object],
+) -> PlayerDeathRecord:
+    skulled = body.get("skulled") is True
+    equipment = _loadout_items(body.get("equipment"), "equipment")
+    inventory = _loadout_items(body.get("inventory"), "inventory")
+    return PlayerDeathRecord(
+        event_id=event_id,
+        occurred_at=occurred_at,
+        account_hash=account_hash,
+        account_name=account_name,
+        skulled=skulled,
+        equipment=tuple(equipment),
+        inventory=tuple(inventory),
+    )
 
 
 def _parse_offer_slot(key: object, value: object) -> GEOfferSlot | None:

@@ -131,7 +131,14 @@ from osrs_toolkit.formatting import (
     synced_trade_label as _synced_trade_label,
 )
 from osrs_toolkit.item_details import ItemDetailsDialog
-from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade, TrackedTrade
+from osrs_toolkit.journal import (
+    JournalRepository,
+    NpcLootRecord,
+    PlayerDeathRecord,
+    SyncedItem,
+    SyncedTrade,
+    TrackedTrade,
+)
 from osrs_toolkit.journal_mirror import JournalMirror, MirrorResult
 from osrs_toolkit.journal_presentation import (
     JOURNAL_STATUS_FILTERS,
@@ -158,7 +165,7 @@ from osrs_toolkit.performance import (
     realized_results,
     summarize,
 )
-from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
+from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
 from osrs_toolkit.ranking import (
     STRATEGIES,
     confidence_standing,
@@ -2136,6 +2143,8 @@ class MainWindow(QMainWindow):
         # have said the same thing before the click.
         self._journal_row_buttons: list[QPushButton] = []
         self._activity_row_buttons: list[QPushButton] = []
+        self._loot_log_row_buttons: list[QPushButton] = []
+        self._death_log_row_buttons: list[QPushButton] = []
         # The Journal page is built first and renders itself as it is built, which reaches
         # the Performance page's renderer before its widgets exist.
         self._performance_ready = False
@@ -2417,6 +2426,28 @@ class MainWindow(QMainWindow):
         menu.addAction("Delete entry…", self._delete_selected_synced_trade)
         menu.addSeparator()
         self._add_copy_action(menu, self.synced_trade_table, row, 3)
+
+    def _loot_log_selection_changed(self) -> None:
+        selected = bool(self.loot_log_table.selectionModel().hasSelection())
+        for button in self._loot_log_row_buttons:
+            button.setEnabled(selected)
+
+    def _build_loot_log_row_menu(self, menu: QMenu, row: int) -> None:
+        """The row menu for an imported loot delivery."""
+        menu.addAction("Delete entry…", self._delete_selected_loot_event)
+        menu.addSeparator()
+        self._add_copy_action(menu, self.loot_log_table, row, 1)
+
+    def _death_log_selection_changed(self) -> None:
+        selected = bool(self.death_log_table.selectionModel().hasSelection())
+        for button in self._death_log_row_buttons:
+            button.setEnabled(selected)
+
+    def _build_death_log_row_menu(self, menu: QMenu, row: int) -> None:
+        """The row menu for an imported death."""
+        menu.addAction("Delete entry…", self._delete_selected_death_event)
+        menu.addSeparator()
+        self._add_copy_action(menu, self.death_log_table, row, 1)
 
     def _build_guide_row_menu(
         self,
@@ -2788,6 +2819,52 @@ class MainWindow(QMainWindow):
         activity_layout.addWidget(self.synced_trade_table, 1)
         self.journal_tabs.addTab(activity_tab, "RuneLite activity")
 
+        loot_log_tab = QWidget()
+        loot_log_layout = QVBoxLayout(loot_log_tab)
+        loot_log_controls = QHBoxLayout()
+        loot_log_remove_button = QPushButton("Delete entry", objectName="secondary")
+        loot_log_remove_button.clicked.connect(self._delete_selected_loot_event)
+        self._loot_log_row_buttons += [loot_log_remove_button]
+        loot_log_controls.addStretch()
+        loot_log_controls.addWidget(loot_log_remove_button)
+        loot_log_layout.addLayout(loot_log_controls)
+        self.loot_log_table = self._table(
+            ["Time", "NPC", "Character", "Items", "Value"],
+            minimum_widths={0: 145, 1: 140, 2: 140, 3: 260},
+            text_columns={1, 2, 3},
+        )
+        self._install_row_menu(self.loot_log_table, self._build_loot_log_row_menu)
+        self._delete_selected_row_on_delete_key(
+            self.loot_log_table, self._delete_selected_loot_event
+        )
+        self.loot_log_table.itemSelectionChanged.connect(self._loot_log_selection_changed)
+        self._loot_log_selection_changed()
+        loot_log_layout.addWidget(self.loot_log_table, 1)
+        self.journal_tabs.addTab(loot_log_tab, "Loot Log")
+
+        death_log_tab = QWidget()
+        death_log_layout = QVBoxLayout(death_log_tab)
+        death_log_controls = QHBoxLayout()
+        death_log_remove_button = QPushButton("Delete entry", objectName="secondary")
+        death_log_remove_button.clicked.connect(self._delete_selected_death_event)
+        self._death_log_row_buttons += [death_log_remove_button]
+        death_log_controls.addStretch()
+        death_log_controls.addWidget(death_log_remove_button)
+        death_log_layout.addLayout(death_log_controls)
+        self.death_log_table = self._table(
+            ["Time", "Character", "Skulled", "Carried", "Value"],
+            minimum_widths={0: 145, 1: 140, 3: 260},
+            text_columns={1, 2, 3},
+        )
+        self._install_row_menu(self.death_log_table, self._build_death_log_row_menu)
+        self._delete_selected_row_on_delete_key(
+            self.death_log_table, self._delete_selected_death_event
+        )
+        self.death_log_table.itemSelectionChanged.connect(self._death_log_selection_changed)
+        self._death_log_selection_changed()
+        death_log_layout.addWidget(self.death_log_table, 1)
+        self.journal_tabs.addTab(death_log_tab, "Death Log")
+
         buy_limits_tab = QWidget()
         buy_limits_layout = QVBoxLayout(buy_limits_tab)
         # Set in _render_buy_limits, which knows whether an empty table means "nothing is
@@ -2835,6 +2912,8 @@ class MainWindow(QMainWindow):
         page.setLayout(layout)
         self._render_journal()
         self._render_synced_trades()
+        self._render_loot_log()
+        self._render_death_log()
         self._render_buy_limits()
         self._render_ge_offers()
         return page
@@ -4353,6 +4432,8 @@ class MainWindow(QMainWindow):
         self._update_runelite_status()
         if result.imported or result.duplicates:
             self._render_synced_trades()
+            self._render_loot_log()
+            self._render_death_log()
         if result.imported:
             self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
             self._render_pvm()
@@ -4984,6 +5065,92 @@ class MainWindow(QMainWindow):
             for event_id in event_ids:
                 self._journal.delete_synced_trade(event_id)
             self._render_synced_trades()
+
+    def _render_loot_log(self) -> None:
+        events = self._journal.list_npc_loot_events()
+        values = [
+            [
+                _display_timestamp(event.occurred_at),
+                event.npc_name,
+                event.account_name,
+                _compact_items(event.items),
+                _gp(event.total_value),
+            ]
+            for event in events
+        ]
+        self._fill_table(
+            self.loot_log_table,
+            values,
+            green_columns=set(),
+            row_ids=[event.event_id for event in events],
+        )
+        self._loot_log_selection_changed()
+
+    def _selected_loot_log_event_id(self) -> str | None:
+        row = self.loot_log_table.currentRow()
+        if row < 0 or row >= self.loot_log_table.rowCount():
+            return None
+        event_id = self.loot_log_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        return event_id if isinstance(event_id, str) else None
+
+    def _delete_selected_loot_event(self) -> None:
+        event_id = self._selected_loot_log_event_id()
+        if event_id is None:
+            QMessageBox.information(self, "No entry selected", "Select a loot log row first.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete loot entry",
+            "Remove this loot delivery from the journal? This does not affect RuneLite or the game.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._journal.delete_npc_loot_event(event_id)
+            self._render_loot_log()
+
+    def _render_death_log(self) -> None:
+        events = self._journal.list_player_death_events()
+        values = [
+            [
+                _display_timestamp(event.occurred_at),
+                event.account_name,
+                "Skulled" if event.skulled else "Not skulled",
+                _compact_items((*event.equipment, *event.inventory)),
+                _gp(event.total_value),
+            ]
+            for event in events
+        ]
+        self._fill_table(
+            self.death_log_table,
+            values,
+            green_columns=set(),
+            row_ids=[event.event_id for event in events],
+        )
+        self._death_log_selection_changed()
+
+    def _selected_death_log_event_id(self) -> str | None:
+        row = self.death_log_table.currentRow()
+        if row < 0 or row >= self.death_log_table.rowCount():
+            return None
+        event_id = self.death_log_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        return event_id if isinstance(event_id, str) else None
+
+    def _delete_selected_death_event(self) -> None:
+        event_id = self._selected_death_log_event_id()
+        if event_id is None:
+            QMessageBox.information(self, "No entry selected", "Select a death log row first.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "Delete death entry",
+            "Remove this death from the journal? This does not affect RuneLite or the game.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._journal.delete_player_death_event(event_id)
+            self._render_death_log()
 
     def _add_trade(self) -> None:
         dialog = TradeEntryDialog(self)

@@ -1,8 +1,14 @@
 from __future__ import annotations
 
-from osrs_toolkit.journal import LoadoutItem, LoadoutSnapshot
+from osrs_toolkit.journal import LoadoutItem, LoadoutSnapshot, NpcLootRecord
 from osrs_toolkit.models import MarketPoint
-from osrs_toolkit.pvm import PVM_ACTIVITIES, assess_all, assess_readiness, estimate_gp_per_hour
+from osrs_toolkit.pvm import (
+    PVM_ACTIVITIES,
+    assess_all,
+    assess_readiness,
+    estimate_gp_per_hour,
+    observed_gp_per_hour,
+)
 
 
 def _snapshot(skills: dict[str, int], item_names: list[str]) -> LoadoutSnapshot:
@@ -179,3 +185,37 @@ def test_gp_estimate_prices_what_it_can_when_one_supply_item_is_missing() -> Non
     # falls back to the gross figure rather than silently netting an incomplete number.
     assert estimate.priced is False
     assert estimate.net_gp_per_hour == barrows.gross_gp_per_hour
+
+
+def _loot(event_id: str, occurred_at: str, value: int) -> NpcLootRecord:
+    return NpcLootRecord(
+        event_id=event_id,
+        occurred_at=occurred_at,
+        account_hash="hash",
+        account_name="Tester",
+        npc_name="Vorkath",
+        items=(LoadoutItem(item_id=995, item_name="Coins", quantity=value, unit_value=1),),
+    )
+
+
+def test_observed_gp_per_hour_needs_at_least_two_events() -> None:
+    assert observed_gp_per_hour([]) is None
+    assert observed_gp_per_hour([_loot("a", "2026-08-15T00:00:00+00:00", 100_000)]) is None
+
+
+def test_observed_gp_per_hour_divides_total_value_by_elapsed_time() -> None:
+    events = [
+        _loot("a", "2026-08-15T00:00:00+00:00", 1_000_000),
+        _loot("b", "2026-08-15T01:30:00+00:00", 1_000_000),
+    ]
+
+    # 2,000,000 gp over 1.5 hours.
+    assert observed_gp_per_hour(events) == 1_333_333
+
+
+def test_observed_gp_per_hour_is_order_independent() -> None:
+    later = _loot("a", "2026-08-15T02:00:00+00:00", 500_000)
+    earlier = _loot("b", "2026-08-15T00:00:00+00:00", 500_000)
+
+    assert observed_gp_per_hour([later, earlier]) == 500_000
+

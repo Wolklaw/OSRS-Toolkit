@@ -437,6 +437,105 @@ def test_imports_loadout_snapshot_and_replaces_earlier_one(tmp_path: Path) -> No
     assert 995 not in updated.owned_item_ids
 
 
+def test_imports_npc_loot_and_lists_it(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    event = _event(
+        "npc_loot",
+        {
+            "npc_name": "Vorkath",
+            "items": [
+                {"item_id": 21_034, "item_name": "Vorkath's head", "quantity": 1, "unit_value": 0},
+                {"item_id": 995, "item_name": "Coins", "quantity": 12_000, "unit_value": 1},
+            ],
+        },
+    )
+    _write_event(root, event)
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    result = RuneLiteSyncImporter(root).import_pending(repository)
+
+    assert result.imported == 1
+    assert not (root / "events" / f"{event['event_id']}.json").exists()
+    rows = repository.list_npc_loot_events()
+    assert len(rows) == 1
+    assert rows[0].npc_name == "Vorkath"
+    assert rows[0].account_name == "Example Player"
+    assert rows[0].total_value == 12_000
+    assert {item.item_name for item in rows[0].items} == {"Vorkath's head", "Coins"}
+
+
+def test_duplicate_npc_loot_event_is_idempotent(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    event = _event("npc_loot", {"npc_name": "Zulrah", "items": [
+        {"item_id": 995, "item_name": "Coins", "quantity": 1_000, "unit_value": 1}
+    ]})
+    _write_event(root, event)
+    repository = JournalRepository(tmp_path / "journal.db")
+    importer = RuneLiteSyncImporter(root)
+    importer.import_pending(repository)
+
+    _write_event(root, event)
+    result = importer.import_pending(repository)
+
+    assert result.duplicates == 1
+    assert len(repository.list_npc_loot_events()) == 1
+
+
+def test_npc_loot_with_no_items_is_rejected(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    event = _event("npc_loot", {"npc_name": "Zulrah", "items": []})
+    _write_event(root, event)
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    result = RuneLiteSyncImporter(root).import_pending(repository)
+
+    assert result.rejected == 1
+    assert repository.list_npc_loot_events() == []
+
+
+def test_imports_player_death_and_lists_it(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    event = _event(
+        "player_death",
+        {
+            "skulled": True,
+            "equipment": [
+                {"item_id": 4_151, "item_name": "Abyssal whip", "quantity": 1, "unit_value": 1_500_000}
+            ],
+            "inventory": [
+                {"item_id": 995, "item_name": "Coins", "quantity": 5_000, "unit_value": 1}
+            ],
+        },
+    )
+    _write_event(root, event)
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    result = RuneLiteSyncImporter(root).import_pending(repository)
+
+    assert result.imported == 1
+    rows = repository.list_player_death_events()
+    assert len(rows) == 1
+    assert rows[0].skulled is True
+    assert rows[0].total_value == 1_505_000
+    assert rows[0].equipment[0].item_name == "Abyssal whip"
+    assert rows[0].inventory[0].item_name == "Coins"
+
+
+def test_player_death_with_nothing_carried_still_imports(tmp_path: Path) -> None:
+    root = tmp_path / "sync"
+    event = _event("player_death", {"skulled": False, "equipment": [], "inventory": []})
+    _write_event(root, event)
+    repository = JournalRepository(tmp_path / "journal.db")
+
+    result = RuneLiteSyncImporter(root).import_pending(repository)
+
+    assert result.imported == 1
+    rows = repository.list_player_death_events()
+    assert len(rows) == 1
+    assert rows[0].skulled is False
+    assert rows[0].total_value == 0
+
+
 def test_connection_status_exposes_active_runelite_character(tmp_path: Path) -> None:
     root = tmp_path / "sync"
     root.mkdir()
