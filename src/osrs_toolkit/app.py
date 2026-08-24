@@ -234,16 +234,17 @@ def configured_web_client(timeout: float | None = None) -> ToolkitWebClient:
 
 
 def build_sync_importer() -> RuneLiteSyncImporter:
-    """Where this app reads live plugin state from.
+    """Where this app reads live plugin state from: the website, always.
 
-    The website when a credential has been entered for it, and the old ``.runelite`` folder
-    when not. The folder is the arrangement the Plugin Hub refused -- a plugin feeding an app
-    on the same machine -- so it is no longer what a new install does. It stays reachable
-    because somebody running last year's plugin still has events sitting in it, and silently
-    reading nothing would look exactly like the app breaking.
+    Never the old ``.runelite`` folder, even with no desktop token entered. That folder is the
+    arrangement the Plugin Hub refused -- a plugin feeding an app on the same machine -- and
+    falling back to it the moment a credential was missing meant a fresh install with an empty
+    Settings dialog was silently in exactly the arrangement the whole point of this module is
+    to avoid. An unconfigured client answers every question here with "nothing yet" rather
+    than reaching for a local file, and ``RuneLiteConnectionDialog`` says plainly that a token
+    is what is missing, rather than a plugin nobody has actually failed to install.
     """
-    client = configured_web_client()
-    return RuneLiteSyncImporter(source=WebAppSource(client) if client.configured else None)
+    return RuneLiteSyncImporter(source=WebAppSource(configured_web_client()))
 
 
 class MarketWorker(QObject):
@@ -1079,6 +1080,16 @@ class RuneLiteConnectionDialog(QDialog):
             self.status.setText(
                 f"Connected{character} — new trades will sync automatically. "
                 f"Player-trade tracking is {player_trades}."
+            )
+        elif reading_website and not self.importer.configured:
+            # An unconfigured website source answers "not connected" indistinguishably from a
+            # plugin that was never installed -- the two point at completely different fixes,
+            # and telling somebody to go install RuneLite when they already have it running is
+            # exactly the kind of wrong-cause message that sends people back to a settings
+            # panel that was never the problem.
+            self.status.setText(
+                "No desktop access token yet. Get one from your runescope.app Profile page, "
+                "under Desktop app, then paste it into Settings → Website."
             )
         elif connection.detected and reading_website and not connection.source_reachable:
             self.status.setText(

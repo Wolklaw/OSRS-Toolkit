@@ -159,6 +159,16 @@ class RuneLiteSyncImporter:
         self.sync_root = getattr(self.source, "sync_root", None)
 
     @property
+    def configured(self) -> bool:
+        """Whether the source has a credential to work with, for sources that need one.
+
+        A local folder always exists as a path, so there is nothing to configure for it --
+        ``True`` is the honest default. A source that does have the concept, like the website,
+        answers for itself.
+        """
+        return getattr(self.source, "configured", True)
+
+    @property
     def plugin_detected(self) -> bool:
         return self.connection_status().detected
 

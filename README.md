@@ -234,12 +234,13 @@ there for the plugin, and a separate **desktop access token** for this app under
 **Settings → Website**. Your GE fills — partial and complete — arrive at the website while
 RuneLite is running, even if this app is shut, and come across next time you open the toolkit.
 
-The plugin no longer writes to a folder on this PC. The RuneLite Plugin Hub does not accept a
-plugin that feeds an application on the same machine it runs on, so the plugin posts to a small
-sync service instead, the website collects from that, and this app reads from the website —
-plugin, then service, then website, then here. If you are still on an older version of the
-plugin that writes to `~/.runelite/osrs-toolkit`, this app still reads that folder too, so
-nothing you already had stops working; it just isn't how a new install talks to a new plugin.
+The plugin no longer writes to a folder on this PC, and this app no longer reads one. The
+RuneLite Plugin Hub does not accept a plugin that feeds an application on the same machine it
+runs on, so the plugin posts to a small sync service instead, the website collects from that,
+and this app reads from the website — plugin, then service, then website, then here, with
+nothing crossing directly between the plugin and this app at any point. Without a desktop
+access token entered, this app simply has nothing to read yet; it does not fall back to
+`~/.runelite/osrs-toolkit` even if an older plugin build has left events sitting there.
 
 [![RuneLite GE fills and player trade activity in the journal](docs/images/runelite-activity.png)](docs/images/runelite-activity.png)
 

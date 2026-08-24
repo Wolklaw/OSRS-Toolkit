@@ -1,8 +1,11 @@
 """Which source the app reads from, and how a token entered in Settings changes it.
 
-The Plugin Hub refused a plugin that feeds an app on the same machine, so a fresh install no
-longer reads the ``.runelite`` folder -- it reads the website. The folder stays reachable for
-somebody still running an older plugin, and these pin down which of the two you get.
+The Plugin Hub refused a plugin that feeds an app on the same machine, so this app reads the
+website -- always, whether or not a desktop token has been entered for it yet. It used to fall
+back to the ``.runelite`` folder the moment a credential was missing, which meant a fresh
+install with an empty Settings dialog was silently in exactly the arrangement the Hub refused.
+These pin down that an unconfigured client is still a website source, just one with nothing to
+say yet, never a reason to read a local file instead.
 """
 
 from __future__ import annotations
@@ -20,7 +23,6 @@ from osrs_toolkit.app import (
     build_sync_importer,
     configured_web_client,
 )
-from osrs_toolkit.sync_source import LocalFileSource
 from osrs_toolkit.web_source import WebAppSource
 
 
@@ -53,10 +55,12 @@ def settings(monkeypatch):
     StubSettings._values.clear()
 
 
-def test_without_a_token_the_old_folder_is_still_read(settings):
-    """Silently reading nothing would look exactly like the app being broken."""
+def test_without_a_token_the_source_is_still_the_website_not_the_folder(settings):
+    """The whole point: an empty Settings dialog must never fall back to a local file, which
+    is the exact arrangement the Plugin Hub refused a plugin for feeding."""
     importer = build_sync_importer()
-    assert isinstance(importer.source, LocalFileSource)
+    assert isinstance(importer.source, WebAppSource)
+    assert importer.configured is False
 
 
 def test_a_token_switches_the_app_over_to_the_website(settings):
@@ -81,26 +85,33 @@ def test_a_self_hosted_address_is_honoured(settings):
 def test_an_address_with_no_token_is_not_configured(settings):
     settings.setValue(WEB_BASE_URL_KEY, "https://runescope.app")
     assert configured_web_client().configured is False
-    assert isinstance(build_sync_importer().source, LocalFileSource)
+    importer = build_sync_importer()
+    assert isinstance(importer.source, WebAppSource)
+    assert importer.configured is False
 
 
 def test_saving_a_token_rebuilds_the_importer(window):
     """A token pasted into Settings has to take effect now, not at the next restart."""
-    assert isinstance(window._sync_importer.source, LocalFileSource)
+    assert isinstance(window._sync_importer.source, WebAppSource)
+    assert window._sync_importer.configured is False
 
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
 
     assert isinstance(window._sync_importer.source, WebAppSource)
+    assert window._sync_importer.configured is True
     assert app_module.QSettings().value(WEB_TOKEN_KEY) == "a-desktop-token"
 
 
-def test_clearing_the_token_goes_back_to_the_folder(window):
+def test_clearing_the_token_leaves_the_source_unconfigured_not_reading_the_folder(window):
+    """Removing a token has to stop the website source from answering, not swap in a local
+    file that would silently start answering instead."""
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
-    assert isinstance(window._sync_importer.source, WebAppSource)
+    assert window._sync_importer.configured is True
 
     window._save_website_settings(DEFAULT_BASE_URL, "")
 
-    assert isinstance(window._sync_importer.source, LocalFileSource)
+    assert isinstance(window._sync_importer.source, WebAppSource)
+    assert window._sync_importer.configured is False
 
 
 def test_saving_the_same_values_leaves_the_importer_alone(window):

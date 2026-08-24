@@ -81,3 +81,39 @@ def test_an_unreachable_website_is_not_blamed_on_the_plugin(qt_app, monkeypatch)
         assert "RuneLite is not currently active" not in dialog.status.text()
     finally:
         dialog.deleteLater()
+
+
+def test_no_desktop_token_says_so_instead_of_blaming_the_plugin(qt_app):
+    """An unconfigured website source and a plugin that was never installed answer
+    ``connection_status()`` identically -- both report nothing detected. Without this, someone
+    who is already running the plugin gets told to go install it, which sends them back to a
+    settings panel that was never the problem."""
+    importer = RuneLiteSyncImporter(source=WebAppSource(ToolkitWebClient("https://x.test", "")))
+    dialog = RuneLiteConnectionDialog(importer)
+    try:
+        assert "No desktop access token" in dialog.status.text()
+        assert "Install and enable the RuneLite plugin" not in dialog.status.text()
+    finally:
+        dialog.deleteLater()
+
+
+def test_a_configured_but_silent_website_still_blames_the_plugin_not_missing_setup(
+    qt_app, monkeypatch
+):
+    """The new message is specifically about a missing token -- a configured source that
+    simply has nothing detected yet should read as it always has. connection_status() is
+    stubbed rather than left to hit the real network: an actually-unreachable test domain
+    would report "cannot reach the website" instead, which is a different, correct message
+    for a different case and would make this test pass for the wrong reason."""
+    importer = _website_importer()
+    monkeypatch.setattr(
+        importer,
+        "connection_status",
+        lambda: RuneLiteConnectionStatus(detected=False, active=False, source_reachable=True),
+    )
+    dialog = RuneLiteConnectionDialog(importer)
+    try:
+        assert "No desktop access token" not in dialog.status.text()
+        assert "Not connected yet" in dialog.status.text()
+    finally:
+        dialog.deleteLater()

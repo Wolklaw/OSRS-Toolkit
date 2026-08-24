@@ -142,6 +142,17 @@ class WebAppSource:
         self.client = client
         self._cached: tuple[float, str, dict] | None = None
 
+    @property
+    def configured(self) -> bool:
+        """Whether there is a desktop token to read with at all.
+
+        Distinct from ``status_payload``'s ``detected``: that answers "is the plugin sending
+        anything", which needs a working credential before it can even be asked. Without this,
+        an empty Settings dialog and a plugin that has simply gone quiet look identical to
+        whatever reads this -- and they call for two completely different fixes.
+        """
+        return self.client.configured
+
     def _state(self, account_hash: str = "") -> dict:
         now = time.monotonic()
         if self._cached is not None:
