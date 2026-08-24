@@ -102,9 +102,8 @@
   <div class="panel-head">
     <div class="grow">
       <h2>Price alerts</h2>
-      <p class="hint tight">A Discord webhook to post to when a watched item crosses a target
-        price you set on the <a href="/watchlist">Watchlist</a>. Create one in a Discord
-        channel's Integrations settings and paste the URL here.</p>
+      <p class="hint tight">A webhook URL from a Discord channel's Integrations settings, posted
+        to when a watched item crosses a target price you set on the <a href="/watchlist">Watchlist</a>.</p>
     </div>
   </div>
   <div class="row">
@@ -332,7 +331,7 @@
   }
 
   async function clearDiscordWebhook() {
-    if (!confirm('Remove your Discord webhook? Any alerts you have set will stop being able to notify you until you add a new one.')) { return; }
+    if (!confirm("Remove your Discord webhook? Alerts you've set won't notify you until you add a new one.")) { return; }
     await api('DELETE', '/api/discord-webhook');
     location.reload();
   }

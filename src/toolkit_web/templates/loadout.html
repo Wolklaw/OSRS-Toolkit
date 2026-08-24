@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Skills & Bank" %}
-{% set page_sub = "Levels and bank contents from your most recent synced snapshot, and how your total level has moved over time." %}
+{% set page_sub = "Skill levels and bank contents from your latest snapshot, and total level over time." %}
 
 {% block content %}
 
@@ -24,7 +24,7 @@
   {% if skills_chart %}
   <div style="overflow-x:auto; margin-top:0.8rem">{{ skills_chart | safe }}</div>
   {% else %}
-  <p class="hint">Levelling up moves this chart — it needs at least two synced snapshots.</p>
+  <p class="hint">Needs at least two snapshots to draw a line.</p>
   {% endif %}
 </div>
 
@@ -78,7 +78,7 @@
   {% else %}
   <div class="empty">
     <strong>Bank is empty</strong>
-    Nothing synced in your bank yet.
+    Nothing in it, as of the last sync.
   </div>
   {% endif %}
 </div>

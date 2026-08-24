@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Death Log" %}
-{% set page_sub = "What you were carrying when a death animation started — not what was lost. Skull state, Protect Item, and wilderness rules decide the real loss." %}
+{% set page_sub = "What you were carrying at the moment of death, not what was lost — skull state, Protect Item and wilderness rules decide that." %}
 
 {% block content %}
 
@@ -52,7 +52,7 @@
   <div class="empty">
     <strong>Nothing recorded yet in this window</strong>
     {% if account.paired %}
-    Good. Die with death tracking on and it appears here the next time this page loads.
+    Die with death tracking on and it appears here the next time this page loads.
     {% else %}
     <a href="/profile">Connect the RuneLite plugin</a> and your deaths arrive on their own.
     {% endif %}
