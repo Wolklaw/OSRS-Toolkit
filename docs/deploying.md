@@ -251,31 +251,31 @@ sudo systemctl restart packagekit
 
 If a future reinstall brings NetworkManager back, this is the page that will break first.
 
-**It came back.** As of 2026-08-24 `NetworkManager.service` is `enabled` and `active` again —
-presumably re-enabled by a package update — so the Software Updates page is broken again by
-exactly the mechanism described above. To put it back:
+**It came back once already.** `NetworkManager.service` was found `enabled` and `active` again
+on 2026-08-24 — presumably re-enabled by a package update — breaking the Software Updates page
+by exactly the mechanism above. Re-disabled the same day (see the housekeeping table below).
+Worth re-checking after any round of updates, since nothing prevents a third time:
 
 ```bash
 sudo systemctl disable --now NetworkManager
 sudo systemctl restart packagekit
 ```
 
-Worth re-checking after any round of updates, since nothing prevents it returning a third time.
+### Housekeeping done on 2026-08-24
 
-### Housekeeping this machine is still carrying
+An audit found several things this machine was carrying for no reason. All fixed the same day,
+once `wolklaw` had passwordless sudo (see below) — the account didn't when the audit itself
+was run, which is why "confirmed" and "fixed" have the same date.
 
-Found in an audit on 2026-08-24 and not yet done — all of it needs `sudo`, which the deploy
-account does not have without a password prompt.
-
-| | |
-|---|---|
-| `kdump-tools` | Reserves **320MB** of a 3.4GB machine (`crashkernel=2G-4G:320M`, confirmed via `/sys/kernel/kexec_crash_size`) to capture a kernel crash dump nobody here will analyse. `sudo systemctl disable --now kdump-tools` and drop the `crashkernel=` boot arg. |
-| `open-vm-tools` | VMware guest tooling. `systemd-detect-virt` reports `none` — this is a physical machine. |
-| `ModemManager` | No modem devices present (`/dev/ttyUSB*`, `/dev/cdc-wdm*` are absent). ~14MB. |
-| `open-iscsi`, `multipathd` | Zero iSCSI sessions, no multipath storage. |
-| `cloud-init` (5 units) | This is not a cloud instance. |
-| `smbd` / `nmbd` | Samba, ~30MB, no connections. Confirmed 2026-08-24 that this machine is server-only and shares no files, so both can go. |
-| journald | Uncapped; 96MB today against a ~9.8GB default ceiling. `SystemMaxUse=200M` in `/etc/systemd/journald.conf`. |
+| | Fixed by | |
+|---|---|---|
+| `kdump-tools` reserving 320MB | purge + `update-grub` + reboot | Verified after reboot four independent ways: `kexec_crash_size` reads `0`, `kexec_crash_loaded` reads `0`, no crash region in `/proc/iomem`, and `MemTotal` in `/proc/meminfo` gained back exactly ~320MB. (A *combined* check misreported the old 320MB figure once, from output interleaving in a multi-command SSH call — re-run alone, it read `0` like everything else. Worth knowing this file can look stale inside a big combined command.) |
+| `open-vm-tools` | purge | Not a VM (`systemd-detect-virt` → `none`); the package did nothing here. |
+| `ModemManager` | `disable --now` | No modem devices present. Not purged — it's a real dependency of `network-manager`, which stays installed, just disabled. |
+| `open-iscsi`, `multipathd` | `disable --now` | Zero iSCSI sessions, no multipath storage. Not purged — both are pulled in by the `ubuntu-server` metapackage; disabling avoids an apt dependency cascade for no real benefit. |
+| journald uncapped | `SystemMaxUse=200M` in `/etc/systemd/journald.conf` | Was 96MB against a ~9.8GB default ceiling. |
+| `smbd` / `nmbd` | **kept, deliberately** | Not unused — Samba is how Claude reaches this machine's filesystem directly. See `project_wolkhost_passwordless_sudo` in the assistant's own memory for why. Do not propose removing it in a future pass. |
+| `cloud-init` (5 units) | left as-is | Already `disabled` in its own config (subiquity turned it off at install) and holds no memory at steady state — the units are one-shots that already exited. Not worth the churn for a saving that doesn't exist. |
 
 ### Rate limiting is a Cloudflare-side job
 
@@ -382,3 +382,10 @@ token. `market-cache/` is disposable.
   it rather than a config file somewhere friendlier.
 
 - **No auto-deploy.** Every update is the manual pull above.
+
+- **`wolklaw` has passwordless sudo**, set up 2026-08-24 (`/etc/sudoers.d/wolklaw-nopasswd`,
+  `NOPASSWD:ALL`), specifically so Claude can do maintenance like the housekeeping above without
+  a password it doesn't have. This is a deliberate, wide grant, not an oversight — but it means
+  destructive commands (`apt purge`, `rm`, anything on a live service) need to be confirmed
+  before they run regardless, the same as they would anywhere else. See
+  `feedback_confirm_before_infra_deletion` in the assistant's own memory.
