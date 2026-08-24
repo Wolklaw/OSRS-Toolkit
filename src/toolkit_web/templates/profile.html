@@ -258,9 +258,7 @@
     // to it having worked.
     if ({{ 'true' if account.paired else 'false' }}) {
       const ok = confirm(
-        'This replaces your current token and switches the old one off.
-
-'
+        'This replaces your current token and switches the old one off.\n\n'
         + 'RuneLite will stop syncing until you paste the new one into the plugin. Continue?'
       );
       if (!ok) { return; }
