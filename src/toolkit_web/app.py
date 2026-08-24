@@ -1070,6 +1070,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 signer.issue(discord_user_id),
                 max_age=MAX_AGE_SECONDS,
                 httponly=True,
+                secure=True,
                 samesite="lax",
             )
             return response
