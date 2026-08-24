@@ -29,14 +29,8 @@ WINDOW_SIZE = (1_920, 1_000)
 
 
 def save_widget(widget: object, path: Path, app: QApplication) -> None:
-    """Render a real Qt widget after its layout and paint events have settled.
-
-    Two things here keep the committed images stable. Opening a dialog can leave the main
-    window a little taller than it started, so its size is re-asserted before every grab
-    rather than only once at start-up. And the grab inherits the device pixel ratio of
-    whichever monitor is running the capture, so a developer at 125% scaling would otherwise
-    rewrite every screenshot at a different resolution than one at 100%.
-    """
+    """Render a real Qt widget after layout/paint settle, normalized to a 1.0 device pixel
+    ratio so screenshots come out the same size regardless of the capturing monitor's scaling."""
     if isinstance(widget, MainWindow):
         widget.resize(*WINDOW_SIZE)
     app.processEvents()
@@ -56,17 +50,12 @@ def save_widget(widget: object, path: Path, app: QApplication) -> None:
 
 
 def show_page(window: MainWindow, name: str) -> None:
-    """Select a sidebar page by name.
-
-    Row numbers used to be hardcoded here, so inserting a page silently shifted every
-    screenshot after it into the wrong file.
-    """
+    """Select a sidebar page by name, not a hardcoded row index."""
     window.nav.setCurrentRow(MainWindow.NAV_ITEMS.index(name))
 
 
 def show_journal_tab(window: MainWindow, name: str) -> None:
-    """Select a Trade Journal tab by its visible label, for the same reason show_page
-    looks pages up by name instead of a hardcoded index."""
+    """Select a Trade Journal tab by its visible label, not a hardcoded index."""
     tabs = window.journal_tabs
     index = next(i for i in range(tabs.count()) if tabs.tabText(i) == name)
     tabs.setCurrentIndex(index)
@@ -75,12 +64,7 @@ def show_journal_tab(window: MainWindow, name: str) -> None:
 def backdate(
     window: MainWindow, position_id: int, *, opened_hours_ago: float, held_hours: float | None
 ) -> None:
-    """Give a demo position a believable lifetime.
-
-    The app records real timestamps, but a journal seeded inside one second would show
-    every flip opening and closing at the same instant — which the Performance page
-    correctly reports as an unknown hold time rather than an instantaneous one.
-    """
+    """Give a demo position a believable lifetime instead of an instantaneous one."""
     opened = datetime.now(UTC) - timedelta(hours=opened_hours_ago)
     finished = (
         None
@@ -100,9 +84,7 @@ def backdate(
 
 
 def add_performance_examples(window: MainWindow) -> None:
-    """Finished flips across all three strategies, so the Performance page has something
-    to compare. Deliberately a mix: Quick turns over fastest, Overnight makes the most per
-    flip, and one Balanced position missed its sell target."""
+    """Finished flips across all three strategies for the Performance page to compare."""
     quick_id = window._journal.track(1515, "Yew logs", 9_000, 320, 345, "Quick (up to 1h)")
     window._journal.update_tracked(
         quick_id, "Completed", None, None, [(9_000, 344)], [(9_000, 318)]
@@ -179,8 +161,7 @@ def add_journal_examples(window: MainWindow) -> int:
 
     window._journal.add("Rune platebody", 12, 37_500, 39_250)
 
-    # Spread the demo history over a few days so both the Journal's Date column and the
-    # Performance page's hold times read like a real account rather than one busy second.
+    # Spread the demo history over a few days so it reads like a real account.
     backdate(window, listed_id, opened_hours_ago=5, held_hours=None)
     backdate(window, cancelled_id, opened_hours_ago=52, held_hours=1.5)
     backdate(window, loss_id, opened_hours_ago=27, held_hours=3.8)
@@ -190,8 +171,7 @@ def add_journal_examples(window: MainWindow) -> int:
 
 
 def add_supplies_examples(window: MainWindow) -> None:
-    """Quest and skilling buys marked Supplies, so the Plans tab shows them sitting
-    alongside ordinary flips without polluting them, and Supplies spend has real totals."""
+    """Quest and skilling buys marked Supplies, so Supplies spend has real totals."""
     lobster_id = window._journal.track(379, "Lobster", 9_000, 152, 152, "Balanced (1–4h)")
     window._journal.update_tracked(lobster_id, "Supplies", None, None, None, [(9_000, 152)])
     backdate(window, lobster_id, opened_hours_ago=18, held_hours=None)
@@ -204,9 +184,8 @@ def add_supplies_examples(window: MainWindow) -> None:
 
 
 def add_buy_limit_example(window: MainWindow) -> int | None:
-    """A recent, real synced buy so the Buy limits tab has something inside its rolling
-    4-hour window to show. Returns the item_id used, or None if the current market
-    snapshot's top flip candidate has no known buy limit to demonstrate against."""
+    """A recent synced buy so the Buy limits tab has something to show. Returns the
+    item_id used, or None if the top flip candidate has no known buy limit."""
     candidate = window._flips[0]
     limit = window._mappings[candidate.item_id].buy_limit
     if not limit:
@@ -233,10 +212,8 @@ def add_buy_limit_example(window: MainWindow) -> int | None:
 
 
 def add_ge_offer_state(window: MainWindow, sync_root: Path) -> None:
-    """A live-looking Grand Exchange: two offers still filling and one bought and sitting
-    uncollected, so the dashboard reads like the middle of a real flipping session rather
-    than an all-empty one. Written straight to the files the real plugin writes, the same
-    way ``read_offer_state`` reads them back — this is not going through a mock."""
+    """A live-looking Grand Exchange: two offers filling, one bought and uncollected.
+    Written straight to the files the real plugin writes, not through a mock."""
     account_hash = "abc123"
     sync_root.mkdir(parents=True, exist_ok=True)
     (sync_root / "status.json").write_text(
@@ -292,8 +269,8 @@ def add_ge_offer_state(window: MainWindow, sync_root: Path) -> None:
 
 
 def add_savings_goal_example() -> None:
-    """A goal a little over a week old, so the realized profit from add_performance_examples
-    (all backdated well inside that window) counts toward visible progress."""
+    """A goal a little over a week old, so add_performance_examples' profit counts
+    toward visible progress."""
     settings = QSettings()
     settings.setValue("savings_goal/label", "Bandos chestplate")
     settings.setValue("savings_goal/target", 5_000_000)
@@ -354,9 +331,8 @@ def add_runelite_examples(window: MainWindow) -> None:
 
 
 def add_pvm_example(window: MainWindow) -> None:
-    """A loadout that's ready for mid-tier melee/ranged bosses but still missing the
-    poison/Slayer requirements for Vorkath, Zulrah, and Cerberus — a realistic mix of
-    Ready and Not ready rows rather than an all-green or all-empty snapshot."""
+    """A loadout ready for mid-tier bosses but missing Vorkath/Zulrah/Cerberus requirements,
+    for a realistic mix of Ready and Not ready rows."""
     equipment = (
         LoadoutItem(4_151, "Abyssal whip", 1, 1_500_000),
         LoadoutItem(12_926, "Toxic blowpipe", 1, 4_000_000),
@@ -393,8 +369,7 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     profile_dir = Path(tempfile.mkdtemp(prefix="osrs-toolkit-docs-"))
 
-    # Isolate both locations used by journal migration. This guarantees that documentation
-    # screenshots can never copy a developer's real journal or settings into the repository.
+    # Isolate journal/settings locations so screenshots never pick up a real dev profile.
     os.environ["LOCALAPPDATA"] = str(profile_dir)
     os.environ["APPDATA"] = str(profile_dir)
     os.environ.setdefault("QT_SCALE_FACTOR", "1")
@@ -464,9 +439,7 @@ def main() -> int:
         window._render_journal()
         show_page(window, "Trade Journal")
         show_journal_tab(window, "Plans && completed")
-        # Seeded before this shot rather than for a tab of its own: the Grand Exchange
-        # slots now sit on the Trade Journal page itself, so this is the screenshot that
-        # has to show them filled rather than eight empty ones.
+        # GE slots live on the Trade Journal page, so seed them before this shot.
         add_ge_offer_state(window, window._sync_importer.sync_root)
         window._render_ge_offers()
         save_widget(window, output_dir / "trade-journal.png", app)
@@ -520,9 +493,7 @@ def main() -> int:
             "RuneLite connected as Example Player • syncing automatically • player trades on"
         )
         window._render_synced_trades()
-        # Selecting the tab is not enough. The sidebar still pointed at Performance from the
-        # capture above, so this shot silently rendered the Performance page instead of the
-        # journal's RuneLite activity tab.
+        # The sidebar still points at Performance from the capture above; reset it first.
         show_page(window, "Trade Journal")
         window.journal_tabs.setCurrentIndex(1)
         save_widget(window, output_dir / "runelite-activity.png", app)

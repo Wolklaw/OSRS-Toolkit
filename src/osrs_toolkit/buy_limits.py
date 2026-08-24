@@ -1,10 +1,8 @@
 """How much of each item's 4-hour Grand Exchange buy limit is still available.
 
-OSRS buy limits are a rolling 4-hour window, not a fixed reset time: each purchase counts
-against the limit until exactly 4 hours after it happened, then drops back out on its own.
-Built from the synced GE fills this app already records, so it needs nothing new from the
-RuneLite plugin. Kept free of Qt so it can be tested directly the way ``journal_presentation``
-and ``performance`` are.
+Buy limits are a rolling 4-hour window: each purchase counts against the limit until exactly
+4 hours after it happened, then drops out on its own. Built from synced GE fills, so it needs
+nothing new from the RuneLite plugin. Kept free of Qt so it can be tested directly.
 """
 
 from __future__ import annotations
@@ -38,11 +36,9 @@ def buy_limit_status(
 ) -> list[BuyLimitStatus]:
     """One row per item bought within the last 4 hours, sorted by least room left first.
 
-    ``trades`` is expected to be every synced GE fill, buys and sells alike; anything that
-    isn't a buy-side ``ge_fill`` is ignored. Items with no known buy limit are skipped —
-    there's nothing useful to say about their remaining room. ``resets_at`` is when the
-    *oldest* purchase still inside the window ages out, which is the next moment the
-    remaining count can go up; later purchases within the window free up after that.
+    ``trades`` is every synced GE fill; non-buy or non-``ge_fill`` entries are ignored, as
+    are items with no known buy limit. ``resets_at`` is when the oldest purchase still in
+    the window ages out — the next moment the remaining count can go up.
     """
     window_start = now - BUY_LIMIT_WINDOW
     quantity_by_item: dict[int, int] = {}
@@ -76,8 +72,6 @@ def buy_limit_status(
 
 
 def _instant(raw: str) -> datetime:
-    """A stored occurred_at, as a comparable instant. A value without a zone can't be
-    compared with one that has it, hence the UTC default — matches how sync events are
-    ordered elsewhere in this app."""
+    """A stored occurred_at, as a comparable instant (naive values are read as UTC)."""
     parsed = datetime.fromisoformat(raw)
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)

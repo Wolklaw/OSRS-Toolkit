@@ -15,19 +15,15 @@ from typing import ClassVar
 
 from osrs_toolkit.ranking import ge_tax
 
-# One row per synced loadout snapshot, per account — bounded so an account synced for years
-# cannot grow this table without limit. Plenty for a readable net-worth chart either way.
+# Bounded per account so a long-lived sync history can't grow this table without limit.
 MAX_NET_WORTH_HISTORY_PER_ACCOUNT = 2_000
 
-# Same reasoning, same cadence — one row per snapshot, capped the same way — for skill
-# levels over time rather than total value.
+# Same cap and reasoning as net worth history, for skill levels over time.
 MAX_SKILLS_HISTORY_PER_ACCOUNT = 2_000
 
-# ``occurred_at`` is stored as the plugin wrote it, and comparing those as text is only
-# roughly comparing them as instants: the writer omits fields that are zero (so "05:00Z"
-# sorts after "05:00:30Z"), and a value could carry a zone offset rather than UTC. A SQL
-# bound is therefore only ever used to cut away the distant past cheaply, wide enough that
-# neither can reach across it; callers still filter exactly, as instants, on what comes back.
+# occurred_at is stored as text from the plugin, not a clean sortable instant (fields
+# omitted when zero, or a non-UTC offset), so text comparison is only safe as a loose lower
+# bound to cut away old rows cheaply. Callers still filter exactly on what comes back.
 NOT_BEFORE_SAFETY_MARGIN = timedelta(days=1)
 
 
@@ -39,8 +35,8 @@ class TradeRecord:
     quantity: int
     buy_price: int
     sell_price: int
-    #: The name this trade goes by everywhere outside its own database. Optional only so that
-    #: a TradeRecord built by hand in a test does not have to invent one.
+    # Name this trade goes by outside its own database. Optional so a TradeRecord built by
+    # hand in a test doesn't need to invent one.
     sync_uid: str | None = None
 
     @property
@@ -96,10 +92,9 @@ class TrackedTrade:
     suggestion_reviewed_at: str | None = None
     completed_at: str | None = None
     listed_sell_price: int | None = None
-    # Which synced character this position belongs to, or None for one opened before this
-    # column existed, or entered by hand with no character context to attach. A caller
-    # filtering by character treats None as belonging to every character, rather than to
-    # none of them — an untagged position is unassigned, not somebody else's.
+    # Which synced character this belongs to. None means unassigned (opened before this
+    # column existed, or entered by hand) — treated as belonging to every character when
+    # filtering, not to none of them.
     account_hash: str | None = None
 
     @property
@@ -118,15 +113,11 @@ class TrackedTrade:
 
     @property
     def asking_price(self) -> int:
-        """What this position is actually asking, which is not the same as what it suggests.
+        """The price actually listed on the GE, not the app's suggestion.
 
-        ``sell_suggestion`` is the app's target — where the flip was planned to sell. The ask
-        is the price the player really typed into the Grand Exchange, recorded by
-        ``record_listed_price`` when the sell offer opened. Only the ask can say whether a
-        listing has gone stale: grading a live offer against a target the player already
-        chose to ignore left a relisted position flagged for attention at the very price the
-        market was suggesting. Falls back to the suggestion for a position never listed
-        through a synced offer, which is the best statement of intent available for it.
+        Falls back to the suggestion for a position never listed through a synced offer.
+        Grading a live offer against the suggestion instead would flag a relisted position
+        that already matches the market.
         """
         return self.listed_sell_price or self.sell_suggestion
 
@@ -151,13 +142,12 @@ class TrackedTrade:
 
     @property
     def unsold_stock(self) -> int:
-        """Units held and still to sell, which is what a profit estimate can be made on.
+        """Units held and still to sell.
 
-        Where buy fills are recorded, only what they bought is stock: a position whose buying
-        stopped part way holds less than it was tracked for, and pricing the rest projects
-        profit on units never bought and never paid for. With no fills recorded — a plan not
-        yet placed, or a position entered by hand — the tracked quantity is the best statement
-        of what it holds, the same reading ``invested`` takes of the same two cases.
+        Where buy fills are recorded, only what they actually bought counts as stock — a
+        position that stopped buying part way shouldn't have profit projected on units
+        never paid for. With no fills, the tracked quantity is the best estimate (same
+        reading ``invested`` takes).
         """
         if self.buy_fills:
             return max(0, self.bought_quantity - self.sold_quantity)
@@ -187,12 +177,11 @@ class TrackedTrade:
 
     @property
     def invested(self) -> int:
-        """Capital actually committed, from the recorded buy fills where there are any.
+        """Capital actually committed, from recorded buy fills where there are any.
 
-        A position that is only part-bought has only spent what those fills cost, so
-        pricing the full tracked quantity would overstate the "Capital traded" summary.
-        With no fills yet, nothing has been spent and the planned outlay is the best
-        estimate available.
+        A part-bought position has only spent what those fills cost — pricing the full
+        tracked quantity would overstate the "Capital traded" summary. With no fills yet,
+        the planned outlay is the best estimate.
         """
         if self.buy_fills:
             return sum(fill.buy_price * fill.quantity for fill in self.buy_fills)
@@ -286,16 +275,14 @@ class LoadoutSnapshot:
 
     @property
     def total_value(self) -> int:
-        """Everything equipped, carried, or banked, priced at each item's own stamped
-        ``unit_value`` — the plugin's own GE-price snapshot at capture time, not a live
-        lookup, so this stays correct even for a snapshot read back long afterward."""
+        """Priced at each item's own stamped ``unit_value`` (the plugin's GE snapshot at
+        capture time), not a live lookup — stays correct even read back long afterward."""
         return sum(item.total_value for item in (*self.equipment, *self.inventory, *self.bank))
 
 
 @dataclass(frozen=True, slots=True)
 class NpcLootRecord:
-    """One delivery of loot from an NPC kill, as the plugin observed it in the moment — not a
-    full drop-table simulation, just what actually landed in the inventory."""
+    """One delivery of loot from an NPC kill, as observed — not a drop-table simulation."""
 
     event_id: str
     occurred_at: str
@@ -311,10 +298,9 @@ class NpcLootRecord:
 
 @dataclass(frozen=True, slots=True)
 class PlayerDeathRecord:
-    """What was equipped and carried at the moment a death animation started — not what was
-    lost. Skull state, Protect Item, and wilderness rules decide the real loss and aren't
-    simulated here; a caller wanting that has this snapshot plus whatever loadout snapshot
-    landed after it to diff against."""
+    """What was equipped and carried when a death animation started — not what was lost.
+    Skull state, Protect Item, and wilderness rules aren't simulated here; diff against the
+    next loadout snapshot to find the real loss."""
 
     event_id: str
     occurred_at: str
@@ -355,16 +341,13 @@ class SkillsPoint:
 
 @dataclass(frozen=True, slots=True)
 class OfferOpened:
-    """A GE offer that was just placed, with nothing filled yet — no coins or items have
-    moved, so unlike a fill this has nothing to record in the synced-trade activity log.
-    It exists purely to start (or advance) Journal tracking the moment the player commits
-    to an offer instead of waiting for the first partial fill.
+    """A GE offer just placed, with nothing filled yet — no coins or items moved, so unlike
+    a fill this has nothing to record in the synced-trade activity log. It exists to start
+    (or advance) Journal tracking the moment the player commits to an offer.
 
     ``restored`` marks an offer the game re-sent on login or a world hop rather than one the
-    player just placed. The plugin cannot always tell a re-sent offer from a new one — its
-    memory of the slot is lost with the client — so it says which case this is and the Journal
-    decides: a restored offer belongs to a position that already exists, a new one may not.
-    Events from plugin builds predating the flag arrive as False, the safer reading.
+    player just placed — the plugin can't always tell the two apart. Events from plugin
+    builds predating the flag arrive as False, the safer reading.
     """
 
     event_id: str
@@ -381,10 +364,9 @@ class OfferOpened:
 
 @dataclass(frozen=True, slots=True)
 class OfferCancelled:
-    """A GE offer the player cancelled. Nothing changes hands at the cancellation itself —
-    whatever filled beforehand already arrived as fills — but the offer is dead, so a position
-    still waiting on it can never resolve on its own. Carries the same fields as OfferOpened
-    because those are what identify the position the offer left behind."""
+    """A GE offer the player cancelled. Whatever filled beforehand already arrived as fills;
+    this just marks the offer dead so a position still waiting on it can resolve. Carries
+    the same fields as OfferOpened since those identify the position it leaves behind."""
 
     event_id: str
     account_hash: str
@@ -400,8 +382,8 @@ class OfferCancelled:
 def _is_newer(incoming: object, existing: object) -> bool:
     """Whether ``incoming`` was written after ``existing``.
 
-    Parsed rather than compared as text: the two sides stamp their own rows, and an offset of
-    "+00:00" against a "Z" would order wrongly as a string while meaning the same instant.
+    Parsed rather than compared as text, since "+00:00" vs "Z" would sort wrong as strings
+    despite meaning the same instant.
     """
     return _as_moment(incoming) > _as_moment(existing)
 
@@ -417,12 +399,11 @@ def _as_moment(stamp: object) -> datetime:
 
 
 def _now() -> str:
-    """The stamp that decides which side of a sync wins, at microsecond precision.
+    """Stamp used to decide which side of a sync wins, at microsecond precision.
 
-    Not truncated to seconds like ``recorded_at`` is. Two edits inside one second would share
-    a stamp, and then neither could be seen as newer than the other: a delete made in the same
-    second as its insert would never travel, and an edit landing in the same second as a
-    client's watermark would be skipped by the next export and lost for good.
+    Not truncated to seconds like ``recorded_at``: two edits in the same second would
+    otherwise share a stamp and neither could be seen as newer than the other, losing
+    deletes and edits that land right on a client's watermark.
     """
     return datetime.now(UTC).isoformat()
 
@@ -430,16 +411,14 @@ def _now() -> str:
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
 
-    #: What a row needs before it can be recognised on another machine. ``trades`` and
-    #: ``tracked_trades`` are the only two tables without a global name of their own --
-    #: everything the plugin produces already carries an ``event_id``, and a loadout is keyed
-    #: by character. So these two are the only ones that need one invented.
-    #:
-    #: ``sync_uid`` is minted locally rather than handed out by the website, so a row created
-    #: with no network still has its final identity the moment it exists. ``deleted_at`` is a
-    #: tombstone rather than a real delete: without one, a row missing from the other side is
-    #: ambiguous between "deleted there" and "created here and not pushed yet", and guessing
-    #: wrong either resurrects deleted rows forever or silently eats new ones.
+    # What a row needs before it can be recognised on another machine. ``trades`` and
+    # ``tracked_trades`` are the only tables without a global identity of their own —
+    # everything else already carries an ``event_id`` or is keyed by character.
+    #
+    # ``sync_uid`` is minted locally (SQLite has no uuid of its own), so a row created
+    # offline still has its final identity. ``deleted_at`` is a tombstone rather than a real
+    # delete: a missing row is otherwise ambiguous between "deleted there" and "not pushed
+    # yet", and guessing wrong either resurrects deletes or silently eats new rows.
     _SYNC_COLUMNS: ClassVar[dict[str, str]] = {
         "sync_uid": "TEXT",
         "updated_at": "TEXT",
@@ -463,14 +442,9 @@ class JournalRepository:
     def _backup_before_migration(self) -> None:
         """Copy the journal aside when this launch is about to change its shape.
 
-        ``_create_startup_backup`` runs after ``_initialize``, so every copy it keeps is of an
-        already-migrated file. That is the right thing for an ordinary launch and the wrong
-        thing for the launch that migrates: the state worth having back is the one that existed
-        before the columns were added, and only ten backups are kept, so it would roll off
-        within a fortnight of daily use.
-
-        Only for a migrating launch. Doing it every time would double the copies kept for no
-        reason, and a migration that has already happened is not one anybody needs to undo.
+        Only for a migrating launch — ``_create_startup_backup`` runs after ``_initialize``
+        and would otherwise only ever keep already-migrated copies, and with just ten
+        backups kept, the pre-migration state would roll off within weeks of daily use.
         """
         if not self.database_path.exists() or self.database_path.stat().st_size == 0:
             return
@@ -496,8 +470,7 @@ class JournalRepository:
                 with closing(sqlite3.connect(destination_path)) as destination:
                     db.backup(destination)
         except sqlite3.Error:
-            # A journal too damaged to read is one this cannot help, and refusing to start over
-            # a backup would strand somebody whose app still would have opened.
+            # A journal too damaged to read can't be backed up; don't block startup for it.
             return
 
     def _recover_or_migrate_default_database(self) -> None:
@@ -538,30 +511,25 @@ class JournalRepository:
         for old_backup in backups[:-10]:
             old_backup.unlink(missing_ok=True)
 
-    #: The tables that travel, and what their local primary key is called. Deliberately only
-    #: these two: everything else in this journal is already named by something both sides
-    #: agree on, so it merges on what it is rather than needing to be reconciled.
+    # The tables that sync, and their local primary key. Everything else in this journal
+    # already has a shared identity both sides agree on, so it merges on what it is rather
+    # than needing to be reconciled.
     _SYNC_TABLES: ClassVar[dict[str, str]] = {
         "trades": "trade_id",
         "tracked_trades": "position_id",
     }
 
-    #: Fills hang off a position and have no identity of their own. They are carried with it
-    #: and replaced wholesale when it changes, rather than merged row by row -- they are
-    #: derived from the position's own history, so the winning position's fills are the right
-    #: ones by definition, and matching them individually would be work in service of nothing.
+    # Fills have no identity of their own — carried with their position and replaced
+    # wholesale when it changes rather than merged row by row, since they're derived from
+    # the position's own history.
     _FILL_TABLES: ClassVar[dict[str, tuple[str, ...]]] = {
         "tracked_sale_fills": ("quantity", "sell_price"),
         "tracked_buy_fills": ("quantity", "buy_price"),
     }
 
     def sync_version(self) -> dict:
-        """The cheapest honest answer to whether anything has changed.
-
-        Two indexed scalars per table and nothing serialized. A client polls this on a timer,
-        so it has to stay something the machine hosting it will not feel -- the pull that
-        actually costs something only happens when this number moves.
-        """
+        """Cheap summary of table state for polling — two indexed scalars per table, nothing
+        serialized. The pull that actually costs something only happens once this moves."""
         with self._connect() as connection:
             latest = ""
             counts = {}
@@ -574,11 +542,8 @@ class JournalRepository:
         return {"version": latest, "counts": counts}
 
     def sync_export(self, since: str | None = None) -> dict:
-        """Every row that changed after ``since``, tombstones included.
-
-        Carrying deletions is the whole reason tombstones exist, so they are exported like any
-        other row rather than filtered out the way every ordinary read filters them.
-        """
+        """Every row that changed after ``since``, tombstones included — unlike every
+        ordinary read, which filters them out."""
         payload: dict[str, list[dict]] = {}
         with self._connect() as connection:
             for table, primary_key in self._SYNC_TABLES.items():
@@ -593,17 +558,16 @@ class JournalRepository:
                     ).fetchall()
                 exported = []
                 for row in rows:
-                    # .keys() is load-bearing: iterating a sqlite3.Row yields its values,
-                    # not its column names, so SIM118's suggestion would silently
-                    # build a record keyed by the data itself.
+                    # .keys() is load-bearing: iterating a sqlite3.Row yields values, not
+                    # column names, so SIM118's fix would build a record keyed by the data.
                     record = {
                         key: row[key]
                         for key in row.keys()  # noqa: SIM118
                         if key != primary_key
                     }
                     if not record.get("sync_uid"):
-                        # Nothing to recognise it by on the other side, so sending it could
-                        # only ever create a duplicate. Cannot happen after the migration.
+                        # Nothing to recognise it by on the other side; sending it would only
+                        # create a duplicate. Cannot happen after the migration.
                         continue
                     if table == "tracked_trades":
                         for fill_table, columns in self._FILL_TABLES.items():
@@ -618,16 +582,12 @@ class JournalRepository:
         return payload
 
     def sync_apply(self, payload: dict) -> dict[str, int]:
-        """Merge rows in, newest ``updated_at`` winning. Returns what actually changed.
+        """Merge rows in, newest ``updated_at`` winning. Returns what changed.
 
-        Last-write-wins, which is the right shape for one person with one desktop and one
-        browser rather than a system with real concurrent writers. A row arriving older than
-        the one already here is dropped, so a slow client replaying stale state cannot walk
-        the journal backwards.
-
-        Unknown columns are ignored rather than rejected, so a newer build on one side can
-        send a column an older build on the other has never heard of without failing the
-        whole sync over it.
+        Last-write-wins: a row older than the one already here is dropped, so a slow client
+        replaying stale state can't walk the journal backwards. Unknown columns are ignored
+        rather than rejected, so a newer build on one side can send a column an older build
+        on the other has never heard of without failing the whole sync.
         """
         applied = {"inserted": 0, "updated": 0, "skipped": 0}
         with self._connect() as connection:
@@ -696,20 +656,15 @@ class JournalRepository:
             )
 
     def _install_touch_triggers(self, connection: sqlite3.Connection) -> None:
-        """Make the database stamp ``updated_at`` on every edit it is not already told about.
+        """Stamp ``updated_at`` automatically on any edit that doesn't set it explicitly.
 
-        Every other path that changes one of these rows -- recording a fill, reviewing a
-        suggestion, listing a price -- has to move the stamp too, or the edit never travels.
-        Doing that at each call site works right up until somebody adds the next one, so the
-        database does it instead.
+        Otherwise every write path — recording a fill, reviewing a suggestion, listing a
+        price — has to remember to move the stamp itself. The guard lets ``sync_apply``
+        write the other side's ``updated_at`` without this overwriting it (and stops the
+        trigger from re-entering its own UPDATE).
 
-        The guard keeps a merge from clobbering the stamp it was handed: ``sync_apply`` writes
-        the other side's ``updated_at`` deliberately, which is an update that did change the
-        column, so this does not fire for it. It is also what stops the trigger re-entering
-        its own UPDATE.
-
-        Installed last, after every migration above has finished, because those rewrite rows
-        without a person having touched anything.
+        Installed last, after every migration above, since those rewrite rows without a
+        person having touched anything.
         """
         for table, primary_key in self._SYNC_TABLES.items():
             connection.execute(
@@ -728,12 +683,11 @@ class JournalRepository:
     def _migrate_sync_columns(
         self, connection: sqlite3.Connection, table: str, primary_key: str, stamp_from: str
     ) -> None:
-        """Give one table the columns that let its rows be recognised elsewhere.
+        """Add sync_uid/updated_at/deleted_at to a table and backfill existing rows.
 
-        Backfills ``sync_uid`` for rows that predate it, one identity per row, generated here
-        because SQLite has no uuid of its own. ``updated_at`` starts as whatever the row
-        already said about when it happened -- not "now", which would make every existing row
-        look freshly edited and win every conflict against the other side on first contact.
+        ``updated_at`` backfills from the row's own existing timestamp, not "now" — "now"
+        would make every existing row look freshly edited and win every conflict on first
+        contact with the other side.
         """
         existing = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
         for column, definition in self._SYNC_COLUMNS.items():
@@ -767,11 +721,10 @@ class JournalRepository:
 
     def _initialize(self) -> None:
         with self._connect() as connection:
-            # Schema maintenance below rewrites rows wholesale -- backfilling a suggestion,
-            # stamping a completion, giving an old row its sync_uid. None of that is a person
-            # editing a trade, and none of it should look like one to the other side of a
-            # sync. Taking the triggers down for the duration is what guarantees that, rather
-            # than every maintenance statement having to remember to preserve the stamp.
+            # Migrations below rewrite rows wholesale (backfilling a suggestion, stamping a
+            # completion, giving an old row its sync_uid). None of that is a person editing a
+            # trade, so triggers are dropped for the duration rather than trusting every
+            # statement to preserve the stamp.
             for table in self._SYNC_TABLES:
                 connection.execute(f"DROP TRIGGER IF EXISTS {table}_touch_updated_at")
             connection.execute(
@@ -815,10 +768,10 @@ class JournalRepository:
                 )
                 """
             )
-            # An opening or cancellation moves no coins, so it has no place in synced_trades —
-            # but it still edits a position, and doing that twice invents a row or deletes a
-            # real one. The queue file it came from is deleted after it applies, and a delete
-            # can fail (a locked file on Windows), so remember which ones already landed.
+            # An opening/cancellation moves no coins, so it has no synced_trades row — but it
+            # still edits a position, and applying it twice would duplicate or delete one.
+            # The queue file is deleted after applying, and deletes can fail on Windows, so
+            # track which ones already landed.
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS applied_offer_events (
@@ -993,8 +946,8 @@ class JournalRepository:
                     suggestion_reviewed_at = COALESCE(suggestion_reviewed_at, created_at)
                 """
             )
-            # Positions saved before completion timestamps existed get a best-effort
-            # backfill so period filters do not silently drop old history.
+            # Backfill completion time for positions saved before it existed, so period
+            # filters don't silently drop old history.
             connection.execute(
                 """
                 UPDATE tracked_trades
@@ -1056,8 +1009,8 @@ class JournalRepository:
 
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
-            # Named at birth, not when it is first synced: a trade recorded with no network
-            # has to already own the identity it will be recognised by later.
+            # Named at birth, not when synced — a trade recorded offline needs its final
+            # identity from the start.
             recorded_at = datetime.now(UTC).isoformat(timespec="seconds")
             cursor = connection.execute(
                 """
@@ -1080,9 +1033,9 @@ class JournalRepository:
     def trade_sync_uid(self, trade_id: int) -> str | None:
         """What a trade is called outside this database, given its local id.
 
-        For a caller that has just created one and needs to record something against it
-        somewhere else -- the website attributes trades to characters in its own database, and
-        an autoincrement id means a different trade on every machine.
+        For a caller that just created one and needs to reference it elsewhere — the website
+        attributes trades to characters by sync_uid, not by this autoincrement id, which
+        means a different trade on every machine.
         """
         with self._connect() as connection:
             row = connection.execute(
@@ -1112,10 +1065,9 @@ class JournalRepository:
     def delete(self, trade_id: int) -> None:
         """Mark a trade deleted rather than removing the row.
 
-        A row that is simply gone is indistinguishable, to the other side of a sync, from one
-        that was never there — so a real delete here would be undone by the next pull, forever.
-        The tombstone is what makes the deletion something that can travel. Every read filters
-        it out, so nothing above this notices the difference.
+        A row that's simply gone is indistinguishable, to the other side of a sync, from one
+        never synced — so a real delete here would be undone by the next pull. The tombstone
+        is what lets deletion travel; every read filters it out.
         """
         with self._connect() as connection:
             connection.execute(
@@ -1164,9 +1116,8 @@ class JournalRepository:
     def list_tracked(self, account_hash: str | None = None) -> list[TrackedTrade]:
         """Every tracked position, or just one character's plus anything never tagged to one.
 
-        An untagged position — opened before this column existed, or entered by hand with no
-        character context — has no owner to exclude it from a character's view, so it is kept
-        in every filtered read rather than only in the unfiltered one.
+        An untagged position has no owner to exclude it, so it's kept in every filtered read
+        rather than only the unfiltered one.
         """
         with self._connect() as connection:
             if account_hash is None:
@@ -1350,14 +1301,11 @@ class JournalRepository:
     def _completion_time(
         self, status: str, previous_status: str, previous_completed_at: str | None
     ) -> str | None:
-        """When this position finished, for the status it is being saved with.
+        """When this position finished, for the status it's being saved with.
 
-        Stamped the moment it first reaches a terminal status, and cleared again if it is
-        reopened. A position that was terminal already keeps the time it actually finished:
-        saving one again is an edit to recorded history — correcting a fill price weeks
-        later, say — not a second completion. Re-stamping it would drag an old trade into
-        today's period filters on the Journal and Performance pages, and stretch its
-        recorded hold time to however long ago it really finished.
+        Stamped once, the first time it reaches a terminal status. Re-saving an already
+        terminal position (e.g. correcting a fill price later) keeps the original time
+        rather than dragging it into today's period filters.
         """
         if status not in self._TERMINAL_STATUSES:
             return None
@@ -1376,35 +1324,28 @@ class JournalRepository:
         suggested_sell_price: int | None = None,
         account_hash: str | None = None,
     ) -> int | None:
-        """Match a synced GE fill to the oldest eligible tracked position for this item and
-        record it as a buy or sale fill, transitioning status when it completes a side.
+        """Match a synced GE fill to the oldest eligible tracked position and record it as a
+        buy or sale fill, transitioning status when it completes a side.
 
-        Only applied to an existing position when the whole fill fits in its remaining room,
-        so a fill that overshoots what was tracked is left for manual reconciliation instead
-        of being silently split or rejected outright. A buy fill with no eligible tracked
-        position creates one instead, sized to the GE offer's full total_quantity when known
-        so the offer's remaining fills keep accumulating onto it rather than each spawning
-        its own position; falls back to just this fill's quantity otherwise. A created
-        position's current sell suggestion is seeded from ``suggested_sell_price`` when it
-        beats what was actually paid, so an untracked flip still shows a real profit estimate
-        instead of one that reads as guaranteed break-even; its target_sell still mirrors the
-        buy price as before, so it is never mistaken for a plan the player made on purpose (see
-        ``apply_offer_opened``). A position the player has manually reclassified to 'Supplies'
-        (see ``JournalRepository.update_tracked``) keeps that status through further fills
-        rather than being carried along the ordinary lifecycle — reclassifying it mid-fill must
-        not stop it absorbing the rest of the same offer, or the offer's remaining fills would
-        find nothing eligible and spawn a duplicate row.
+        Only applied when the whole fill fits in the position's remaining room — a fill that
+        overshoots what was tracked is left for manual reconciliation rather than split or
+        rejected. A buy fill with no eligible position creates one, sized to the offer's full
+        ``total_quantity`` when known (so the offer's remaining fills keep landing on it
+        instead of each spawning a duplicate), else sized to just this fill. A created
+        position's sell suggestion is seeded from ``suggested_sell_price`` when it beats what
+        was paid, but ``target_sell`` still mirrors the buy price so it's never mistaken for
+        a plan the player made on purpose (see ``apply_offer_opened``). A position manually
+        marked 'Supplies' keeps that status through further fills rather than being pulled
+        back into the ordinary lifecycle.
 
-        A sale is matched against a position that is still 'Pending buy' only once no ordinary
-        holding can absorb it. Such a position bought less than it set out to — the offer behind
-        it was cancelled part way, or was smaller than the plan it was placed against — so it
-        can never reach 'Bought' on its own and its stock would otherwise be unsellable. Selling
-        that stock is the player saying the buying is over, so the position is resized to what
-        it actually bought and carries on through the ordinary lifecycle from there. Only the
-        quantity bought is sellable, whatever the position was originally sized to. The cost is
-        that listing part of a holding while its buy offer is still running ends that position
-        early, and the offer's remaining fills open a row of their own; the alternative leaves
-        every part-bought position permanently stuck, which is the case that actually happens.
+        A sale only matches a still-'Pending buy' position once no ordinary holding can
+        absorb it. Such a position bought less than it set out to (offer cancelled or
+        undersized) and can never reach 'Bought' on its own, so its stock would otherwise be
+        unsellable — matching it resizes the position down to what it actually bought and
+        lets it continue through the ordinary lifecycle. This ends that position early and
+        the offer's remaining fills open a row of their own, but the alternative leaves every
+        part-bought position permanently stuck, which is the case that actually happens.
+
         Returns the matched or newly created position_id, or None for an unmatched sell.
         """
         if side not in ("buy", "sell"):
@@ -1414,18 +1355,17 @@ class JournalRepository:
             if side == "buy"
             else ("Bought", "Listed for sale", "Partially sold", "Supplies")
         )
-        # Restricted to this character's own positions (plus any never tagged to one) once an
-        # account_hash is given, so a fill on one character cannot absorb into a position another
-        # character opened for the same item — two people flipping the same item through one
-        # pairing token used to merge into whichever position happened to be oldest.
+        # Restricted to this character's own positions (plus any never tagged to one), so a
+        # fill on one character can't absorb into another character's position for the same
+        # item.
         tracked = [trade for trade in self.list_tracked(account_hash) if trade.item_id == item_id]
         candidates = sorted(
             (trade for trade in tracked if trade.status in eligible_statuses),
             key=lambda trade: trade.created_at,
         )
         if side == "sell":
-            # Last resort, behind every ordinary holding: the stock a part-bought position
-            # never got to finish buying is still stock, and a sale has to land somewhere.
+            # Last resort, behind every ordinary holding: a part-bought position's stock is
+            # still stock, and a sale has to land somewhere.
             candidates += sorted(
                 (
                     trade
@@ -1448,15 +1388,14 @@ class JournalRepository:
                     if trade.bought_quantity + quantity == trade.quantity
                     else "Pending buy"
                 )
-                # sale_fills stays untouched (None); actual_sell is passed through explicitly
-                # so update_tracked doesn't blank out an already-recorded sell average.
+                # sale_fills stays untouched; actual_sell passed through so update_tracked
+                # doesn't blank the already-recorded sell average.
                 self.update_tracked(
                     trade.position_id, new_status, None, trade.actual_sell, None, new_buy_fills
                 )
             else:
-                # A position still buying holds only what it bought; one that finished holds
-                # everything it was tracked for, fills recorded against it or not (a manually
-                # entered position has none).
+                # A still-buying position holds only what it's bought; a finished one holds
+                # everything it was tracked for, fills or not (a manual entry has none).
                 part_bought = trade.status == "Pending buy"
                 stock = trade.bought_quantity if part_bought else trade.quantity
                 remaining = stock - trade.sold_quantity
@@ -1471,8 +1410,8 @@ class JournalRepository:
                     if trade.sold_quantity + quantity == stock
                     else "Partially sold"
                 )
-                # buy_fills stays untouched (None); actual_buy is passed through explicitly
-                # so update_tracked doesn't blank out the already-recorded buy average.
+                # buy_fills stays untouched; actual_buy passed through so update_tracked
+                # doesn't blank the already-recorded buy average.
                 self.update_tracked(
                     trade.position_id,
                     new_status,
@@ -1483,13 +1422,11 @@ class JournalRepository:
                 )
             return trade.position_id
         if side != "buy" or not total_quantity or total_quantity < quantity:
-            # Without the offer's real total_quantity there is no reliable size to create a
-            # position at: guessing from a single partial fill (e.g. sizing it to just this
-            # fill) would mark it "complete" immediately, so the offer's next fill finds
-            # nothing eligible to match and creates yet another "complete" position — one
-            # GE order fragmenting into several Journal rows. Better to leave it for the
-            # RuneLite activity feed until a fill reports the real total, or an explicit
-            # ge_offer_opened event starts tracking it properly from the outset.
+            # No reliable size to create a position at without the offer's real total —
+            # sizing from a single partial fill would mark it complete immediately, and the
+            # offer's next fill would spawn a duplicate "complete" position. Leave it for the
+            # activity feed until a fill reports the real total, or an explicit offer-opened
+            # event starts tracking it properly.
             return None
         position_id = self.track(
             item_id,
@@ -1518,50 +1455,39 @@ class JournalRepository:
     ) -> int | None:
         """Start (or advance) tracking the moment an offer is placed, before anything fills.
 
-        A buy offer first looks for a position the player already planned for this item — still
-        "Pending buy", nothing bought, and carrying a real sell target above its buy target —
-        and adopts that instead of opening a second row beside it. Tracking a suggested flip and
-        then placing exactly that offer is the ordinary way to use the Journal, and it used to
-        produce two rows: the plan, and a duplicate priced from the offer whose sell target
-        equalled its buy target, so it always read as a guaranteed loss. A created position's
-        current sell suggestion is seeded from ``suggested_sell_price`` when it beats the offer
-        price, for the same reason ``apply_synced_ge_fill`` does — target_sell itself is left
-        mirroring target_buy, so a position this method created is always told apart from one
-        the player planned.
+        A buy offer first looks for a matching untouched plan (still "Pending buy", nothing
+        bought, real sell target above buy target) and adopts it instead of opening a second
+        row — tracking a suggested flip and then placing that exact offer used to produce a
+        duplicate row priced buy == sell, which always read as a guaranteed loss. A created
+        position's sell suggestion is seeded from ``suggested_sell_price`` when it beats the
+        offer price, same as ``apply_synced_ge_fill``; ``target_sell`` still mirrors
+        ``target_buy`` so a position this method creates is always told apart from one the
+        player planned.
 
         ``restored`` says the game re-sent this offer on login or a world hop rather than the
-        player placing it. A re-sent offer is one already running, so it belongs to whatever
-        in-flight position is tracking it, however much has bought against it: adopting is
-        right and opening a row beside it is the duplicate. That claim outranks an untouched
-        plan, which a re-sent offer cannot be the placing of; only when nothing is tracking it
-        does it fall back to a plan, or start a position of its own — which is how an offer
-        placed elsewhere, on mobile or while this app was closed, still reaches the Journal.
+        player placing it. A re-sent offer is already running, so it belongs to whatever
+        in-flight position is tracking it — that claim outranks an untouched plan, since a
+        re-sent offer can't be the placing of one. Only when nothing is tracking it does it
+        fall back to a plan or start a new position, which is how an offer placed elsewhere
+        (mobile, or while this app was closed) still reaches the Journal. Without the flag
+        (older plugin builds), a re-announced offer is only recognised when it matches an
+        in-flight position with fills exactly, in both size and price — a stricter match
+        that costs an occasional merged row rather than a duplicate on every world hop.
 
-        Without that flag, from an older plugin build, an offer arriving while an in-flight
-        position for the item already has fills is read as that same offer re-announced when it
-        matches the position exactly, in both size and price. Two separate offers agreeing on
-        both is rare and costs a merged row; a re-announcement not recognised costs a duplicate
-        row on every world hop, which is the case that actually happens. Anything else — a
-        different price, a different size, or nothing filled yet — still opens its own row, so
-        two genuinely independent offers stay on two rows.
+        A sell offer only nudges an existing "Bought" position to "Listed for sale"; there's
+        nothing to create from a sell alone. Failing that, it falls back in order to: a
+        restored offer matching an already-"Listed for sale" position (counts as matched); a
+        "Pending buy" position with fills (stopped buying part way, resized to what it
+        actually bought and listed); or a "Partially sold" position being relisted (status
+        untouched, price recorded as the new ask). Either way the price is written via
+        ``record_listed_price``.
 
-        A sell offer only nudges an existing "Bought" position to "Listed for sale"; there is
-        nothing to create from a sell alone, since a sale must already have something bought
-        behind it. One already listed is what a restored sell offer is describing, so it counts
-        as matched rather than as nothing at all. Failing both, a position still "Pending buy"
-        with fills against it is a holding that stopped buying part way, and listing it says so:
-        it is resized to what it actually bought and listed like any other holding, for the
-        reasons ``apply_synced_ge_fill`` gives. Failing all of those, a part-sold position for
-        the item is being relisted: nothing about its status changes, but the offer's price is
-        recorded as its new ask. Either way the sell offer's price is written to the position it
-        matched — see ``record_listed_price``. Returns the position_id touched, or None for a
-        sell with nothing eligible.
+        Returns the position_id touched, or None for a sell with nothing eligible.
         """
         if side not in ("buy", "sell"):
             raise ValueError("side must be 'buy' or 'sell'")
         # Restricted the same way apply_synced_ge_fill is: to this character's own positions
-        # plus any never tagged to one, so an offer placed on one character cannot adopt a plan
-        # or an in-flight position that belongs to another.
+        # plus any never tagged to one.
         by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
         if side == "buy":
             untouched_plan = next(
@@ -1578,11 +1504,9 @@ class JournalRepository:
             already_tracked = self._offer_already_tracked(
                 by_age, item_id, total_quantity, offer_price, restored
             )
-            # Which claim on the offer is stronger depends on where it came from. A newly
-            # placed offer is a plan being acted on, so the plan takes it. A re-sent one is
-            # already running and something is already tracking it — taking a plan there
-            # adopts a flip that was never placed, and resizes it to an offer that has
-            # nothing to do with it, while the position doing the buying is left behind.
+            # A newly placed offer is a plan being acted on, so the plan takes it. A re-sent
+            # offer is already running and tracked elsewhere — taking the plan there would
+            # adopt a flip never placed and leave the real position behind.
             planned = (
                 already_tracked or untouched_plan if restored else untouched_plan or already_tracked
             )
@@ -1599,9 +1523,8 @@ class JournalRepository:
                     self.review_suggestion(position_id, offer_price, suggested_sell_price)
                 return position_id
             if total_quantity > planned.quantity:
-                # Buying more than planned: grow the position to the offer actually placed so
-                # its fills have room to land. Nothing already bought is invalidated by growing
-                # it, and the planned prices are deliberately left as the player set them.
+                # Buying more than planned: grow the position so its fills have room to land.
+                # The planned prices are deliberately left as the player set them.
                 self.update_tracked(
                     planned.position_id,
                     planned.status,
@@ -1638,10 +1561,9 @@ class JournalRepository:
                 None,
             )
             if candidate is None:
-                # A part-sold position keeps its status when its sell offer is cancelled —
-                # those sales really happened — so relisting the rest transitions nothing and
-                # was dropped here entirely. The new price is the whole point of a relist, and
-                # without it the row stays flagged against the ask the player just abandoned.
+                # A part-sold position keeps its status when its sell offer is cancelled, so
+                # relisting the rest changes nothing but the price — without recording it the
+                # row stays flagged against the ask the player just abandoned.
                 part_sold = next(
                     (
                         trade
@@ -1661,9 +1583,8 @@ class JournalRepository:
             candidate.actual_sell,
             quantity=(candidate.bought_quantity if candidate.status == "Pending buy" else None),
         )
-        # The one moment the app learns what the player is really asking. Dropping it left the
-        # Needs attention flag grading every listing against the app's own original target, so
-        # relisting at the market's suggestion cleared nothing and the row stayed flagged.
+        # The moment the app learns what the player is really asking — without it, "Needs
+        # attention" keeps grading listings against the app's own original target.
         self.record_listed_price(candidate.position_id, offer_price)
         return candidate.position_id
 
@@ -1677,8 +1598,8 @@ class JournalRepository:
     ) -> TrackedTrade | None:
         """The position a buy offer is already tracked by, when the offer is not a new one.
 
-        Only consulted once no untouched plan matched, so every candidate here either has fills
-        against it or was opened by an offer of its own. See ``apply_offer_opened`` for why a
+        Only consulted once no untouched plan matched, so every candidate here either has
+        fills or was opened by an offer of its own. See ``apply_offer_opened`` for why a
         restored offer may adopt any of them while an unflagged one needs an exact match.
         """
         in_flight = [
@@ -1717,35 +1638,31 @@ class JournalRepository:
     ) -> int | None:
         """Resolve the position a cancelled GE offer leaves behind.
 
-        A cancelled buy that never filled leaves a position that can never complete; it only
-        existed because the offer was placed, so it goes away with the offer. One that part
-        filled is resized down to what actually bought and marked "Bought" — the same
-        reconciliation the Journal otherwise asks the player to do by hand. A cancelled sell
-        with nothing sold drops back to "Bought" so it can be relisted; one that already part
-        sold is left alone, because those sales really happened.
+        A cancelled buy that never filled is deleted — it only existed because the offer was
+        placed. One that part-filled is resized down to what actually bought and marked
+        "Bought", the same reconciliation the Journal otherwise asks the player to do by
+        hand. A cancelled sell with nothing sold drops back to "Bought" so it can be
+        relisted; one that already part-sold is left alone, since those sales really
+        happened.
 
-        A cancelled buy is matched strictly — same size and price as the offer — because getting
-        it wrong deletes or resizes a position the player may have built by hand. A cancelled
-        sell only flips a status back, which costs nothing to undo, so it matches the oldest
-        listing for the item exactly as apply_offer_opened picked one to list in the first place.
-        A part-filled buy already sitting at "Supplies" is resized down the same way but keeps
-        that status rather than being pulled back into the ordinary Bought lifecycle. Returns
-        the position_id touched, or None when nothing matched.
+        A cancelled buy is matched strictly (same size and price) since getting it wrong
+        deletes or resizes a position the player may have built by hand. A cancelled sell
+        only flips a status back, which costs nothing to undo, so it matches the oldest
+        listing for the item. A part-filled buy already at "Supplies" is resized down the
+        same way but keeps that status rather than being pulled into the ordinary lifecycle.
 
-        Only a position an offer opened for itself is deleted, told apart by the invariant
-        ``apply_offer_opened``/``apply_synced_ge_fill`` maintain: a position they create has
-        target_sell mirroring target_buy, where one the player planned carries a real sell
-        target above its buy target. Tracking a suggested flip and then placing exactly that
-        offer means ``apply_offer_opened`` adopted the plan rather than opening a row beside
-        it, so without that check cancelling the offer deleted the plan the player made.
+        Only a position an offer opened for itself is deleted, told apart by the same
+        target_sell/target_buy invariant ``apply_offer_opened`` maintains — otherwise
+        cancelling an offer that had adopted a player's plan would delete that plan.
+
+        Returns the position_id touched, or None when nothing matched.
         """
         if side not in ("buy", "sell"):
             raise ValueError("side must be 'buy' or 'sell'")
         by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
         if side == "sell":
-            # A sell offer never created the position — a buy did — so neither its price nor its
-            # size describes how the position was tracked: the player can list part of one, or
-            # cover one listing with several offers. Status is the honest thing to match on.
+            # A sell offer never created the position, so its price/size don't describe how
+            # the position was tracked. Status is the honest thing to match on.
             candidate = next(
                 (
                     trade
@@ -1775,9 +1692,8 @@ class JournalRepository:
             return None
         if candidate.bought_quantity == 0:
             if candidate.target_sell > candidate.target_buy:
-                # A plan the player made, adopted by the offer rather than created by it. The
-                # offer is gone but the plan is not: it is back to being tracked and not yet
-                # placed, which is exactly the state it is already in.
+                # A player-made plan, adopted rather than created by the offer. Still tracked
+                # and not yet placed — exactly the state it's already in.
                 return None
             self.delete_tracked(candidate.position_id)
             return candidate.position_id
@@ -1804,15 +1720,10 @@ class JournalRepository:
     def record_listed_price(self, position_id: int, sell_price: int) -> None:
         """Record the price a sell offer was actually placed at.
 
-        Kept apart from ``review_suggestion``: that is the app revising its own advice, and it
-        stamps ``suggestion_reviewed_at``, which the Journal shows as the ↻ marker. A player
-        listing at their own price is not the app reviewing anything, so it writes only the ask
-        and leaves the suggestion — and the plan behind it — exactly as it was.
-
-        Never cleared when the offer ends. Cancelling a listing does not un-choose the price the
-        player picked, and the alternative on a part-sold position that stays "Partially sold"
-        is falling back to the suggestion, which is the stale number this field exists to stop
-        being read as an ask. The next listing overwrites it.
+        Kept apart from ``review_suggestion`` (the app revising its own advice, which stamps
+        ``suggestion_reviewed_at``): this writes only the ask, leaving the suggestion and
+        plan untouched. Never cleared when the offer ends — cancelling a listing doesn't
+        un-choose the price the player picked. The next listing overwrites it.
         """
         with self._connect() as connection:
             connection.execute(
@@ -1843,10 +1754,10 @@ class JournalRepository:
         return self.add_synced_trades([trade])[0]
 
     def claim_offer_event(self, event_id: str) -> bool:
-        """Claim a GE offer opening or cancellation, returning False if it already applied.
+        """Claim a GE offer opening or cancellation, returning False if already applied.
 
-        Claimed before the event is applied rather than after, so a crash in between costs one
-        event instead of replaying it — the same order ``add_synced_trades`` and its fills use.
+        Claimed before the event is applied, so a crash in between costs one event instead of
+        replaying it.
         """
         with self._connect() as connection:
             cursor = connection.execute(
@@ -1915,15 +1826,10 @@ class JournalRepository:
     ) -> list[SyncedTrade]:
         """Imported RuneLite activity, newest first.
 
-        ``since`` bounds the read to recent history for callers that only ever look at a
-        short window (see ``NOT_BEFORE_SAFETY_MARGIN`` for why it is deliberately loose).
-        Without it this loads every event ever imported, plus every one of their items —
-        fine for the activity feed, which shows exactly that, and steadily more expensive
-        for anything on a timer.
-
-        ``account_hash``, unlike the same filter on ``list_tracked``, is exact: every synced
-        trade carries a real character it happened on, so there is no untagged case to fall
-        back into.
+        ``since`` bounds the read for callers that only look at a recent window (see
+        ``NOT_BEFORE_SAFETY_MARGIN``); without it this loads every event ever imported.
+        ``account_hash`` is exact here, unlike ``list_tracked`` — every synced trade carries
+        a real character, so there's no untagged case to fall back into.
         """
         conditions: list[str] = []
         parameters: list[str] = []
@@ -2227,9 +2133,8 @@ class JournalRepository:
             )
 
     def save_loadout_snapshot(self, snapshot: LoadoutSnapshot) -> None:
-        """Replace any previous snapshot for this account — only the latest full state
-        matters for that — and append its total value to the net-worth history, which is
-        the one part of a snapshot worth keeping every reading of."""
+        """Replace the previous snapshot for this account and append its total value to
+        the net-worth and skills history."""
 
         def dump(items: tuple[LoadoutItem, ...]) -> str:
             return json.dumps(

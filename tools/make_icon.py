@@ -1,13 +1,9 @@
-"""Generate the Windows application icon using the existing Qt build dependency.
+"""Generate the Windows application icon (multi-size .ico) using the existing Qt build
+dependency.
 
-Windows asks for this icon at several sizes and picks the closest one it is given. A single
-256x256 entry is not "one size that scales" — the taskbar, Alt-Tab and Explorer's smaller
-views want something around 16-48px, and when the only thing on offer is a 256x256 stored as
-an uncompressed BMP, they render nothing at all. That is what shipped: a real icon on the
-executable that the taskbar drew as a blank square.
-
-So every size is drawn at its own scale rather than resampled down from one big one, and each
-is stored as PNG, which is what the Vista-era icon format expects for anything this size.
+Windows picks the closest available size from the .ico, so each size is drawn at its own
+scale rather than resampled down from one big image — a single 256x256 entry renders as a
+blank square in the taskbar and other small views.
 """
 
 from __future__ import annotations
@@ -18,18 +14,14 @@ from pathlib import Path
 from PySide6.QtCore import QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPen
 
-#: What Windows actually reaches for: 16 in the taskbar's small view and Explorer's list, 32
-#: for the standard shell, 48 for medium icons, and 256 for the preview pane. The ones between
-#: are cheap and stop Windows resampling across a wide gap.
+# Sizes Windows actually uses: 16 (taskbar/Explorer list), 32 (shell), 48 (medium icons),
+# 256 (preview pane); the rest fill gaps to avoid wide resampling jumps.
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
 def render(size: int) -> QImage:
-    """The mark at one size, drawn at that size.
-
-    Proportional rather than fixed so the border stays a border instead of thinning to nothing:
-    at 16px the 12px stroke of the full-size drawing rounds to under a pixel and disappears.
-    """
+    """The mark at one size, drawn at that size (proportional stroke so it doesn't vanish
+    at small sizes)."""
     scale = size / 256
     image = QImage(size, size, QImage.Format.Format_ARGB32)
     image.fill(QColor("#11151b"))
@@ -52,9 +44,8 @@ def render(size: int) -> QImage:
 
 
 def as_png(image: QImage) -> bytes:
-    # QBuffer with no argument owns its storage. Handing it a QByteArray built inline instead
-    # hands it one that Python is free to collect while Qt still holds the pointer, which
-    # segfaults rather than failing.
+    # QBuffer() owns its storage; a QByteArray built inline could be GC'd while Qt still
+    # holds the pointer, causing a segfault.
     buffer = QBuffer()
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
     if not image.save(buffer, "PNG"):
@@ -64,18 +55,13 @@ def as_png(image: QImage) -> bytes:
 
 
 def build_ico(frames: list[bytes], sizes: tuple[int, ...]) -> bytes:
-    """Assemble the container by hand.
-
-    Qt writes one image per .ico and offers no way to add a second, which is the whole reason
-    the old icon had a single size in it. The format itself is a six-byte header, one sixteen-
-    byte directory entry per image, then the payloads — cheaper to write than to take on an
-    imaging dependency for.
-    """
+    """Assemble the .ico container by hand, since Qt can only write one size per .ico.
+    Format: six-byte header, one sixteen-byte directory entry per image, then payloads."""
     header = struct.pack("<HHH", 0, 1, len(frames))
     offset = len(header) + 16 * len(frames)
     directory = b""
     for size, payload in zip(sizes, frames):
-        # 256 is stored as 0: the field is one byte and the format predates the larger size.
+        # 256 is stored as 0 — the field is one byte and predates the larger size.
         directory += struct.pack(
             "<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(payload), offset
         )

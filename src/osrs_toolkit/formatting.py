@@ -1,15 +1,4 @@
-"""Turning numbers into the strings a person reads.
-
-Everything here is presentation, and nothing here knows what is drawing it. It was written
-inside the desktop window, which was fine while that window was the only thing displaying any
-of it. A second front end is the difference between a helper and a duplicated helper — one of
-these had already been copied into ``journal_presentation`` before this module existed.
-
-The choices carry judgement, which is why they live together rather than being inlined at each
-call site: whether a tiny sliver of progress reads as "0%" or "<1%" is a decision about what
-the reader should conclude from it, and two screens should not be able to answer it
-differently.
-"""
+"""Presentation helpers: turning raw values into the strings the UI displays."""
 
 from __future__ import annotations
 
@@ -17,10 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # Imported for annotations only. ``performance`` imports ``journal_presentation``, which
-    # imports this module, so pulling either in at runtime would close the loop. Annotations
-    # are strings under ``from __future__ import annotations``, so none of them are needed
-    # until something asks for the types.
+    # Avoids a runtime import cycle (performance -> journal_presentation -> this module).
     from osrs_toolkit.journal import SyncedItem, SyncedTrade
     from osrs_toolkit.performance import GroupPerformance
 
@@ -35,7 +21,7 @@ def signed_gp(value: int) -> str:
 
 
 def percent(value: float | None, *, signed: bool = False) -> str:
-    """A percentage that never rounds a real result away to a bare "-0.0%"."""
+    """Formats a percentage, avoiding a misleading "-0.0%" for tiny values."""
     if value is None:
         return "—"
     places = 2 if value and abs(value) < 0.05 else 1
@@ -43,7 +29,7 @@ def percent(value: float | None, *, signed: bool = False) -> str:
 
 
 def hold_time(hours: float | None) -> str:
-    """A duration at a readable scale: minutes for quick flips, days for overnight ones."""
+    """Formats a duration at a readable scale: minutes, hours, or days."""
     if hours is None:
         return "—"
     if hours < 1:
@@ -68,8 +54,7 @@ def short_duration(seconds: int) -> str:
 
 
 def format_countdown(seconds: int) -> str:
-    """Hours-and-minutes countdown for the buy-limit "resets in" column, precise enough to
-    be useful against a 4-hour window without needing seconds."""
+    """Hours-and-minutes countdown for the buy-limit "resets in" column."""
     if seconds <= 0:
         return "any moment"
     hours, minutes = divmod(seconds // 60, 60)
@@ -79,17 +64,14 @@ def format_countdown(seconds: int) -> str:
 
 
 def format_goal_percent(percent: float) -> str:
-    """Rounding a real but tiny sliver of progress straight to "0%" reads as no progress
-    at all against a large target — distinct from an actual 0%."""
+    """Shows "<1%" instead of rounding a real but tiny sliver of progress down to "0%"."""
     if 0 < percent < 1:
         return "<1%"
     return f"{percent:.0f}%"
 
 
 def format_eta(days: float) -> str:
-    """A savings goal's ETA is only ever a rough projection, so it's shown in whatever
-    unit keeps it readable — "~19,671 days" doesn't parse at a glance the way "~54 years"
-    does, and small values stay in days where that's still the natural unit."""
+    """Formats a rough ETA in days or years, whichever reads better."""
     if days < 1:
         return "less than a day"
     if days < 365:
@@ -156,12 +138,8 @@ def group_row(group: GroupPerformance, *, hold: bool) -> list[str]:
 
 
 def attention_tooltip(asking: int, live_sell_price: int) -> str:
-    """Why a journal row is flagged, in lines short enough to read at a glance.
-
-    Broken across three of them deliberately. Qt renders a plain-text tooltip on a single
-    line however long it is, and the one sentence this used to be stretched most of the
-    window — laid over the rows underneath it, which is exactly where the eye was looking.
-    """
+    """Why a journal row is flagged. Split into short lines since Qt renders a plain-text
+    tooltip on a single line however long it is."""
     drop_pct = (asking - live_sell_price) / asking * 100
     return (
         "This ask looks stale.\n"

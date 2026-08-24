@@ -9,13 +9,10 @@ from osrs_toolkit.calculators import conservative_buy_price
 from osrs_toolkit.journal import LoadoutSnapshot, NpcLootRecord
 from osrs_toolkit.models import ItemMapping, MarketPoint
 
-# Potions and some other consumables carry a trailing dose count in their real in-game name
-# (e.g. "Prayer potion(4)", "Anti-venom+(2)"). Checklist requirements are written without a
-# dose so any charge level satisfies them; strip it before comparing names.
+# Strip dose counts (e.g. "Prayer potion(4)") so any charge level satisfies a checklist entry.
 _DOSE_SUFFIX = re.compile(r"\s*\(\d+\)\s*$")
 
-# An imbued item (e.g. "Slayer helmet (i)") is a strict upgrade of its base form, so owning
-# the imbued version should satisfy a checklist that just asks for the base item.
+# Imbued items (e.g. "Slayer helmet (i)") should satisfy a checklist asking for the base item.
 _IMBUED_SUFFIX = re.compile(r"\s*\(i\)\s*$")
 
 
@@ -53,13 +50,10 @@ class PvmActivity:
 
 @dataclass(frozen=True, slots=True)
 class GpEstimate:
-    """Community loot-value baseline minus the live cost of what the trip actually consumes.
+    """Community loot-value baseline minus the live cost of supplies consumed.
 
-    ``gross_gp_per_hour`` is the community figure ``PvmActivity.gross_gp_per_hour`` already
-    carries — a settled estimate of the loot itself, which this module has no better way to
-    price than the community already has. ``net_gp_per_hour`` subtracts supply cost priced
-    from the live market snapshot, so the number moves with real prices the same way every
-    other calculator in this app does, without pretending to simulate a full drop table.
+    ``gross_gp_per_hour`` is the community estimate from ``PvmActivity``. ``net_gp_per_hour``
+    subtracts supply cost priced from the live market snapshot.
     """
 
     gross_gp_per_hour: int
@@ -67,9 +61,8 @@ class GpEstimate:
     net_gp_per_hour: int
     priced: bool
     price_age_seconds: int
-    #: The account's own recorded rate for this activity, from Loot Log history — set by the
-    #: caller via ``dataclasses.replace`` once it has loot events to compute from, not by
-    #: ``estimate_gp_per_hour`` itself. ``None`` means no observed data, not a rate of zero.
+    # This account's own rate from Loot Log history, set by the caller via dataclasses.replace
+    # once it has loot events — not by estimate_gp_per_hour. None means no data, not zero.
     observed_gp_per_hour: int | None = None
 
 
@@ -83,8 +76,7 @@ def estimate_gp_per_hour(
     """Net the activity's gross loot value against its live supply cost.
 
     Falls back to the gross figure alone (``priced=False``) when a supply item has no current
-    market snapshot — a stale-but-present estimate beats hiding the row's numbers entirely
-    because one potion was briefly missing a price.
+    market snapshot, rather than hiding the row.
     """
     del mappings  # Supplies are looked up by item_id; mappings only carry display names.
     point_by_id = {point.item_id: point for point in points}
@@ -114,9 +106,8 @@ def estimate_gp_per_hour(
 def observed_gp_per_hour(events: list[NpcLootRecord]) -> int | None:
     """This account's own gp/hr, from the loot it actually received for one NPC.
 
-    Spans the earliest to the latest event given — deliberately not "value divided by kill
-    count", since a loot delivery isn't always exactly one kill. ``None`` with fewer than two
-    events (no elapsed time to divide by) or when they all landed at the same instant.
+    Spans earliest to latest event, not value / kill count (a delivery isn't always one
+    kill). ``None`` with fewer than two events or if they all landed at the same instant.
     """
     if len(events) < 2:
         return None
@@ -146,8 +137,7 @@ class ActivityReadiness:
     missing_skills: tuple[MissingSkill, ...]
     missing_gear: tuple[str, ...]
     assessed: bool = True
-    """False when there is no loadout to compare against, which is not the same answer as
-    "you are missing everything": nothing is known about what this account owns."""
+    """False when there is no loadout to compare against (unknown, not "missing everything")."""
 
     @property
     def is_ready(self) -> bool:
@@ -169,9 +159,8 @@ def _prayer_and_food(
     )
 
 
-# Current best-in-slot-ish melee weapons, shared across every "strong melee weapon" checklist
-# entry so an account with modern gear (fang, scythe, soulreaper axe, ...) isn't flagged as
-# missing a weapon slot just because a given boss's list predates that item.
+# Modern BiS-ish melee weapons, shared across "strong melee weapon" entries so newer gear
+# isn't flagged missing just because a boss's list predates it.
 _META_MELEE_WEAPONS: tuple[str, ...] = (
     "Osmumten's fang",
     "Scythe of vitur",
@@ -668,11 +657,8 @@ def assess_readiness(activity: PvmActivity, snapshot: LoadoutSnapshot | None) ->
     """Compare a loadout snapshot against one activity's checklist.
 
     Gear is matched by item name (case-insensitive, dose suffix ignored) across equipment,
-    inventory, and bank — everything a bank trip away counts as "owned" for planning purposes.
-
-    Without a snapshot there is no comparison to make. Treating that as an account with
-    nothing in the bank and level 1 in everything would report every requirement as missing,
-    which reads as a verdict on the account rather than on what is known about it.
+    inventory, and bank. Without a snapshot, returns unassessed rather than reporting every
+    requirement missing.
     """
     if snapshot is None:
         return ActivityReadiness(activity, (), (), assessed=False)

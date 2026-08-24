@@ -47,12 +47,11 @@ STRATEGIES = {
 
 
 def confidence_standing(confidence: int, floor: int) -> float:
-    """Where a score sits between the strategy's own minimum and a perfect 100.
+    """Where a score sits between the strategy's own minimum and 100.
 
-    Every row on screen already cleared ``floor`` — that is what the filter did — so the
-    raw number cannot say much on its own: 58% is a poor showing under Overnight's 65 and a
-    comfortable one under Quick's 45. Scored against the floor it was actually judged by, 0
-    means "scraped in" and 1 means "as good as this gets".
+    Every row already cleared ``floor``, so the raw number alone is misleading (58% is poor
+    under Overnight's 65 but comfortable under Quick's 45). 0 means "scraped in", 1 means
+    "as good as this gets".
     """
     span = max(1, 100 - floor)
     return max(0.0, min(1.0, (confidence - floor) / span))
@@ -175,10 +174,9 @@ def plan_flip_portfolio(
 ) -> list[FlipCandidate]:
     """Allocate one cash stack across distinct GE offers without exceeding safe item caps.
 
-    ``rank_flips`` calculates the maximum sensible size for each item independently. This
-    function turns those independent limits into one diversified, cash-constrained plan.
-    It tries to use every requested slot, shares spare capital between the selected offers,
-    and deliberately leaves cash unused when liquidity, buy limits, or risk caps say to stop.
+    Turns the independent per-item limits from ``rank_flips`` into one diversified,
+    cash-constrained plan. Leaves cash unused when liquidity, buy limits, or risk caps say
+    to stop.
     """
     if cash_stack <= 0 or slot_count <= 0:
         return []
@@ -195,13 +193,10 @@ def plan_flip_portfolio(
     current_utility = -1
     current_capital = -1
 
-    # Forward-select the offer that contributes the most to the complete portfolio at
-    # each step. Ranking remains useful for tie-breaking, but a high score can no longer
-    # hide a lower-ranked offer with materially more total, confidence-adjusted profit.
-    #
-    # Every trial re-sizes the whole set, so this runs the sizing pass thousands of times
-    # per plan against a full market snapshot. It therefore works in plain numbers and
-    # only builds ``FlipCandidate`` objects once, for the set that actually wins.
+    # Forward-select the offer that contributes most to the portfolio at each step (score
+    # only breaks ties). Every trial re-sizes the whole set — this runs thousands of times
+    # per plan, so it works in plain numbers and only builds FlipCandidate objects once,
+    # for the winning set.
     for _slot in range(min(slot_count, len(eligible))):
         best_candidate: FlipCandidate | None = None
         best_metric: tuple[int, int, float] | None = None
@@ -242,9 +237,8 @@ def plan_flip_portfolio(
 def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
     """Quantities for a chosen offer set, sized for maximum confidence-adjusted profit.
 
-    One unit of every offer is bought first so the portfolio stays diversified, then the
-    spare cash goes to whichever offers return the most confidence-adjusted profit per
-    coin committed.
+    Buys one unit of every offer first to stay diversified, then spends spare cash on
+    whichever offers return the most confidence-adjusted profit per coin.
     """
     quantities = [1 for _candidate in selected]
     remaining = cash_stack - sum(candidate.buy_price for candidate in selected)

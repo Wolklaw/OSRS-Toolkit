@@ -1,15 +1,6 @@
-"""Where synced events come from.
-
-The plugin used to hand its events over by writing files into ``.runelite``. The RuneLite
-Plugin Hub will not accept a plugin that depends on an application installed on the same
-machine, so it posts them to a web service instead — and this app has to be able to read from
-either, because a queue of files written by an older plugin should not become unreadable the
-day the newer one ships.
-
-A source deals only in transport. It fetches raw payloads and says when something has been
-taken; it does not know what a Grand Exchange offer is. Everything that gives those payloads
-meaning stays in ``runelite_sync``, which is what keeps this module free to be swapped and
-keeps the parsing tested once rather than once per transport.
+"""Where synced events come from: a local ``.runelite`` folder (older plugin builds) or the
+sync web service (current plugin, per Plugin Hub rules). A source only handles transport —
+fetching raw payloads and acknowledging them — parsing lives in ``runelite_sync``.
 """
 
 from __future__ import annotations
@@ -31,19 +22,18 @@ MAX_OFFER_STATE_BYTES = 16_384
 MAX_OFFER_SCREEN_BYTES = 4_096
 MAX_REJECTED_FILES = 200
 
-#: A local heartbeat is re-stamped every ten seconds, so half a minute of silence means the
-#: client is gone. The web service answers this question itself and this does not apply to it.
+# Local heartbeat re-stamps every 10s; 30s of silence means the client is gone. Doesn't apply
+# to the web service, which answers this itself.
 LOCAL_STATUS_FRESH_SECONDS = 30
 
-#: Sent on every request to the sync service. Not politeness: Cloudflare turns away the generic
-#: name Python's standard library sends by default, with a 403 that arrives looking exactly like
-#: a bug in our own code. Saying who we are avoids being mistaken for something else.
+# Cloudflare 403s the default urllib User-Agent, which looks like a bug in our code. Set
+# explicitly to avoid that.
 USER_AGENT = "OSRS-Toolkit/1.0 (+https://runescope.app)"
 
 HTTP_TIMEOUT_SECONDS = 20
 
-#: How long one fetch of ``/v1/state`` is reused for. Long enough that the several slices of it
-#: one page wants cost a single request, short enough that it cannot outlive the render asking.
+# How long a /v1/state fetch is cached — long enough that one page's several reads cost one
+# request, short enough not to outlive the render.
 STATE_CACHE_SECONDS = 2.0
 
 
@@ -54,20 +44,17 @@ class RuneLiteConnectionStatus:
     account_name: str | None = None
     account_hash: str | None = None
     player_trade_tracking: bool = False
-    #: Whether the source itself answered. False means this app could not reach wherever it
-    #: reads from -- which says nothing at all about whether the plugin is running, and is a
-    #: different thing to tell somebody than "the plugin is offline". Always true for the
-    #: local folder: a directory that exists has, by definition, already answered.
+    # Whether the source itself answered. False means unreachable (site down, etc), not
+    # "plugin offline" — different message to show. Always true for the local folder.
     source_reachable: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class PendingSyncEvent:
-    """One event waiting to be imported, and whatever the source needs to forget it again.
+    """One event waiting to be imported, plus whatever the source needs to forget it again.
 
-    ``payload`` is ``None`` where the source could reach the event but not make JSON of it.
-    That is a rejection rather than a retry: reading it again will fail the same way, and
-    leaving it in place would block everything queued behind it.
+    ``payload`` is ``None`` when the source reached the event but couldn't parse it as JSON —
+    treated as a rejection, not a retry, since reading it again fails the same way.
     """
 
     handle: str
@@ -85,11 +72,8 @@ class SyncSource(Protocol):
     def offer_screen_payload(self, account_hash: str) -> dict | None: ...
 
     def pending(self, scan_limit: int) -> Iterator[PendingSyncEvent]:
-        """Events waiting, oldest first, produced lazily.
-
-        Lazily because the caller's budget is measured in events it could *use*, and one it
-        cannot read yet does not spend any of it. A source that handed back a fixed batch would
-        let a backlog of those fill the batch and starve the events that do work.
+        """Events waiting, oldest first, produced lazily so an unreadable event doesn't spend
+        the caller's per-pass budget and starve the readable ones behind it.
         """
 
     def collected(self, handles: list[str]) -> None:
@@ -158,8 +142,8 @@ class LocalFileSource:
                     continue
                 raw = path.read_bytes()
             except OSError:
-                # A partially written or briefly locked file is not invalid. Leaving it out of
-                # this pass entirely means the next one finds it finished.
+                # Partially written or briefly locked, not invalid — skip this pass, the next
+                # one finds it finished.
                 continue
             try:
                 yield PendingSyncEvent(path.name, json.loads(raw), raw)
@@ -171,8 +155,8 @@ class LocalFileSource:
             try:
                 (self.events_dir / handle).unlink(missing_ok=True)
             except OSError:
-                # Every event applied this pass is recorded under its own id, so a file left
-                # behind costs a second look at it rather than a second application.
+                # Recorded under its own id, so a leftover file costs a second look, not a
+                # second application.
                 pass
 
     def quarantine(self, event: PendingSyncEvent) -> None:
@@ -185,9 +169,8 @@ class LocalFileSource:
             pass
 
     def housekeeping(self) -> None:
-        """Rejected events are kept so a malformed one can be looked at, not replayed. Capping
-        the directory stops an event the plugin keeps producing and this app keeps refusing —
-        an oversized bank snapshot, say — filling the disk one copy at a time."""
+        """Kept so a malformed event can be inspected, not replayed. Capped so a repeatedly
+        rejected event (e.g. an oversized bank snapshot) can't fill the disk."""
         try:
             files = sorted(
                 self.rejected_dir.glob("*.invalid"), key=lambda path: path.stat().st_mtime
@@ -204,12 +187,9 @@ class LocalFileSource:
 class HttpSyncSource:
     """The sync service.
 
-    Events are taken from a queue held for this pairing and acknowledged by id once imported,
-    which is what lets this app skip an event type it does not recognise yet and still find it
-    waiting after an update. Acknowledging by cursor would sweep those away unread.
-
-    Nothing here retries. A pass that cannot reach the service imports nothing and acknowledges
-    nothing, so the queue is untouched and the next pass sees exactly what this one did.
+    Events are acknowledged by id, not by cursor, so an event type this build doesn't
+    recognize yet is skipped and still there after an update. Nothing here retries — a failed
+    pass leaves the queue untouched.
     """
 
     def __init__(self, base_url: str, token: str) -> None:
@@ -233,11 +213,9 @@ class HttpSyncSource:
     def state_payload(self, account_hash: str = "") -> dict | None:
         """Everything the service knows about one character, in one request.
 
-        Memoised for a moment because the callers below each want a different slice of the same
-        answer, and a page that draws status, slots and the offer box together used to fetch
-        the identical response three times. The window is short enough that nothing here can go
-        stale within a render, and it is keyed by hash so asking about a different character is
-        a guaranteed miss rather than a wrong answer.
+        Memoised briefly since status/slots/offer-box each used to fetch the same response
+        separately. Keyed by account hash so a different character is a guaranteed miss, not a
+        wrong answer.
         """
         if not self.base_url or not self.token:
             return None
@@ -257,19 +235,16 @@ class HttpSyncSource:
             return (False, None, False)
         payload = self.state_payload()
         if payload is None:
-            # Configured but unreachable. Detected stays true so the app can say "cannot reach
-            # the service" rather than "no plugin", which are different problems to fix.
+            # Configured but unreachable — detected stays true so the app says "can't reach
+            # the service", not "no plugin".
             return (True, None, False)
         return (True, payload, bool(payload.get("active")))
 
     def known_accounts(self) -> list[dict]:
-        """Every character the service has ever seen for this pairing, newest first.
+        """Every character the service has seen for this pairing, newest first.
 
-        A capability the local file bridge never had: it only ever tracked whichever character
-        happened to be logged in when it last wrote a file, and had no registry of the others.
-        Centralising state on the service is what makes "switch character" something a caller
-        can offer at all, so this lives here rather than on ``SyncSource`` — a source that
-        cannot support it should not have to fake an empty answer for it.
+        Lives here rather than on ``SyncSource`` since the local file bridge has no such
+        registry and shouldn't have to fake one.
         """
         payload = self._call("GET", "/v1/accounts")
         if not isinstance(payload, dict):
@@ -291,15 +266,15 @@ class HttpSyncSource:
         screen = payload.get("screen")
         if not isinstance(screen, dict):
             return None
-        # The service already withholds a screen too old to believe, but it stamps what it
-        # returns so the age check downstream has something to read either way.
+        # Service withholds a stale screen itself, but stamps updated_at anyway so the
+        # downstream age check has something to read.
         stamped = dict(screen)
         stamped.setdefault("updated_at", payload.get("screen_updated_at"))
         return stamped
 
     def pending(self, scan_limit: int) -> Iterator[PendingSyncEvent]:
-        # One request rather than a stream: the service already caps what it returns, and a
-        # second round trip to a home connection costs more than reading a few extra events.
+        # One request, not a stream — the service caps what it returns, and an extra round
+        # trip over a home connection costs more than a few extra events.
         payload = self._call("GET", f"/v1/events?limit={min(scan_limit, 500)}")
         if not isinstance(payload, dict):
             return
@@ -318,8 +293,8 @@ class HttpSyncSource:
             self._call("POST", "/v1/events/ack", {"event_ids": handles})
 
     def quarantine(self, event: PendingSyncEvent) -> None:
-        # Nowhere to put it and nothing gained by keeping it: the service would hand back the
-        # same unusable event on every pass. Acknowledging drops it.
+        # Nothing to gain keeping it — the service would hand back the same unusable event
+        # every pass, so acknowledge it away.
         self.collected([event.handle])
 
     def housekeeping(self) -> None:

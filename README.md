@@ -17,16 +17,14 @@ boss gear checklists.
 
 **Nothing plays the game for you.**
 
-No token entered, and this is a fully offline app: your journal stays on your PC, and GE
-Flipper, the Trade Journal, High Alchemy and skilling all work against live market prices with
-nothing signed in.
+Without signing in, the app is fully offline: your journal stays on your PC, and GE Flipper,
+the Trade Journal, High Alchemy and skilling all work against live market prices.
 
-Sign in and two things change. RuneLite data now reaches this app through
-[runescope.app](https://runescope.app) rather than a folder the plugin writes to directly — the
-RuneLite Plugin Hub does not accept a plugin that feeds an app on the same machine, so the
-plugin posts to a web service and this app reads from there instead. And your journal — manual
-trades and tracked positions — mirrors the same account's journal on the website: record a
-trade in either place and it reaches the other within a minute.
+Sign in and two things change: RuneLite data reaches this app through
+[runescope.app](https://runescope.app) instead of a local folder (the RuneLite Plugin Hub
+doesn't allow a plugin that feeds an app on the same machine, so the plugin posts to a web
+service instead), and your journal — manual trades and tracked positions — mirrors the same
+account's journal on the website, syncing within a minute either direction.
 
 </div>
 
@@ -73,8 +71,8 @@ More detail further down:
 ## GE Flipper
 
 Type in how much GP you want to put to work, say how many slots are free (**1–8**), and pick
-**Quick**, **Balanced**, or **Overnight**. It then plans those slots as one set rather than handing
-you the top rows of a list — eight suggestions that each want your whole cash stack aren't a plan.
+**Quick**, **Balanced**, or **Overnight**. It plans those slots as one set, not just the top
+rows of a list.
 
 - It decides how much of each item to buy from your cash, your slot count, the four-hour buy limit,
   how much the item really trades, and how much risk the strategy you picked allows.
@@ -119,9 +117,9 @@ was suggested with. From there it moves through **Bought**, **Listed for sale**,
 - All eight GE slots sit above the journal, laid out the way the game lays them out, colour-coded
   for buying, selling, and done-and-waiting-to-collect.
 - When a buy finishes and the item is yours to sell, the slot and its journal row flash yellow
-  together — the row you need to deal with comes and finds you. The same flash marks a sale
-  finishing, and any rows a newly tracked plan just created. If it happens while you're in-game,
-  the sidebar holds a dot until you come back and look, then plays it.
+  together. The same flash marks a sale finishing, and any rows a newly tracked plan just
+  created. If it happens while you're in-game, the sidebar holds a dot until you come back and
+  look, then plays it.
 - Standing at the Grand Exchange in-game, the rows you're trading highlight themselves: the row
   turns blue, with the quantity and the price for whichever side you're on picked out inside it.
   It follows the whole trade — the "Set up offer" box narrows it to the one item while you type,
@@ -166,11 +164,11 @@ startup backups, can find and move your data if an older version left it somewhe
 [![Performance page comparing realized results by strategy](docs/images/performance-strategy.png)](docs/images/performance-strategy.png)
 
 The toolkit suggests a strategy and some target prices. The journal records what you really got.
-**Performance** puts the two side by side, which is the point of keeping a journal at all.
+**Performance** puts the two side by side.
 
 - **By strategy.** Realized profit, win rate, return on capital, and typical hold time for each
-  strategy you've traded under. It's comparing your results to your results — not the strategy
-  descriptions to each other.
+  strategy you've traded under — your results against your results, not the strategy
+  descriptions against each other.
 - **By item.** Which items actually make you money. Items you've flipped once are hidden unless you
   ask for them, since one flip tells you almost nothing.
 - **Plan vs. actual.** The buy and sell targets you were given against the prices you really filled
@@ -234,13 +232,12 @@ there for the plugin, and a separate **desktop access token** for this app under
 **Settings → Website**. Your GE fills — partial and complete — arrive at the website while
 RuneLite is running, even if this app is shut, and come across next time you open the toolkit.
 
-The plugin no longer writes to a folder on this PC, and this app no longer reads one. The
-RuneLite Plugin Hub does not accept a plugin that feeds an application on the same machine it
-runs on, so the plugin posts to a small sync service instead, the website collects from that,
-and this app reads from the website — plugin, then service, then website, then here, with
-nothing crossing directly between the plugin and this app at any point. Without a desktop
-access token entered, this app simply has nothing to read yet; it does not fall back to
-`~/.runelite/osrs-toolkit` even if an older plugin build has left events sitting there.
+The plugin no longer writes to a folder on this PC, and this app no longer reads one: the
+RuneLite Plugin Hub doesn't accept a plugin that feeds an app on the same machine, so the
+plugin posts to a small sync service, the website collects from that, and this app reads from
+the website. Nothing crosses directly between the plugin and this app. Without a desktop
+access token entered, this app has nothing to read yet — it does not fall back to
+`~/.runelite/osrs-toolkit` even if an older plugin build left events sitting there.
 
 [![RuneLite GE fills and player trade activity in the journal](docs/images/runelite-activity.png)](docs/images/runelite-activity.png)
 
@@ -336,10 +333,9 @@ Chaos Elemental.
 at that time. It does not mean every item traded at 14:03:03.
 
 Quiet items might not have traded for half an hour, two hours, or longer. The **Oldest trade**,
-**Buy trade age**, and **Oldest trade used** columns tell you how old the real trades behind each
-result are. For a skilling method, that's whichever ingredient or output has gone longest without
-trading. So a fresh download can still contain old prices — that's the truth about the item, not a
-bug in the app.
+**Buy trade age**, and **Oldest trade used** columns show how old the real trades behind each
+result are. For a skilling method, that's whichever ingredient or output has gone longest
+without trading — a fresh download can still show old prices; that reflects the item, not a bug.
 
 Prices are downloaded once and shared by every page. Refreshing by hand greys out the refresh
 buttons until it's done, leaves the window usable, and redraws whatever page you're on. If the API
@@ -374,23 +370,22 @@ one. You can also check whenever you like from **Settings → About**. Either wa
 the official GitHub release and checks it against GitHub's own SHA-256 before replacing anything.
 
 An installed copy updates itself: it closes, writes the new version into the same folder, and
-reopens on it. No installer to click through, no second window asking something you already
-answered. An all-users install stays all-users and a per-user install stays per-user, so you never
-end up with a stray second copy. Portable copies are the exception — they get offered the setup
-wizard, because for them it's a real question: it makes a proper installed copy and leaves your
-portable folder alone.
+reopens on it — no installer to click through. An all-users install stays all-users and a
+per-user install stays per-user, so you never end up with a stray second copy. Portable copies
+are the exception: they get offered the setup wizard instead, which installs a proper copy and
+leaves the portable folder alone.
 
 After an update, a **What's new** window shows that version's changes once, straight from the
 bundled [changelog](CHANGELOG.md). It's still there in **Settings → About** afterwards.
 
-Your journal, imported trades, settings, watchlists, and cached prices all live in local folders on
-your PC. Nothing signed in, and that is the whole story. Sign in under **Settings → Website**
-with a token from your [runescope.app](https://runescope.app) profile and your journal — manual
-trades and tracked positions — also mirrors to that account, which is what lets a phone or
-another PC see the same one. Prices come from the OSRS Wiki API, update checks from GitHub
-Releases, and character lookups from the public hiscores. OSRS Toolkit never asks for or stores
-a Jagex password, bank PIN, authenticator code, or anything else that gets you into the game. If
-you find a security problem, the [security policy](SECURITY.md) says how to report it.
+Your journal, imported trades, settings, watchlists, and cached prices all live in local folders
+on your PC — nothing signed in, nothing sent anywhere. Sign in under **Settings → Website** with
+a token from your [runescope.app](https://runescope.app) profile and your journal — manual
+trades and tracked positions — also mirrors to that account, so a phone or another PC can see
+the same one. Prices come from the OSRS Wiki API, update checks from GitHub Releases, and
+character lookups from the public hiscores. OSRS Toolkit never asks for or stores a Jagex
+password, bank PIN, authenticator code, or anything else that gets you into the game. If you
+find a security problem, the [security policy](SECURITY.md) says how to report it.
 
 ## Quick start
 

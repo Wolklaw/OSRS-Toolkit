@@ -1,8 +1,7 @@
 """Export the Trade Journal to CSV, independent of Qt.
 
-Covers every tracked position and every manually entered trade, regardless of the status
-or period filter currently selected on screen — an export is a data backup, not a view of
-the table, so it should not silently drop rows the user has filtered out.
+Includes every tracked position and manual trade regardless of the current status/period
+filter — an export is a backup, not a view of the filtered table.
 """
 
 from __future__ import annotations

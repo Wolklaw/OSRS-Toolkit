@@ -24,11 +24,7 @@ _HISTORY_TIMESTEP = "6h"
 
 
 class TimeseriesWorker(QObject):
-    """Fetches one item's price history off the GUI thread.
-
-    Owned by ``ItemDetailsDialog`` rather than defined alongside the app's other workers,
-    since it exists only to serve that dialog's Price history tab.
-    """
+    """Fetches one item's price history off the GUI thread, for the Price history tab."""
 
     finished = Signal(object)
     failed = Signal(str)
@@ -153,9 +149,8 @@ class ItemDetailsDialog(QDialog):
         return tab
 
     def _tab_changed(self, index: int) -> None:
-        # Fetched only once the tab is actually opened, both to avoid a network call for
-        # the common case of a user who only checks the Overview metrics, and so a dialog
-        # can be constructed in tests without triggering one.
+        # Fetched only once the tab is actually opened, to skip the network call for users
+        # who never check it, and so tests can build a dialog without triggering one.
         if index != self._history_tab_index or self._history_requested:
             return
         self._history_requested = True
@@ -170,9 +165,8 @@ class ItemDetailsDialog(QDialog):
         worker.finished.connect(thread.quit)
         worker.failed.connect(thread.quit)
         thread.finished.connect(thread.deleteLater)
-        # moveToThread does not parent the worker to anything, so without holding this
-        # reference Python would garbage-collect it before the thread's event loop ever
-        # gets to run it — the worker would simply never fire.
+        # moveToThread doesn't parent the worker to anything, so without this reference
+        # Python would garbage-collect it before the thread ever runs it.
         self._history_thread = thread
         self._history_worker = worker
         thread.start()

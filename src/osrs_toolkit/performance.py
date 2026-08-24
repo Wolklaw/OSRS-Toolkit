@@ -1,18 +1,9 @@
 """Grade the trade journal's recorded history against the plans that produced it.
 
-The app already predicts — ``ranking`` picks a strategy and target prices — and already
-records what happened, because ``journal`` keeps every real fill. Nothing compared the two.
-These are the pure functions that do, kept free of Qt so they can be tested directly the way
-``journal_presentation`` and ``ranking`` are.
-
-Every figure here is **realized**: it comes from recorded sale fills, never from a current
-suggestion. A position still waiting to sell contributes the part it has sold and nothing
-else, and a projection never counts as a result.
-
-Manually entered completed trades are included alongside tracked positions, under the
-``MANUAL_STRATEGY`` heading. They have no plan to grade, so they are excluded from
-``calibration`` — but leaving them out of the totals would make this page disagree with the
-Trade Journal's own summary cards, which count them.
+Pure functions, kept free of Qt so they can be tested directly. Every figure is **realized**
+— from recorded sale fills, never a current suggestion. Manually entered trades are included
+in totals (to match the Trade Journal's summary cards) but excluded from ``calibration``,
+since they have no plan to grade.
 """
 
 from __future__ import annotations
@@ -40,9 +31,8 @@ DEFAULT_MINIMUM_ITEM_POSITIONS = 2
 class RealizedResult:
     """One finished piece of trading, normalized so every aggregate reads the same shape.
 
-    ``basis`` is the cost of the quantity *actually sold*, not of the whole position. A
-    position half-sold has only half its capital at work in the result it has produced so
-    far; charging the full outlay against a half-size profit would understate the return.
+    ``basis`` is the cost of the quantity *actually sold*, not the whole position — a
+    half-sold position should only be charged for the capital that produced its result.
     """
 
     item_name: str
@@ -88,13 +78,10 @@ class CalibrationRow:
     actual: int
     positions: int
     favourable_direction: int
-    # ``note`` is short enough to sit in a column without forcing the table sideways;
-    # ``detail`` carries the caveats and rides along as the row's tooltip.
+    # note: fits in a table column. detail: caveats, shown as the row's tooltip.
     note: str
     detail: str
-    # Prices are always positive and read as plain amounts; a profit can be negative and
-    # has to carry its sign. The UI formats the two differently.
-    signed: bool = False
+    signed: bool = False  # Profit can be negative and needs its sign; prices don't.
 
     @property
     def drift(self) -> float | None:
@@ -125,15 +112,12 @@ def _parse_timestamp(timestamp: str | None) -> datetime | None:
 
 
 def _hold_hours(trade: TrackedTrade) -> float | None:
-    """Hours from opening a position to finishing it, where that is actually known.
+    """Hours from opening a position to finishing it, where that is known.
 
-    Taken from the position's own timestamps rather than from individual fills, because
-    ``update_tracked`` rewrites a position's fills wholesale on every edit — a per-fill
-    timestamp would be reset to "now" the moment a user corrected a price.
-
-    Positions saved before ``completed_at`` existed were backfilled with their creation
-    time, which is why a zero-length hold is treated as unknown rather than as a
-    same-instant flip. Recording a buy and a sale in the same second does not happen.
+    Uses the position's own timestamps, not individual fills — ``update_tracked`` rewrites
+    fills wholesale on every edit, which would reset a per-fill timestamp to "now". A
+    zero-length hold is treated as unknown rather than a same-instant flip, since positions
+    saved before ``completed_at`` existed were backfilled with their creation time.
     """
     started = _parse_timestamp(trade.created_at)
     finished = _parse_timestamp(trade.completed_at)
@@ -151,8 +135,8 @@ def realized_results(
 ) -> list[RealizedResult]:
     """Every position and manual trade that has actually produced a result, in ``period``.
 
-    Period scoping matches the Trade Journal exactly — the same two helpers, so the two
-    pages can never disagree about which history is in view.
+    Period scoping uses the same two helpers as the Trade Journal, so the two pages agree
+    on which history is in view.
     """
     results: list[RealizedResult] = []
     for trade in tracked:
@@ -187,11 +171,8 @@ def realized_results(
 
 
 def _return_on_capital(results: list[RealizedResult]) -> float | None:
-    """Capital-weighted return, not the mean of each position's ROI.
-
-    A 400 gp flip returning 60% and a 40m flip returning 1% do not average to 30.5% of
-    anything a trader can spend.
-    """
+    """Capital-weighted return, not the mean of each position's ROI (a 400gp flip at 60%
+    and a 40m flip at 1% shouldn't average to 30.5%)."""
     basis = sum(result.basis for result in results)
     if basis <= 0:
         return None
@@ -261,12 +242,9 @@ def by_item(
 def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list[CalibrationRow]:
     """Compare the plan each position was opened with against what it really did.
 
-    The plan is ``target_buy``/``target_sell`` — the original suggestion, preserved for the
-    life of the position — never ``current_*_suggestion``, which is refreshed against a
-    later market and would grade the plan against a moved goalpost.
-
-    Prices are weighted by the quantity behind them, so a 5,000-unit position counts for
-    more than a single-unit one instead of both being one sample.
+    Plan is ``target_buy``/``target_sell`` (the original, preserved suggestion), never
+    ``current_*_suggestion`` which refreshes against a later market. Prices are weighted by
+    quantity, so a 5,000-unit position counts for more than a single-unit one.
     """
     planned_buy = actual_buy = bought = 0
     buy_positions = 0
@@ -279,11 +257,9 @@ def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list
         in_period = tracked_position_within_period(trade.completed_at, period, now)
         if not in_period:
             continue
-        # Fills where there are any, else the stored weighted average over the tracked
-        # quantity — the same fallback ``TrackedTrade.invested`` uses. A position marked
-        # bought before per-fill prices existed only gains its fill rows at the next
-        # start-up migration, and until then it should not silently drop out of the buy
-        # comparison while still counting in the sell and profit ones.
+        # Fills where there are any, else the stored weighted average (same fallback as
+        # TrackedTrade.invested) — positions predating per-fill prices only gain fill rows
+        # at the next migration, and shouldn't drop out of the buy comparison until then.
         average_buy = trade.average_buy_price if trade.buy_fills else trade.actual_buy
         buy_quantity = trade.bought_quantity if trade.buy_fills else trade.quantity
         if average_buy is not None and trade.target_buy > 0 and buy_quantity > 0:
@@ -299,8 +275,7 @@ def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list
             sell_positions += 1
         realized = trade.realized_profit
         if realized is not None and trade.sold_quantity > 0:
-            # What the original targets promised for the quantity that actually sold, so
-            # both sides of the comparison cover the same goods.
+            # What the original targets promised, for the quantity that actually sold.
             per_unit = trade.target_sell - trade.target_buy - ge_tax(trade.target_sell)
             planned_profit += per_unit * trade.sold_quantity
             actual_profit += realized

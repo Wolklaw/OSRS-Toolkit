@@ -1,18 +1,12 @@
-"""Generate the Inno Setup wizard artwork using the existing Qt build dependency.
+"""Generate the Inno Setup wizard artwork (sidebar and badge images) using the existing Qt
+build dependency, styled to match the application icon instead of Inno's stock grey wizard.
 
-Inno Setup's stock wizard is unmistakably a stock wizard: grey, wordless, and identical to
-every other installer built the same way. These two images are the whole of what the setup
-program shows about itself before anything is installed, so they carry the same colours as
-the application icon rather than introducing a second look.
+Each image is drawn once against a logical canvas and rasterised at several sizes, since Inno
+picks the closest match for the display's scaling. Output is BMP for compatibility with all
+6.x versions of Inno Setup (PNG support only arrived in 6.3).
 
-Both are drawn once against a logical canvas and rasterised at several sizes, because Inno
-picks the closest match for the display's scaling and will otherwise stretch one bitmap
-across a 4K screen. The output is BMP: PNG support arrived in Inno Setup 6.3, and BMP works
-on every 6.x a contributor might have installed.
-
-The files land in packaging/wizard/ and not in assets/, which is deliberate — the compiled
-build sweeps up all of assets/, and installer chrome has no business inside the running
-application.
+Files land in packaging/wizard/, not assets/, since the compiled build sweeps up all of
+assets/ and installer chrome shouldn't ship inside the running application.
 """
 
 from pathlib import Path
@@ -37,8 +31,7 @@ GOLD = QColor("#d5ad52")
 GOLD_BRIGHT = QColor("#f0c862")
 MUTED = QColor("#91a0b4")
 
-# Inno Setup scales the wizard images by the display's DPI and picks the nearest supplied
-# size. These are the sizes its own documentation lists for the two slots.
+# Sizes Inno Setup's docs list for the two image slots, scaled by display DPI.
 SIDEBAR_SIZES = ((164, 314), (192, 386), (246, 459), (328, 628), (410, 797))
 BADGE_SIZES = ((55, 55), (64, 68), (92, 97), (110, 116), (138, 140), (164, 161))
 
@@ -104,8 +97,6 @@ def _render(name: str, sizes: tuple[tuple[int, int], ...], logical, draw) -> lis
         image, painter = _canvas(width, height, logical)
         draw(painter)
         painter.end()
-        # Inno's own naming: the base size is unsuffixed, larger ones carry @2x-style
-        # markers only by convention, so plain dimensions keep the .iss list readable.
         path = OUTPUT_DIR / f"{name}-{width}x{height}.bmp"
         if not image.save(str(path), "BMP"):
             raise RuntimeError(f"Qt could not write {path}")

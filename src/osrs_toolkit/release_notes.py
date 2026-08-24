@@ -1,11 +1,8 @@
-"""Read the bundled CHANGELOG so the app can show what changed in the version you run.
+"""Reads the bundled CHANGELOG so the app can show what changed in the running version.
 
-The changelog is the single source of truth for release notes: writing an entry for a
-release is all that is needed for the "What's new" window to describe it. That window
-shows headlines rather than the entries in full — every release here is described at
-length, and someone who skipped three versions wants to know what they missed, not to
-read three pages — so a release may open with a "### Highlights" section saying the
-short version of itself. Without one, each entry is cut back to its opening sentence.
+The "What's new" window shows headlines, not full entries: a release may open with a
+"### Highlights" section for its short version; without one, each entry is cut to its
+opening sentence.
 """
 
 from __future__ import annotations
@@ -23,9 +20,8 @@ _BULLET = re.compile(r"^[-*]\s+(.*)$")
 _CODE_SPAN = re.compile(r"`([^`]+)`")
 _BOLD_SPAN = re.compile(r"\*\*([^*]+)\*\*")
 _LINK_SPAN = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
-# A sentence ends where the next one starts, which is why the capital letter matters: a
-# changelog entry quoting a figure like "Est. 12,345 gp" has a full stop mid-sentence, and
-# splitting there would cut the line off in the middle of its own example.
+# Requires a capital letter after the break so "Est. 12,345 gp" (a mid-sentence full stop)
+# doesn't get split.
 _SENTENCE_END = re.compile(r'(?<=[.!?])\s+(?=[A-Z"“])')
 
 # "Unreleased" is a placeholder heading rather than a version anyone can be running.
@@ -125,8 +121,8 @@ def notes_for_version(releases: list[ReleaseNotes], version: str) -> ReleaseNote
 
 
 def version_key(version: str) -> tuple[int, ...]:
-    """Order versions by their numbers. Anything unparseable sorts oldest, so a changelog
-    with an odd heading in it costs that one entry rather than the whole catch-up."""
+    """Order versions by their numbers. Unparseable text sorts oldest, so one bad heading
+    doesn't break the whole catch-up."""
     digits = re.fullmatch(r"v?(\d+(?:\.\d+)*)", version.strip())
     if not digits:
         return ()
@@ -142,14 +138,11 @@ def catch_up_notes(
 ) -> list[ReleaseNotes]:
     """The releases to describe on this launch, newest first.
 
-    Never anything newer than ``current``: the changelog ships with the app, so an entry
-    above the running version is one this build does not contain. ``since`` is the version
-    last seen, and everything after it is what was missed — updating three versions at
-    once should say so rather than describe only the newest. ``limit`` keeps a long-idle
-    install from opening onto a wall of history.
+    Never anything newer than ``current`` (the changelog ships with the app). ``since`` is
+    the last version seen, so updating three versions at once describes all three, not just
+    the newest. ``limit`` caps a long-idle install from opening onto a wall of history.
 
-    An empty result (no ``since`` match, or a build older than the one last run) falls
-    back to the running version alone, so the window always has something to say.
+    Falls back to just the running version if nothing else qualifies.
     """
     running = version_key(current)
     missed = version_key(since) if since else ()
@@ -178,11 +171,9 @@ class Highlight:
 def summarize(notes: ReleaseNotes, limit: int = 4) -> tuple[tuple[Highlight, ...], int]:
     """A release in at most ``limit`` lines, with the number of entries left out.
 
-    A "Highlights" section is taken as written — it is the summary someone wrote on
-    purpose, and it needs no label saying which kind of change it is. Failing that, every
-    entry is cut back to its opening sentence and labelled with the section it came from,
-    taking one section at a time in turn: a release that fixed four things and changed
-    three would otherwise describe itself entirely in bug fixes.
+    A "Highlights" section is used as written. Otherwise entries are cut to their opening
+    sentence and interleaved round-robin across sections, so e.g. four fixes and three
+    changes don't describe the release entirely as bug fixes.
     """
     for section in notes.sections:
         if section.heading.strip().lower() == HIGHLIGHTS_HEADING:

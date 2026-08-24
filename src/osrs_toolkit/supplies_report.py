@@ -1,8 +1,6 @@
 """Summarize Trade Journal positions marked 'Supplies' — quest and skilling buys that
-aren't flips — into a spend report grouped by item.
-
-Kept free of Qt so it can be tested directly the way ``journal_presentation`` and
-``performance`` are.
+aren't flips — into a spend report grouped by item. Kept free of Qt so it can be tested
+directly.
 """
 
 from __future__ import annotations
@@ -14,9 +12,9 @@ from osrs_toolkit.journal import TrackedTrade
 
 @dataclass(frozen=True, slots=True)
 class SuppliesSpendRow:
-    """One item's supplies purchases, aggregated across every position marked 'Supplies'
-    for it. ``spent`` uses each position's ``invested`` — the cost of what was actually
-    bought, not the full planned quantity of a still-filling buy."""
+    """One item's supplies purchases, aggregated across every 'Supplies' position for it.
+    ``spent`` uses each position's ``invested`` (cost of what was actually bought, not the
+    full planned quantity of a still-filling buy)."""
 
     item_name: str
     quantity: int

@@ -62,13 +62,10 @@ class JournalPLPresentation:
 
 
 def trade_within_period(timestamp: str | None, period: str, now: datetime) -> bool:
-    """Return whether an ISO timestamp falls inside the selected earnings period.
+    """Whether an ISO timestamp falls inside the selected earnings period.
 
-    ``now`` must be timezone-aware, and its timezone defines the calendar: "Today",
-    "This week", "This month", and "This year" are boundaries in *that* zone, so passing
-    a local ``now`` makes them mean the user's day rather than the UTC day. Stored
-    timestamps are converted into it before any date comparison. A naive stored timestamp
-    is read as UTC, since that is what this app writes (``datetime.now(UTC)``).
+    ``now`` must be timezone-aware — its zone defines "Today"/"This week"/etc, so a naive
+    stored timestamp is read as UTC (what this app writes) and converted into it.
     """
     if period == "All time":
         return True
@@ -101,12 +98,9 @@ def trade_within_period(timestamp: str | None, period: str, now: datetime) -> bo
 def tracked_position_within_period(completed_at: str | None, period: str, now: datetime) -> bool:
     """Scope a tracked position to the selected period.
 
-    The period filter scopes *history*, so it only applies to positions that have finished.
-    A position still in progress has no completion time to place in any period, so it stays
-    in scope: its row keeps showing and the profit already realized from its recorded sale
-    fills keeps counting toward the summary cards. Both callers must use this one rule —
-    scoping the rows and the cards differently is what let a partially sold position
-    display "+22,500 gp" above a summary card reading zero.
+    The period filter scopes history, so an in-progress position (no completion time) stays
+    in scope. Both the row list and the summary cards must use this same rule, or a
+    partially sold position can show profit in one and zero in the other.
     """
     if completed_at is None:
         return True
@@ -114,12 +108,10 @@ def tracked_position_within_period(completed_at: str | None, period: str, now: d
 
 
 def journal_status_matches(status: str, selected_filter: str) -> bool:
-    """Return whether a journal row belongs in the selected status group.
+    """Whether a journal row belongs in the selected status group.
 
-    "Supplies" is a status like any other here — a quest or skilling buy the player has
-    said isn't a flip, set the same way as any other status change (the Update dialog),
-    and filtered the same way. It never counts toward "Active trades": it isn't a trade in
-    progress, it's an entry excluded from trading altogether.
+    "Supplies" is a status like any other — set via the Update dialog, filtered the same
+    way, and never counted toward "Active trades" since it isn't a trade in progress.
     """
     if selected_filter == "All statuses":
         return True
@@ -145,19 +137,16 @@ def journal_display_status(
     item_id: int | None,
     placed_item_ids: frozenset[int] | None,
 ) -> str:
-    """How a position's status should read, given what is actually on the Grand Exchange.
+    """How a position's status should read, given what's actually on the GE.
 
-    "Pending buy" says two different things at once: an offer is out there filling, and a
-    flip is planned but not placed. They look identical in the table, and they stay that way
-    after a cancelled offer — a plan the player made is deliberately kept rather than deleted
-    with the offer that was placed for it, so the row outlives the offer that explains it.
-    A pending buy with nothing bought and no Grand Exchange slot holding a buy for that item
-    reads as "Planned" instead. Only the label changes: the stored status is untouched, so
-    filters, sorting and the Update dialog all still see one status.
+    "Pending buy" covers both an offer currently filling and a flip only planned, and they
+    look identical even after a cancelled offer (the plan is kept, not deleted with the
+    offer). With nothing bought and no live GE slot for the item, it reads as "Planned"
+    instead — only the label changes, the stored status stays untouched.
 
-    ``placed_item_ids`` is None when there is no live view of the slots to judge against —
-    RuneLite not connected, or no offer state saved yet. Nothing is relabelled then, because
-    "no offer found" and "nowhere to look" must not read the same.
+    ``placed_item_ids`` is None when there's no live view to judge against (RuneLite not
+    connected, or no offer state saved yet), so nothing is relabelled then — "no offer
+    found" and "nowhere to look" must not read the same.
     """
     if placed_item_ids is None or status != "Pending buy" or bought_quantity > 0:
         return status
@@ -166,19 +155,15 @@ def journal_display_status(
     return PLANNED_STATUS
 
 
-#: Where a position's next move is to buy, and where it is to sell. A row is a candidate for the
-#: open offer box on whichever side it still has something left to do: nothing bought yet, or
-#: bought and waiting to be listed.
+# Where a position's next move is to buy vs. to sell — a row is a candidate for the open
+# offer box on whichever side it still has something left to do.
 _BUY_SIDE_STATUSES = frozenset({"Pending buy"})
 _SELL_SIDE_STATUSES = frozenset({"Bought", "Listed for sale", "Partially sold"})
 
 
 def offer_screen_is_sell_side(status: str) -> bool:
-    """Whether what a position needs next is a sale rather than a buy.
-
-    Which of the two price columns is the one the player is about to type into, and so which one
-    the highlight has to be on.
-    """
+    """Whether a position needs a sale next rather than a buy — decides which price
+    column the highlight belongs on."""
     return status in _SELL_SIDE_STATUSES
 
 
@@ -189,19 +174,14 @@ def offer_screen_positions(
 ) -> frozenset[int]:
     """The journal rows an open Grand Exchange offer box is about.
 
-    ``candidates`` is ``(position id, item id, stored status)`` for every tracked position; the
-    stored status, not the displayed one, because "Planned" is a label the table puts on a
-    pending buy and not a state a position is ever in.
+    ``candidates`` is ``(position id, item id, stored status)``; the stored status, not the
+    displayed one, since "Planned" is a table label rather than a real state.
 
-    Every row for the item, narrowed to the ones whose next move is the side being offered: a
-    flip already bought and waiting to be listed is not what the player is looking at while
-    setting up a buy. The narrowing gives way rather than answering nothing — an item whose only
-    rows are on the other side, or in a status with no side at all like Supplies, still lights
-    them, because the row wanted is far likelier to be one of those than none of them.
-
-    Several rows for one item is an ordinary thing to have and they are all returned. Picking one
-    would mean guessing which of two identical pending buys the player means, and guessing wrong
-    points at the wrong quantity — the exact number this is supposed to be telling them.
+    Narrows to rows whose next move is the side being offered, but falls back to every row
+    for the item if none match — an item whose only rows are on the other side (or in a
+    status with no side, like Supplies) should still light up, since that's likelier to be
+    the wanted row than nothing at all. Several rows for one item all return; picking one
+    would mean guessing which the player means.
     """
     if not item_id:
         return frozenset()
@@ -226,16 +206,13 @@ def live_offer_positions(
     live_offers: Iterable[tuple[int, str | None]],
     candidates: Iterable[tuple[int, int | None, str]],
 ) -> frozenset[int]:
-    """The journal rows the offers already out on the Grand Exchange are about.
+    """The journal rows the offers already out on the GE are about.
 
-    What the highlight falls back to for the rest of the trade. Setting an offer up is one screen
-    of a session that goes on through watching it fill and collecting it, and the row stays worth
-    pointing at the whole way — but from the confirm onwards the interface no longer names an
-    item, only the slots do. ``live_offers`` is ``(item id, side)`` per occupied slot, and each is
-    matched to rows exactly as an open box would be, so a row lights for the same reasons at
-    every stage rather than by two rules that could disagree.
+    What the highlight falls back to once a box is confirmed and the interface no longer
+    names an item, only the slots do. ``live_offers`` is ``(item id, side)`` per occupied
+    slot, matched to rows the same way an open box would be.
 
-    ``candidates`` is consumed once per offer, so it must be a sequence rather than an iterator.
+    ``candidates`` is consumed once per offer, so it must be a sequence, not an iterator.
     """
     return frozenset().union(
         *(offer_screen_positions(item_id, side, candidates) for item_id, side in live_offers),
@@ -253,15 +230,12 @@ def trade_needs_attention(
     *,
     threshold_pct: float = 2.0,
 ) -> bool:
-    """A listed ask that current market conditions no longer support.
+    """A listed ask the market no longer supports.
 
-    True when a position is actively for sale and the market's current passive sell
-    target has fallen at least ``threshold_pct`` below what this position is asking —
-    meaning the ask is stale and unlikely to fill soon.
-
-    ``asking_price`` must be what the position is really asking, not what the app suggests
-    it ask: see ``TrackedTrade.asking_price``. Passing the suggestion flags a position the
-    player has already relisted at the market's own price, and no relist can clear it.
+    True when the position is actively for sale and the market's current passive sell
+    target has fallen at least ``threshold_pct`` below the ask. ``asking_price`` must be
+    the real ask (see ``TrackedTrade.asking_price``) — passing the suggestion would flag a
+    position already relisted at the market's own price, with no relist able to clear it.
     """
     if status not in _ATTENTION_STATUSES:
         return False
@@ -290,10 +264,9 @@ def journal_pl_presentation(
         return JournalPLPresentation("—", "neutral")
 
     if status == "Supplies":
-        # A Supplies position's sell suggestion mirrors its buy price (see
-        # apply_offer_opened/apply_synced_ge_fill), so projecting a sale here would show
-        # roughly "the GE tax you'd pay if you resold it at cost" — an alarming, meaningless
-        # number for something that was never going to be sold in the first place.
+        # Supplies mirrors its sell suggestion to its buy price (see apply_offer_opened /
+        # apply_synced_ge_fill), so projecting a sale here would just show the GE tax on
+        # reselling at cost — meaningless for something never meant to be sold.
         return JournalPLPresentation(
             "—",
             "neutral",

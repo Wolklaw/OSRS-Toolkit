@@ -19,10 +19,8 @@ USER_AGENT = f"OSRS-Toolkit-Updater/{__version__} (+https://github.com/Wolklaw/O
 _FINALIZE_ATTEMPTS = 5
 _FINALIZE_RETRY_SECONDS = 0.4
 
-# Inno Setup registers an uninstall entry under the AppId in packaging/installer.iss with
-# "_is1" appended. Changing the AppId there without changing it here would leave every
-# installed copy believing it is portable, quietly demoting in-place updates back to the
-# wizard, so the two are a pair.
+# Inno Setup registers the uninstall entry under the AppId in packaging/installer.iss + "_is1".
+# Keep both in sync — a mismatch makes every install look portable and falls back to the wizard.
 _SETUP_APP_ID = "{D8518C0E-7D14-47D9-A9D8-4030E3B25DB6}_is1"
 _UNINSTALL_KEY = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{_SETUP_APP_ID}"
 
@@ -129,12 +127,10 @@ def download_installer(
 def _finalize_download(partial: Path, destination: Path) -> None:
     """Move the verified download into place, retrying past a transient file lock.
 
-    A file just written to disk is a favorite target for antivirus real-time scanning,
-    which can hold it open for a moment and make the rename fail with Windows error 5
-    ("Access is denied") even though nothing is actually wrong. Retrying briefly clears
-    that up; a destination genuinely locked by something else (e.g. a copy of the
-    installer left running from an earlier attempt) keeps failing and gets a clearer,
-    actionable message instead of the raw OS error.
+    Antivirus scanning can briefly hold the file open and fail the rename with Windows
+    error 5 ("Access is denied") even though nothing's wrong. Retry clears that up; a
+    genuinely locked destination (e.g. installer still running) gets a clearer message
+    instead of the raw OS error.
     """
     last_error: OSError | None = None
     for attempt in range(_FINALIZE_ATTEMPTS):
@@ -165,20 +161,17 @@ def application_directory() -> Path:
 def find_install(app_directory: Path | None = None) -> InstallLocation | None:
     """The registered installation this running copy belongs to, if it is one.
 
-    A portable copy is not an installation: nothing registered it, nothing knows how to
-    remove it, and rewriting its folder from underneath it is not this program's business.
-    Setup records the folder it installed into, so "is the code now running the installed
-    copy?" is answered by comparing that folder against this one — rather than by looking
-    for Program Files somewhere in the path, which a portable folder is free to sit inside
-    too, and which says nothing about whether there is an installation to update.
+    A portable copy isn't an installation — nothing registered it or knows how to remove it.
+    Compares this folder against the one Setup recorded, rather than checking for "Program
+    Files" in the path (a portable copy can sit there too).
     """
     if sys.platform != "win32":
         return None
     import winreg
 
     directory = (app_directory or application_directory()).resolve()
-    # Machine-wide first: both registrations can exist at once, and the one this
-    # executable is actually running from is the one that answers the question.
+    # Machine-wide first: both registrations can exist at once, but only the one we're
+    # actually running from matters.
     for root, all_users in (
         (winreg.HKEY_LOCAL_MACHINE, True),
         (winreg.HKEY_CURRENT_USER, False),
@@ -202,11 +195,9 @@ def find_install(app_directory: Path | None = None) -> InstallLocation | None:
 def silent_install_arguments(installer: Path, install: InstallLocation) -> list[str]:
     """The command line that replaces an installed copy without showing a wizard.
 
-    ``/DIR`` and the privilege switch together are what keep an update where it already
-    is. Left to its defaults the setup program installs wherever it is entitled to, so a
-    machine-wide copy updated by an unelevated app would land in the user's own folder and
-    leave the original sitting there — two installations, one of them stale, and a Start
-    Menu entry pointing at whichever was written last.
+    ``/DIR`` plus the privilege switch keep the update in the same location — without them,
+    an unelevated update of a machine-wide install would land in the user's folder instead,
+    leaving two installations behind.
     """
     return [
         str(installer),
@@ -214,13 +205,13 @@ def silent_install_arguments(installer: Path, install: InstallLocation) -> list[
         "/SUPPRESSMSGBOXES",
         "/NORESTART",
         "/NOCANCEL",
-        # Read by the [Run] section of packaging/installer.iss: start the app again once
-        # the files are in place, because this update closed it in order to replace them.
+        # Read by packaging/installer.iss's [Run] section: relaunch the app once files are
+        # in place.
         "/RELAUNCH=1",
         "/ALLUSERS" if install.all_users else "/CURRENTUSER",
         f"/DIR={install.directory}",
         # The app is gone by the time anything can go wrong, so this log is the only
-        # account of a failed update that anyone could later be asked for.
+        # record of a failed update.
         f"/LOG={update_directory() / 'install.log'}",
     ]
 
@@ -228,13 +219,11 @@ def silent_install_arguments(installer: Path, install: InstallLocation) -> list[
 def start_installer(path: Path, install: InstallLocation | None = None) -> None:
     """Hand the update to the setup program and get out of its way.
 
-    An installed copy is replaced in place and restarted with no wizard: the app has
-    already asked whether to update, and putting the same question in a second window is
-    not consent, it is another dialog. A portable copy still gets the wizard, because for
-    it the wizard asks something real — it is being offered an installed copy it does not
-    have, rather than a newer version of one it does.
+    An installed copy is replaced in place with no wizard — the app already asked whether
+    to update. A portable copy still gets the wizard, since it's being offered an install
+    it doesn't have yet.
 
-    Detached, because what it is about to overwrite includes this process's own executable.
+    Detached: what it's about to overwrite includes this process's own executable.
     """
     arguments = silent_install_arguments(path, install) if install else [str(path)]
     creation_flags = 0

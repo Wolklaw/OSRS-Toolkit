@@ -1,12 +1,7 @@
-"""Generate the 1280x640 GitHub social preview card.
+"""Generate the 1280x640 GitHub social preview card (Settings > General > Social preview).
 
-GitHub shows this image when the repository is linked on Discord, Reddit, or anywhere else
-that reads Open Graph tags. Without it, shared links unfurl as a generic avatar-and-commit
-card. Upload the result under Settings > General > Social preview.
-
-The card crops the GE Flipper table and leaves the sidebar out. That keeps the busiest part
-of the app in frame at a readable size, and it means the card never advertises the contents
-of the navigation, which is the part most likely to go out of date between releases.
+Crops the GE Flipper table and leaves the sidebar out, keeping the busiest part of the app
+in frame without showing nav contents that go stale between releases.
 """
 
 from pathlib import Path

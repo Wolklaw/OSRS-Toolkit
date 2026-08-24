@@ -96,7 +96,7 @@ SKILL_GUIDES = {
 
 
 SKILL_METHODS = [
-    # Cooking. Profit assumes every raw fish cooks successfully; the UI calls this out explicitly.
+    # Cooking. Assumes no burns (UI notes this).
     SkillMethod(
         "Cook trout",
         "Cooking",
@@ -405,7 +405,7 @@ SKILL_METHODS = [
         (_item(1601, "Diamond"),),
         (_item(9192, "Diamond bolt tips", 12),),
     ),
-    # Smithing. Item IDs avoid the Cannonball -> Steel cannonball rename that hid this row.
+    # Smithing. IDs pinned to dodge the Cannonball -> Steel cannonball rename.
     SkillMethod(
         "Smith steel cannonballs",
         "Smithing",
@@ -894,7 +894,7 @@ def skill_results(
     *,
     now: int | None = None,
 ) -> list[SkillResult]:
-    del mappings  # Recipes use stable item IDs so display-name changes cannot remove methods.
+    del mappings  # Recipes key on item_id, not display name.
     point_by_id = {point.item_id: point for point in points}
     current_time = int(time.time()) if now is None else now
     results = []

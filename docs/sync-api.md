@@ -7,8 +7,7 @@ the desktop app. The service lives at
 This replaces the local file bridge (`.runelite/osrs-toolkit/`), which the RuneLite Plugin Hub
 rejected in [plugin-hub#14949](https://github.com/runelite/plugin-hub/pull/14949): plugins may
 not depend on a native application running on the user's machine. A web service is acceptable
-because, in the maintainer's words, information sent to a website can be verified where an
-arbitrary local binary cannot.
+because information sent to it can be verified, unlike an arbitrary local binary.
 
 The event payloads themselves are **unchanged**. `ge_fill`, `ge_offer_opened`,
 `ge_offer_cancelled`, `player_trade` and `loadout_snapshot` keep the exact shape they have on
@@ -29,22 +28,21 @@ disk today, so `parse_sync_event` needs no changes. Only the transport moves.
 app once. The token identifies the pairing, not the character — several accounts sit under one
 token and stay separated by the existing `account_hash`.
 
-It is the only credential, it grants access to nothing but that pairing's own data, and the
+It is the only credential, grants access to nothing but that pairing's own data, and the
 service stores only its SHA-256 digest.
 
-Pairing is open by default because the plugin has to work for anyone who installs it. Setting
-`SYNC_INVITE_CODE` closes it, which is what you want while the service is only for people you
-know.
+Pairing is open by default so the plugin works for anyone who installs it. Setting
+`SYNC_INVITE_CODE` closes it, for when the service is only for people you know.
 
 ## Liveness
 
-The old design re-stamped a heartbeat file every 10 seconds because local writes are free. Over
-a network that is 8,640 requests per user per day carrying no information.
+The old design re-stamped a heartbeat file every 10 seconds (cheap for local writes, but 8,640
+requests per user per day over a network, carrying no information).
 
 Liveness is now **derived**: the service records `last_seen` on every authenticated request, and
 the plugin calls `POST /v1/heartbeat` only when it has had nothing else to say for 60 seconds.
-An account reads as connected for 90 seconds after its last contact, which leaves room for one
-heartbeat to be missed entirely.
+An account reads as connected for 90 seconds after its last contact, leaving room for one missed
+heartbeat.
 
 Desktop-side thresholds widen to match:
 
@@ -60,8 +58,8 @@ but the service orders on a **normalised copy**.
 
 Java's `Instant.toString()` prints only as many fractional digits as it needs, so the plugin
 emits both `…:55.35Z` and `…:55.351844100Z`. Compared as text the second sorts *before* the
-first, because `'1'` is below `'Z'`. Two events written in the same second would come back
-reversed — and an offer has to open before its fills land on it.
+first (`'1'` is below `'Z'`), so two events written in the same second could come back reversed
+— and an offer has to open before its fills land on it.
 
 ## Endpoints
 
@@ -75,14 +73,13 @@ Returns `201 { "token": "..." }`.
 Retires the token the request was made with, and deletes everything held under it. Returns
 `{ "revoked": true, "deleted": { ... } }`.
 
-Authenticated by the token being retired, because there is nothing above it to authenticate
-with — a pairing token is the only credential this service has, and holding one is the whole of
-the right to end it.
+Authenticated by the token being retired — a pairing token is the only credential this service
+has, so holding one is sufficient to end it.
 
-**Whoever mints a replacement is expected to call this on the one it replaces.** Without that
-step every old token stays valid forever, and a plugin still holding one keeps syncing
-perfectly into a pairing nobody reads: correct requests, `200` responses, and a page that never
-shows any of it. Revoked, that plugin gets a `401` and says so.
+**Whoever mints a replacement is expected to call this on the one it replaces.** Otherwise the
+old token stays valid forever, and a plugin still holding it keeps syncing into a pairing nobody
+reads: correct requests, `200` responses, and a page that never shows any of it. Revoked, that
+plugin gets a `401` instead.
 
 Anything still queued under the token becomes unreachable the moment it is gone, so drain it
 first if it matters.
@@ -114,10 +111,10 @@ matching `MAX_EVENTS_PER_IMPORT`. The desktop app still sorts by
 Desktop app → service. `{ "event_ids": [...] }`, returns `{ "deleted": n }`. Unknown ids are
 ignored.
 
-**Ack is per-id, not a cursor.** The desktop app deliberately leaves events it does not
-recognise in the queue so a later build can import them — the plugin updates through the Plugin
-Hub while the app updates by hand, so the two drifting apart is the normal case, not corruption.
-A monotonic cursor would silently discard those.
+**Ack is per-id, not a cursor.** The desktop app leaves events it doesn't recognise in the queue
+so a later build can import them — the plugin updates through the Plugin Hub while the app
+updates by hand, so drift between the two is normal, not corruption. A monotonic cursor would
+silently discard those.
 
 ### `POST /v1/heartbeat`
 
@@ -125,11 +122,11 @@ Plugin → service. `{ "account_hash": "...", "account_name": "...", "player_tra
 
 ### `PUT /v1/state/offers` and `PUT /v1/state/screen`
 
-**`PUT`, not `POST`** — these replace the one copy the service keeps, rather than adding to
-something it collects, and the service answers a `POST` here with `405`. Worth stating plainly
-because the plugin got it wrong once and the failure was silent: a `405` is a 4xx, the client
-drops 4xx payloads rather than retrying them, and the heartbeat on the same client kept
-reporting a healthy connection while no live state arrived at all.
+**`PUT`, not `POST`** — these replace the one copy the service keeps rather than adding to a
+collection, and the service answers a `POST` here with `405`. Worth stating plainly: the plugin
+got it wrong once, and the failure was silent — a `405` is a 4xx, the client drops 4xx payloads
+instead of retrying, and the heartbeat on the same client kept reporting a healthy connection
+while no live state arrived.
 
 Plugin → service. `{ "account_hash": "...", "payload": { ... } }`, replacing `state/<hash>.json`
 and `state/<hash>-screen.json`. Last write wins.
@@ -139,18 +136,18 @@ closed — absence is the message, exactly as a deleted file was.
 
 ### `GET /v1/state?account_hash=...`
 
-Website and desktop app → service. Slots, offer box and connection status in one call, because
-a caller wants all three to draw one page — and because three separate calls return three
-different moments assembled as though they agreed.
+Website and desktop app → service. Slots, offer box and connection status in one call, since a
+caller needs all three to draw one page, and three separate calls would return three different
+moments assembled as though they agreed.
 
 `account_hash` may be **left off**, meaning "whichever character this pairing was last seen
-playing". That is the question a caller has before it knows any character to name — a dashboard
-drawing a connection badge, most of all — and answering it here is what keeps that from costing
-a `GET /v1/accounts` first. The hash actually used comes back as `account_hash`, and the slots
-and offer box are that same character's.
+playing" — the question a caller has (a dashboard drawing a connection badge, most of all)
+before it can name any character, and answering it here avoids a `GET /v1/accounts` first. The
+hash actually used comes back as `account_hash`, and the slots and offer box are that same
+character's.
 
-It used to match no status row at all, so an omitted hash answered "not connected" with total
-confidence no matter how many heartbeats had landed.
+An omitted hash used to match no status row at all, answering "not connected" regardless of how
+many heartbeats had landed.
 
 ```json
 {
@@ -165,8 +162,9 @@ confidence no matter how many heartbeats had landed.
 }
 ```
 
-The stamps sit beside the payloads rather than inside them: the offers payload is keyed by slot
-number, so an `updated_at` key within it would be one more thing every reader has to skip.
+The stamps sit beside the payloads rather than inside them, since the offers payload is keyed
+by slot number and an `updated_at` key inside it would be one more thing every reader has to
+skip.
 
 ### `GET /v1/accounts`
 

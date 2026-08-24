@@ -1,18 +1,10 @@
-"""Reading live plugin state from the website instead of from the plugin.
+"""Reads live plugin state from the website instead of the plugin directly.
 
-The RuneLite Plugin Hub will not accept a plugin that feeds an application installed on the
-same machine, and ``LocalFileSource`` -- the plugin writing files into ``.runelite`` for this
-app to pick up -- is exactly that arrangement. The plugin now posts to the sync service, the
-website collects from it, and this app reads from the website. Nothing the plugin does reaches
-this machine directly any more.
+The plugin posts to the sync service, the website collects from it, and this app reads from
+the website — nothing the plugin does reaches this machine directly. Payloads are relayed
+unchanged so ``runelite_sync``'s existing parsers stay the one place that gives them meaning.
 
-What arrives here is the sync service's own payloads, relayed unchanged by the website rather
-than reshaped by it. That is deliberate: ``runelite_sync`` already owns tested parsers for
-these shapes, and a relay keeps the website from becoming a second place where the meaning of
-a Grand Exchange slot is decided.
-
-Only the standard library, like every other module here -- the desktop app declares no runtime
-dependencies at all, and a web client is not a good enough reason to start.
+Standard library only, like every module here — no runtime dependencies.
 """
 
 from __future__ import annotations
@@ -32,16 +24,12 @@ from osrs_toolkit.sync_source import (
 
 DEFAULT_BASE_URL = "https://runescope.app"
 
-#: What the settings dialog's "Check connection" button waits, as opposed to the twenty seconds
-#: a background refresh is happy to. Somebody has just pressed a button and is watching the
-#: window: a wrong address has to come back as an answer while they are still looking at it,
-#: not freeze the app long enough to look like a crash.
+# Timeout for the "Check connection" button (vs. 20s for a background refresh) — someone's
+# watching, so a bad address needs to answer quickly, not freeze the app.
 INTERACTIVE_TIMEOUT_SECONDS = 6.0
 
-#: One dashboard refresh asks for status, then slots, then the open offer box. Those are three
-#: questions about one moment, and over a home connection to a remote site three round trips
-#: to answer them is three times the latency for no extra truth. A window this short collapses
-#: them into one request without ever letting one refresh show another refresh's data.
+# Collapses one refresh's status/slots/offer-box calls into a single request instead of
+# three round trips.
 STATE_CACHE_SECONDS = 2.0
 
 
@@ -52,9 +40,9 @@ class ToolkitWebError(Exception):
 class ToolkitWebClient:
     """Talks to one account's corner of the website, carrying a desktop credential.
 
-    The credential is minted on the website's profile page and pasted in here. It is not the
-    plugin's pairing token: that one is the plugin's write credential to the sync service, and
-    a token that could also read somebody's whole journal would be a much worse thing to leak.
+    Minted on the website's profile page, pasted in here. Distinct from the plugin's pairing
+    token (its write credential to the sync service) — a token that can also read the journal
+    would be worse to leak.
     """
 
     def __init__(
@@ -84,11 +72,9 @@ class ToolkitWebClient:
     ) -> object | None:
         """The response as JSON, or ``None`` for anything that did not clearly succeed.
 
-        Every failure answers the same way on purpose. A caller here is a dashboard refresh
-        deciding whether it has something to draw, and "the site is down", "the token was
-        revoked" and "the reply was not JSON" all mean the same thing to it: nothing to draw
-        this time, try again on the next tick. ``ToolkitWebError`` is raised only where a
-        caller has explicitly asked to be told -- see ``check``.
+        Every failure answers the same way on purpose — a dashboard refresh treats "site
+        down", "token revoked", and "reply wasn't JSON" identically: nothing to draw, try next
+        tick. ``ToolkitWebError`` is raised only where a caller asks to be told — see ``check``.
         """
         if not self.configured:
             return None
@@ -111,9 +97,8 @@ class ToolkitWebClient:
     def check(self) -> str:
         """Confirm the credential works and return the account name it belongs to.
 
-        Used by the settings dialog, which is the one place a person is owed a real answer
-        rather than a quiet retry -- they have just typed something and want to know whether
-        it was right.
+        Used by the settings dialog, where a person just typed something and wants a real
+        answer, not a quiet retry.
         """
         if not self.configured:
             raise ToolkitWebError("Enter the website address and a desktop access token.")
@@ -128,14 +113,10 @@ class ToolkitWebClient:
 class WebAppSource:
     """A :class:`~osrs_toolkit.sync_source.SyncSource` backed by the website.
 
-    Live state -- who is logged in, what is in the eight Grand Exchange slots, what offer box
-    is open -- is relayed from the sync service and parsed by the same code that has always
-    parsed it.
-
-    It yields no pending events, and that is not a gap. Events are the plugin's raw output, and
-    the website has already imported them into the journal that this app now mirrors. Handing
-    them over here as well would import each one twice, and acknowledging them would take them
-    away from the website that has to serve everyone else's view of the same account.
+    Relays live state (login, GE slots, offer box) from the sync service. Yields no pending
+    events on purpose — the website already imported them into the journal this app mirrors;
+    importing them again here would double them, and acknowledging would steal them from other
+    viewers of the same account.
     """
 
     def __init__(self, client: ToolkitWebClient) -> None:
@@ -146,10 +127,8 @@ class WebAppSource:
     def configured(self) -> bool:
         """Whether there is a desktop token to read with at all.
 
-        Distinct from ``status_payload``'s ``detected``: that answers "is the plugin sending
-        anything", which needs a working credential before it can even be asked. Without this,
-        an empty Settings dialog and a plugin that has simply gone quiet look identical to
-        whatever reads this -- and they call for two completely different fixes.
+        Distinct from ``status_payload``'s ``detected`` ("is the plugin sending anything") —
+        without this, an empty Settings dialog and a plugin gone quiet would look identical.
         """
         return self.client.configured
 
@@ -169,8 +148,8 @@ class WebAppSource:
             return (False, None, False)
         payload = self._state()
         if not payload:
-            # Configured but unreachable. Detected stays true so the app can say "cannot reach
-            # the website" rather than "no plugin", which are different problems to fix.
+            # Configured but unreachable — detected stays true so the app says "can't reach
+            # the website", not "no plugin".
             return (True, None, False)
         status = payload.get("status")
         fresh = bool(payload.get("status_fresh"))
