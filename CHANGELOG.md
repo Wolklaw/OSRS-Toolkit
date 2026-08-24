@@ -4,15 +4,23 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-08-23
+
+### Highlights
+
+- This app no longer has any path that reads RuneLite data straight off this PC. With no
+  desktop access token entered it used to fall back to `~/.runelite/osrs-toolkit` silently —
+  exactly the plugin feeding an app on the same machine that the RuneLite Plugin Hub does not
+  accept, and a fresh install's default state until Settings was touched. A fresh install now
+  reads only through the website, configured or not; an empty Settings dialog means nothing
+  arrives, not a quiet fallback.
+
 ### Fixed
 
-- With no desktop access token entered, this app silently read RuneLite data straight out of
-  `~/.runelite/osrs-toolkit` instead of waiting for a website connection — exactly the plugin
-  feeding an app on the same machine that the RuneLite Plugin Hub does not accept. A fresh
-  install now reads only through the website, whether or not a token has been entered for it
-  yet; an empty Settings dialog means nothing arrives, not a quiet fallback. The Connect
-  RuneLite dialog also now says plainly when a token is what's missing, instead of telling
-  someone who already has the plugin running to go install it.
+- The Connect RuneLite dialog told someone who already had the plugin running to go install
+  it, whenever no desktop access token was entered — an unconfigured website connection and a
+  never-installed plugin used to report identically. It now says plainly when a token is
+  what's missing.
 
 ## [1.2.2] - 2026-08-23
 
