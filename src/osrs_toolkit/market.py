@@ -169,9 +169,15 @@ def _parse_timeseries(payload: object) -> list[TimeseriesPoint]:
                 timestamp=timestamp,
                 average_high=_price(entry.get("avgHighPrice")),
                 average_low=_price(entry.get("avgLowPrice")),
+                high_volume=_volume(entry.get("highPriceVolume")),
+                low_volume=_volume(entry.get("lowPriceVolume")),
             )
         )
     return points
+
+
+def _volume(value: object) -> int:
+    return value if isinstance(value, int) and value >= 0 else 0
 
 
 def _positive_int(value: object) -> int | None:

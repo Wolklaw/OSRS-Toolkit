@@ -33,6 +33,40 @@ def test_an_entry_missing_its_timestamp_is_dropped() -> None:
     assert _parse_timeseries(payload) == []
 
 
+def test_a_normal_entry_also_parses_volume() -> None:
+    payload = {
+        "data": [
+            {
+                "timestamp": 1_700_000_000,
+                "avgHighPrice": 210,
+                "avgLowPrice": 195,
+                "highPriceVolume": 300,
+                "lowPriceVolume": 550,
+            }
+        ]
+    }
+
+    (point,) = _parse_timeseries(payload)
+
+    assert point.high_volume == 300
+    assert point.low_volume == 550
+    assert point.total_volume == 850
+
+
+def test_a_missing_or_invalid_volume_defaults_to_zero() -> None:
+    payload = {"data": [{"timestamp": 1_700_000_000, "avgHighPrice": 210, "avgLowPrice": 195}]}
+
+    (point,) = _parse_timeseries(payload)
+
+    assert point.high_volume == 0
+    assert point.low_volume == 0
+    assert point.total_volume == 0
+
+    payload["data"][0]["highPriceVolume"] = "not a number"
+    (point,) = _parse_timeseries(payload)
+    assert point.high_volume == 0
+
+
 def test_a_zero_or_negative_price_is_treated_as_unavailable() -> None:
     payload = {"data": [{"timestamp": 1_700_000_000, "avgHighPrice": 0, "avgLowPrice": -5}]}
 

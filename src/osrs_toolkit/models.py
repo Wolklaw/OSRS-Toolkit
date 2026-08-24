@@ -38,6 +38,12 @@ class TimeseriesPoint:
     timestamp: int
     average_high: int | None
     average_low: int | None
+    high_volume: int = 0
+    low_volume: int = 0
+
+    @property
+    def total_volume(self) -> int:
+        return self.high_volume + self.low_volume
 
 
 @dataclass(frozen=True, slots=True)
