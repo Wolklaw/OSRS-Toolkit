@@ -133,8 +133,6 @@ from osrs_toolkit.formatting import (
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import (
     JournalRepository,
-    NpcLootRecord,
-    PlayerDeathRecord,
     SyncedItem,
     SyncedTrade,
     TrackedTrade,
@@ -165,7 +163,7 @@ from osrs_toolkit.performance import (
     realized_results,
     summarize,
 )
-from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
+from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import (
     STRATEGIES,
     confidence_standing,
