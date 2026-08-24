@@ -8,9 +8,11 @@
 <div class="panel">
   <div class="callout info">
     <strong>Not on the Plugin Hub yet.</strong>
-    <p>The submission is in review, and reviews take a while. Until it lands you build the
-      plugin yourself — about five minutes, and it needs nothing but Java. Everything on this
-      site works without it in the meantime; the plugin only saves you typing.</p>
+    <p>The submission is in review, and reviews take a while — this could be the install method
+      for a good while yet. Until it lands you build the plugin yourself. You'll need about ten
+      minutes, a free Java install, and to open a terminal window once — every step below shows
+      exactly how, even if you have never done this before. Everything on this site works
+      without it in the meantime; the plugin only saves you typing.</p>
   </div>
 </div>
 
@@ -20,16 +22,17 @@
     <ol class="steps">
       <li><strong>Install Java 11 or newer.</strong> If you are not sure you have it, get
         <a href="https://adoptium.net/" target="_blank" rel="noopener">Temurin</a> — the
-        default options are fine.</li>
+        default options are fine. Say yes to everything the installer asks.</li>
       {#
         Every link here is built from PLUGIN_BRANCH rather than written out, so the ZIP, the
         clone and the folder name cannot drift apart -- see the note beside that constant for
         the time they did, and what it cost.
       #}
       <li><strong>Download the plugin.</strong>
-        <a href="{{ plugin_zip_url }}"><strong>Download the ZIP</strong></a> and unzip it —
-        that gives you a folder called
-        <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. With git instead:
+        <a href="{{ plugin_zip_url }}"><strong>Download the ZIP</strong></a>, then right-click
+        it and choose <strong>Extract All</strong> (macOS: just double-click it) — that gives
+        you a folder called <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. With git
+        instead:
         <div class="code-box cmd">
           <code id="clone-cmd">git clone {{ plugin_repo_url }}.git</code>
           <button class="button secondary small" onclick="copyValue('clone-cmd', this)">Copy</button>
@@ -37,16 +40,34 @@
         <p class="hint"><a href="{{ plugin_source_url }}" target="_blank" rel="noopener">Browse
           the source</a> first if you would rather see what you are building.</p>
       </li>
-      <li><strong>Build it.</strong> Open a terminal in that folder and run:
+      <li><strong>Open a terminal in that folder.</strong> This sounds bigger than it is —
+        open the folder in File Explorer, click once in the empty address bar at the top (it
+        highlights blue), type <code>cmd</code>, and press Enter. A black window opens already
+        pointed at the right folder. (Windows 11: right-clicking empty space inside the folder
+        and choosing <strong>Open in Terminal</strong> does the same thing.)
+        <p class="hint">To make sure Java installed correctly, type <code>java -version</code>
+          in that window and press Enter — you should see a version number. If it instead says
+          something like "not recognized", restart your computer and try again; that refreshes
+          what the terminal can find.</p>
+        <details class="faq">
+          <summary>Using macOS or Linux instead?</summary>
+          <p><strong>macOS:</strong> open Terminal (Applications → Utilities → Terminal), type
+            <code>cd </code> with a trailing space, then drag the unzipped folder into the
+            Terminal window and press Enter.</p>
+          <p><strong>Linux:</strong> most file managers offer <strong>Open Terminal Here</strong>
+            on right-click inside the folder; otherwise <code>cd</code> to it by hand.</p>
+        </details>
+      </li>
+      <li><strong>Build it.</strong> Still in that same terminal window, run:
         <div class="code-box cmd">
           <code id="build-cmd">gradlew shadowJar</code>
           <button class="button secondary small" onclick="copyValue('build-cmd', this)">Copy</button>
         </div>
         <p class="hint">On macOS or Linux it is <code>./gradlew shadowJar</code>. The first
-          build downloads Gradle and the RuneLite client, so give it a few minutes; later ones
-          take seconds.</p>
+          build downloads Gradle and the RuneLite client, so give it a few minutes — it can
+          look stuck but is working. Later builds take seconds.</p>
       </li>
-      <li><strong>Run it.</strong>
+      <li><strong>Run it.</strong> Same terminal window again:
         <div class="code-box cmd">
           <code id="run-cmd">java -jar build/libs/{{ plugin_jar_name }}</code>
           <button class="button secondary small" onclick="copyValue('run-cmd', this)">Copy</button>
@@ -69,47 +90,52 @@
       that folder), run the build command once more, and run the jar. Your settings and your
       journal are untouched by a rebuild.</p>
 
-    <h3>If you play on a Jagex account</h3>
-    <p>The Jagex Launcher hands RuneLite your login, and a client started from the command
-      line does not get it — you would land on the old username-and-password screen with no
-      way through. RuneLite has a supported way around this: tell the launcher to write its
-      credentials to a file, which any RuneLite on that machine can then read. These steps are
-      from RuneLite's own
-      <a href="https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts" target="_blank" rel="noopener">Using
-      Jagex Accounts</a> guide.</p>
-    <ol class="steps">
-      <li><strong>Check your RuneLite launcher is 2.6.3 or newer.</strong> The launcher, not
-        the client — older ones cannot do this.</li>
-      <li><strong>Open the launcher's configuration.</strong> On Windows that is <strong>RuneLite
-        (configure)</strong> in the Start menu. On macOS, run
-        <code>/Applications/RuneLite.app/Contents/MacOS/RuneLite --configure</code>; on Linux,
-        pass <code>--configure</code> to the launcher the same way.</li>
-      <li><strong>Add the flag.</strong> In the <strong>Client arguments</strong> box put:
-        <div class="code-box cmd">
-          <code id="jagex-flag">--insecure-write-credentials</code>
-          <button class="button secondary small" onclick="copyValue('jagex-flag', this)">Copy</button>
-        </div>
-        Save, and close the configuration window.
-      </li>
-      <li><strong>Launch RuneLite through the Jagex Launcher once</strong>, the way you
-        normally play. It writes your credentials to
-        <code>.runelite/credentials.properties</code>.</li>
-      <li><strong>Now run the jar from step 4 above.</strong> It reads that file and signs in
-        as your Jagex account, plugin and all.</li>
-    </ol>
+    <details class="faq">
+      <summary>If you play on a Jagex account, one more step</summary>
+      <p class="hint tight">You're on a Jagex account if you sign in through the separate
+        Jagex Launcher app rather than typing a username and password straight into RuneLite.
+        If that's not you, skip this.</p>
+      <p>The Jagex Launcher hands RuneLite your login, and a client started from the command
+        line does not get it — you would land on the old username-and-password screen with no
+        way through. RuneLite has a supported way around this: tell the launcher to write its
+        credentials to a file, which any RuneLite on that machine can then read. These steps are
+        from RuneLite's own
+        <a href="https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts" target="_blank" rel="noopener">Using
+        Jagex Accounts</a> guide.</p>
+      <ol class="steps">
+        <li><strong>Check your RuneLite launcher is 2.6.3 or newer.</strong> The launcher, not
+          the client — older ones cannot do this.</li>
+        <li><strong>Open the launcher's configuration.</strong> On Windows that is <strong>RuneLite
+          (configure)</strong> in the Start menu. On macOS, run
+          <code>/Applications/RuneLite.app/Contents/MacOS/RuneLite --configure</code>; on Linux,
+          pass <code>--configure</code> to the launcher the same way.</li>
+        <li><strong>Add the flag.</strong> In the <strong>Client arguments</strong> box put:
+          <div class="code-box cmd">
+            <code id="jagex-flag">--insecure-write-credentials</code>
+            <button class="button secondary small" onclick="copyValue('jagex-flag', this)">Copy</button>
+          </div>
+          Save, and close the configuration window.
+        </li>
+        <li><strong>Launch RuneLite through the Jagex Launcher once</strong>, the way you
+          normally play. It writes your credentials to
+          <code>.runelite/credentials.properties</code>.</li>
+        <li><strong>Now run the jar the same way as before</strong> (the "Run it" step above).
+          It reads that file and signs in as your Jagex account, plugin and all.</li>
+      </ol>
 
-    <div class="callout">
-      <strong>That file is a login bypass — treat it like a password.</strong>
-      <p>Anyone holding <code>credentials.properties</code> can sign into your account without
-        knowing your password, which is why the flag has "insecure" in its name. Do not share
-        it, and keep it out of screenshots and support posts.</p>
-      <p>When you are done, delete the file and take
-        <code>--insecure-write-credentials</code> back out of the launcher's client arguments,
-        or it is written again on every launch. If you think the file has been seen by anyone
-        else, use <strong>End sessions</strong> in your account settings on
-        <a href="https://secure.runescape.com/m=account-settings/" target="_blank" rel="noopener">runescape.com</a>
-        to invalidate it.</p>
-    </div>
+      <div class="callout">
+        <strong>That file is a login bypass — treat it like a password.</strong>
+        <p>Anyone holding <code>credentials.properties</code> can sign into your account without
+          knowing your password, which is why the flag has "insecure" in its name. Do not share
+          it, and keep it out of screenshots and support posts.</p>
+        <p>When you are done, delete the file and take
+          <code>--insecure-write-credentials</code> back out of the launcher's client arguments,
+          or it is written again on every launch. If you think the file has been seen by anyone
+          else, use <strong>End sessions</strong> in your account settings on
+          <a href="https://secure.runescape.com/m=account-settings/" target="_blank" rel="noopener">runescape.com</a>
+          to invalidate it.</p>
+      </div>
+    </details>
   </div>
 </div>
 
