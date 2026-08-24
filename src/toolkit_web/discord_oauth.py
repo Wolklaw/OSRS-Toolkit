@@ -37,6 +37,12 @@ class DiscordUser:
 
 
 def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
+    # No "prompt" override -- Discord's default already skips the consent screen for a user
+    # who previously authorized this app. "prompt=none" looks like the same optimization but
+    # is not: it also suppresses Discord's own login form, so anyone not already signed into
+    # Discord in that browser (a fresh device, a fresh profile, an installed PWA's isolated
+    # storage) gets bounced to discord.com's homepage with no way back into the flow, instead
+    # of being asked to log in. That's what a fresh tablet with no Discord session hit.
     query = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -44,9 +50,6 @@ def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
             "response_type": "code",
             "scope": "identify",
             "state": state,
-            # Discord otherwise silently re-approves a user who already authorized once,
-            # which is fine — asking every time would just be friction with no benefit here.
-            "prompt": "none",
         }
     )
     return f"{AUTHORIZE_URL}?{query}"
