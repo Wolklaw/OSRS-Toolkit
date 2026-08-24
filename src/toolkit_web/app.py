@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from osrs_toolkit.account import AccountLookupError, fetch_player
 from osrs_toolkit.buy_limits import buy_limit_status
@@ -55,6 +56,8 @@ from toolkit_web.releases import RELEASES_URL, ReleaseCache
 from toolkit_web.serialize import serialize
 from toolkit_web.sessions import COOKIE_NAME, MAX_AGE_SECONDS, SessionSigner
 from toolkit_web.token_probe import mint_pairing_token, probe_token, revoke_pairing_token
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 STATE_COOKIE = "oauth_state"
 
@@ -316,6 +319,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="OSRS Toolkit",
         summary="Web front end for the OSRS Toolkit trade journal.",
     )
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @app.get("/sw.js")
+    def service_worker() -> Response:
+        # Served from root, not /static, so its default scope covers the whole app.
+        return Response(
+            content=(STATIC_DIR / "sw.js").read_text(),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     @app.middleware("http")
     async def no_store_when_signed_in(request: Request, call_next):

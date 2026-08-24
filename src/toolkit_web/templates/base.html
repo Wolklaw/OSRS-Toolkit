@@ -11,6 +11,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if page_title is defined and page_title %}{{ page_title }} · RuneScope{% else %}RuneScope{% endif %}</title>
   <meta name="description" content="RuneScope — Grand Exchange research and a trade journal for Old School RuneScape.">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <meta name="theme-color" content="#101217">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16.png">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RuneScope">
   <script>
     // Applied before the first paint so a light-theme visitor never sees a dark flash on
     // every navigation. No stored value means "follow the system", which is the default.
@@ -804,6 +812,10 @@
   }
 
   if (document.getElementById('market-pill')) { showMarketAge(); }
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+  }
 </script>
 {% block scripts %}{% endblock %}
 </body>
