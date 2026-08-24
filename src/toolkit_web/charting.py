@@ -104,6 +104,70 @@ def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: i
     return "\n".join(lines)
 
 
+def volume_history_svg(points: list[TimeseriesPoint], width: int = 760, height: int = 120) -> str:
+    """A bar chart of total (high + low) volume per interval, oldest first, on the same
+    x-axis time span as ``price_history_svg`` so the two can sit stacked. Empty string when
+    there is nothing plottable — no points, or every interval traded zero volume."""
+    plotted = [(point.timestamp, point.total_volume) for point in points]
+    if len(plotted) < 2:
+        return ""
+    max_volume = max(volume for _timestamp, volume in plotted)
+    if max_volume <= 0:
+        return ""
+    min_time = plotted[0][0]
+    max_time = plotted[-1][0]
+    time_span = max(max_time - min_time, 1)
+
+    padding_left, padding_right, padding_top, padding_bottom = 70, 20, 10, 30
+    plot_width = width - padding_left - padding_right
+    plot_height = height - padding_top - padding_bottom
+    bar_width = max(plot_width / len(plotted) * 0.7, 1)
+
+    def x_for(timestamp: int) -> float:
+        return padding_left + (timestamp - min_time) / time_span * plot_width
+
+    def bar_height(volume: int) -> float:
+        return volume / max_volume * plot_height
+
+    bars = []
+    for timestamp, volume in plotted:
+        if volume <= 0:
+            continue
+        height_px = bar_height(volume)
+        bars.append(
+            f'<rect x="{x_for(timestamp) - bar_width / 2:.1f}" '
+            f'y="{padding_top + plot_height - height_px:.1f}" '
+            f'width="{bar_width:.1f}" height="{height_px:.1f}" fill="{_LOW_COLOR}"/>'
+        )
+    start_label = datetime.fromtimestamp(min_time, tz=UTC).strftime("%b %d")
+    end_label = datetime.fromtimestamp(max_time, tz=UTC).strftime("%b %d")
+
+    return "\n".join(
+        [
+            (
+                f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
+                f'font-family="Segoe UI, system-ui, sans-serif" font-size="12">'
+            ),
+            (
+                f'<line x1="{padding_left}" y1="{height - padding_bottom}" '
+                f'x2="{width - padding_right}" '
+                f'y2="{height - padding_bottom}" stroke="{_GRID_COLOR}"/>'
+            ),
+            (
+                f'<text x="{padding_left - 10}" y="{padding_top + 4}" fill="{_TEXT_COLOR}" '
+                f'text-anchor="end">{max_volume:,}</text>'
+            ),
+            f'<text x="{padding_left}" y="{height - 8}" fill="{_TEXT_COLOR}">{start_label}</text>',
+            (
+                f'<text x="{width - padding_right}" y="{height - 8}" fill="{_TEXT_COLOR}" '
+                f'text-anchor="end">{end_label}</text>'
+            ),
+            *bars,
+            "</svg>",
+        ]
+    )
+
+
 def net_worth_history_svg(
     points: list[tuple[str, int]], width: int = 760, height: int = 200
 ) -> str:

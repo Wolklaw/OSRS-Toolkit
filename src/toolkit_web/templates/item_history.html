@@ -72,10 +72,42 @@
     <span><svg width="11" height="11"><rect width="11" height="11" fill="#5fb0e2"/></svg> Average low</span>
   </div>
   <div style="overflow-x:auto">{{ chart | safe }}</div>
+  {% if history_stats %}
+  <div class="row" style="gap:1.6rem; margin:0.6rem 0 0; font-size:0.82rem; color:var(--muted)">
+    <span>Average spread: {% if history_stats.average_spread is not none %}{{ "{:,}".format(history_stats.average_spread) }} gp{% else %}—{% endif %}</span>
+    <span>Average volume/interval: {{ "{:,}".format(history_stats.average_volume) }}</span>
+    <span>Total volume shown: {{ "{:,}".format(history_stats.total_volume) }}</span>
+  </div>
+  {% endif %}
+  {% if volume_chart %}
+  <h3 style="margin:1.2rem 0 0.3rem; font-size:0.9rem; color:var(--text-dim)">Volume</h3>
+  <div style="overflow-x:auto">{{ volume_chart | safe }}</div>
+  {% endif %}
   {% else %}
   <div class="empty">No price history available for this item yet.</div>
   {% endif %}
 </div>
+
+{% if volume_by_weekday %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Volume by day of week</h2>
+      <p class="hint tight">Average total volume per interval, grouped by weekday — a seasonality flag, not a forecast.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Day</th><th class="num">Average volume</th></tr></thead>
+      <tbody>
+        {% for row in volume_by_weekday %}
+        <tr><td>{{ row.day }}</td><td class="num">{{ "{:,}".format(row.average_volume) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 {% endblock %}
 

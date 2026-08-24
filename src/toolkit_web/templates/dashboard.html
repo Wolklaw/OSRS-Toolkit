@@ -251,6 +251,27 @@
   {% endif %}
 </div>
 
+{% if net_worth_composition %}
+<div class="panel">
+  <h2>Net worth composition</h2>
+  <p class="hint tight">What your latest snapshot and open positions are made of, right now.</p>
+  <div style="display:flex; height:1.6rem; border-radius:6px; overflow:hidden; margin-top:0.8rem; border:1px solid var(--border)">
+    {% for bucket in net_worth_composition %}
+    <div style="width:{{ bucket.percent }}%; background:var({{ bucket.color }})"
+         title="{{ bucket.label }}: {{ '{:,}'.format(bucket.value) }} gp ({{ '%.1f'|format(bucket.percent) }}%)"></div>
+    {% endfor %}
+  </div>
+  <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:0.6rem">
+    {% for bucket in net_worth_composition %}
+    <div style="display:flex; align-items:center; gap:0.4rem">
+      <span style="width:0.7rem; height:0.7rem; border-radius:2px; background:var({{ bucket.color }}); display:inline-block"></span>
+      <span class="hint tight">{{ bucket.label }}: {{ "{:,}".format(bucket.value) }} gp ({{ "%.1f"|format(bucket.percent) }}%)</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% if net_worth_chart %}
 <div class="panel">
   <h2>Net worth over time</h2>

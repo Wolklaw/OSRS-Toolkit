@@ -171,6 +171,33 @@ def test_the_item_history_page_renders_a_chart_when_prices_are_available(
     assert "No price history available" not in response.text
 
 
+def test_the_item_history_page_shows_volume_and_spread_stats(signed_in: TestClient):
+    from unittest.mock import patch
+
+    from osrs_toolkit.models import TimeseriesPoint
+
+    # Sunday and Monday, per the timestamps below.
+    points = [
+        TimeseriesPoint(
+            timestamp=1755392400, average_high=100, average_low=80,
+            high_volume=100, low_volume=50,
+        ),
+        TimeseriesPoint(
+            timestamp=1755478800, average_high=120, average_low=100,
+            high_volume=200, low_volume=100,
+        ),
+    ]
+    with patch("toolkit_web.market_cache.WikiMarketClient.fetch_timeseries", return_value=points):
+        response = signed_in.get("/item/4151")
+
+    assert response.status_code == 200
+    assert "Average spread: 20 gp" in response.text
+    assert "Total volume shown: 450" in response.text
+    assert "Volume by day of week" in response.text
+    assert "Sunday" in response.text
+    assert "Monday" in response.text
+
+
 def test_csv_export_includes_tracked_and_manual_trades(signed_in: TestClient, settings: Settings):
     repository = JournalRepository(settings.journal_path("111"))
     repository.track(4151, "Abyssal whip", 1, target_buy=1_000_000, target_sell=1_100_000)

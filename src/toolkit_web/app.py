@@ -24,7 +24,7 @@ from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS, trade_needs_attention
 from osrs_toolkit.market import MarketDataError
-from osrs_toolkit.models import ItemMapping, MarketPoint
+from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
 from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, plan_flip_portfolio, rank_flips
@@ -39,7 +39,7 @@ from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spe
 
 from toolkit_web import discord_oauth, turnstile
 from toolkit_web.accounts_db import Account, AccountsDB
-from toolkit_web.charting import net_worth_history_svg, price_history_svg
+from toolkit_web.charting import net_worth_history_svg, price_history_svg, volume_history_svg
 from toolkit_web.config import Settings
 from toolkit_web.discord_webhook import is_discord_webhook_url, send_webhook_message
 from toolkit_web.importing import (
@@ -206,6 +206,39 @@ def _desktop_activity(tokens: list) -> tuple[str, str | None]:
     return ("live" if age <= DESKTOP_CONNECTED_SECONDS else "idle"), last
 
 
+def _net_worth_composition(snapshot: object, total_invested: int) -> list[dict]:
+    """What the dashboard's net-worth figure is actually made of, right now — not history,
+    just the latest snapshot split into cash, carried gear, bank, and capital tied up in open
+    Grand Exchange positions. Rows with nothing in them are dropped rather than shown at 0%,
+    since an account with no bank snapshot yet still has open positions worth showing alone.
+    """
+    cash = equipment_value = inventory_value = bank_value = 0
+    if snapshot is not None:
+        cash = snapshot.quantity_owned(995)
+        equipment_value = sum(item.total_value for item in snapshot.equipment if item.item_id != 995)
+        inventory_value = sum(item.total_value for item in snapshot.inventory if item.item_id != 995)
+        bank_value = sum(item.total_value for item in snapshot.bank if item.item_id != 995)
+    buckets = [
+        ("Cash", cash, "--good"),
+        ("Carried gear", equipment_value + inventory_value, "--accent"),
+        ("Bank", bank_value, "--info"),
+        ("GE in-flight", total_invested, "--border-strong"),
+    ]
+    total = sum(value for _label, value, _color in buckets)
+    if total <= 0:
+        return []
+    return [
+        {
+            "label": label,
+            "value": value,
+            "percent": value / total * 100,
+            "color": color,
+        }
+        for label, value, color in buckets
+        if value > 0
+    ]
+
+
 def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
     """Every number the desktop window's item-details dialog shows, for one item.
 
@@ -235,6 +268,40 @@ def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
         "members": item.members,
         "age_minutes": max(0, now - min(point.high_time, point.low_time)) // 60,
     }
+
+
+_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+
+def _history_stats(history: list[TimeseriesPoint]) -> tuple[dict | None, list[dict]]:
+    """Two views of the same timeseries the price chart already has: average spread and
+    volume across the window, and average volume by day of week — a seasonality flag, not
+    a forecast. Both empty for too little history to say anything from."""
+    if not history:
+        return None, []
+    spreads = [
+        point.average_high - point.average_low
+        for point in history
+        if point.average_high is not None and point.average_low is not None
+    ]
+    total_volume = sum(point.total_volume for point in history)
+    stats = {
+        "average_spread": round(sum(spreads) / len(spreads)) if spreads else None,
+        "total_volume": total_volume,
+        "average_volume": round(total_volume / len(history)),
+    }
+    volumes_by_weekday: dict[int, list[int]] = {}
+    for point in history:
+        weekday = datetime.fromtimestamp(point.timestamp, tz=UTC).weekday()
+        volumes_by_weekday.setdefault(weekday, []).append(point.total_volume)
+    by_weekday = [
+        {
+            "day": _WEEKDAY_NAMES[weekday],
+            "average_volume": round(sum(volumes) / len(volumes)),
+        }
+        for weekday, volumes in sorted(volumes_by_weekday.items())
+    ]
+    return stats, by_weekday
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -387,9 +454,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         open_positions = [
             position for position in positions if position.status not in CLOSED_STATUSES
         ]
+        total_invested = sum(position.invested for position in open_positions)
         desktop_state, desktop_last_seen = _desktop_activity(
             accounts.list_desktop_tokens(account.discord_user_id)
         )
+        snapshot = (
+            repository.get_loadout_snapshot(filter_hash)
+            if filter_hash
+            else repository.get_latest_loadout_snapshot()
+        )
+        net_worth_composition = _net_worth_composition(snapshot, total_invested)
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -399,12 +473,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "statuses": list(POSITION_STATUSES),
                 "open_count": len(open_positions),
                 "attention_count": sum(1 for row in position_rows if row["needs_attention"]),
-                "total_invested": sum(position.invested for position in open_positions),
+                "total_invested": total_invested,
                 "total_estimated_profit": sum(
                     position.estimated_profit for position in open_positions
                 ),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
                 "net_worth_chart": net_worth_chart,
+                "net_worth_composition": net_worth_composition,
                 "live_character_selected": live_hash is not None,
                 "plugin_state": plugin_activity(settings, account),
                 "desktop_state": desktop_state,
@@ -439,6 +514,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             account is not None
             and item_id in accounts.list_watchlist_item_ids(account.discord_user_id)
         )
+        history_stats, volume_by_weekday = _history_stats(history)
         return templates.TemplateResponse(
             request,
             "item_history.html",
@@ -449,6 +525,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "breakdown": breakdown,
                 "watched": watched,
                 "chart": price_history_svg(history),
+                "volume_chart": volume_history_svg(history),
+                "history_stats": history_stats,
+                "volume_by_weekday": volume_by_weekday,
                 "has_history": bool(history),
                 **_optional_switcher(account, active),
             },
@@ -633,6 +712,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "window_days": ACTIVITY_WINDOW_DAYS,
                 **switcher,
             },
+        )
+
+    @app.get("/counterparties", response_class=HTMLResponse)
+    def counterparties_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        """Who player trades actually reach, and how each relationship has netted out —
+        lifetime, not windowed like /activity: this is a relationship history, not a feed."""
+        switcher = character_switcher_context(account, active)
+        repository = journal_for(settings, account)
+        trades = repository.list_synced_trades(
+            "player_trade", account_hash=switcher["active_character"]
+        )
+        by_counterparty: dict[str, list] = {}
+        for trade in trades:
+            by_counterparty.setdefault(trade.counterparty or "Unknown", []).append(trade)
+        rows = [
+            {
+                "counterparty": name,
+                "trade_count": len(with_them),
+                "given_value": sum(trade.given_value for trade in with_them),
+                "received_value": sum(trade.received_value for trade in with_them),
+                "net": sum(trade.estimated_difference for trade in with_them),
+                "last_traded_at": max(trade.occurred_at for trade in with_them),
+            }
+            for name, with_them in by_counterparty.items()
+        ]
+        rows.sort(key=lambda row: row["last_traded_at"], reverse=True)
+        return templates.TemplateResponse(
+            request,
+            "counterparties.html",
+            {"account": account, "rows": rows, **switcher},
         )
 
     @app.get("/loot-log", response_class=HTMLResponse)

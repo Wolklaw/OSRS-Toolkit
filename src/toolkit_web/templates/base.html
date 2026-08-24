@@ -532,6 +532,7 @@
 {%- elif name == "skilling" -%}<path d="M17.5 2.5l4 4-3 3-4-4z"/><path d="M14.5 8.5L3 20l1 1L15.5 9.5z"/>
 {%- elif name == "trades" -%}<path d="M5 3h11l3 3v15H5z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/>
 {%- elif name == "activity" -%}<path d="M3 12h4l2.5-7 4 14L16 12h5"/>
+{%- elif name == "counterparties" -%}<circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/>
 {%- elif name == "limits" -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
 {%- elif name == "performance" -%}<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
 {%- elif name == "pvm" -%}<path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/>
@@ -562,6 +563,7 @@
   ("Journal", [
     ("/trades", "Trade Journal", "trades"),
     ("/activity", "RuneLite Activity", "activity"),
+    ("/counterparties", "Trading Partners", "counterparties"),
     ("/buy-limits", "Buy Limits", "limits"),
     ("/performance", "Performance", "performance"),
   ]),
