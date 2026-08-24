@@ -210,3 +210,19 @@ def test_check_alerts_respects_the_cooldown_after_firing(alerting_client: TestCl
     assert first.json()["sent"] == 1
     assert second.json()["sent"] == 0
     sender.assert_called_once()
+
+
+def test_check_alerts_does_not_touch_the_market_when_nothing_is_armed(
+    alerting_client: TestClient,
+):
+    """The scheduler runs on a longer interval than the market cache's TTL, so a tick that
+    reached for prices would find the cache stale and pay for a real fetch every time —
+    to then discover there was nothing to check."""
+    with patch("toolkit_web.market_cache.WikiMarketClient.fetch_snapshot") as fetch:
+        response = alerting_client.post(
+            "/internal/check-alerts", headers={"X-Internal-Token": "test-internal-token"}
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "checked": 0, "sent": 0}
+    fetch.assert_not_called()

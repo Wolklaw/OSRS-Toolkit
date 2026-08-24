@@ -1910,6 +1910,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         provided = request.headers.get("X-Internal-Token")
         if not provided or not secrets.compare_digest(provided, settings.internal_task_token):
             raise HTTPException(status_code=401, detail="Invalid or missing internal token.")
+        # Asked before the market is, so a scheduler tick with nothing armed costs one cheap
+        # SQLite read rather than a full price refresh. The refresh is not free: this runs on
+        # a timer longer than the market cache's own TTL, so every tick would otherwise find
+        # the cache stale and pay for a real fetch to check nothing at all.
+        armed = accounts.list_armed_alerts()
+        if not armed:
+            return {"ok": True, "checked": 0, "sent": 0}
         try:
             mappings, points = market.snapshot()
         except MarketDataError:
@@ -1917,7 +1924,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         point_by_id = {point.item_id: point for point in points}
         now = datetime.now(UTC)
         checked = sent = 0
-        for alert in accounts.list_armed_alerts():
+        for alert in armed:
             checked += 1
             if alert.last_alerted_at:
                 last = datetime.fromisoformat(alert.last_alerted_at)
