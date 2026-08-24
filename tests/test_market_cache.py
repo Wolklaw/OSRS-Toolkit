@@ -8,7 +8,12 @@ from typing import Self
 
 import pytest
 
-from osrs_toolkit.market import MAPPING_TTL_SECONDS, MarketDataError, WikiMarketClient
+from osrs_toolkit.market import (
+    MAPPING_TTL_SECONDS,
+    MAX_TIMESERIES_CACHE_FILES,
+    MarketDataError,
+    WikiMarketClient,
+)
 
 
 class _Response:
@@ -163,3 +168,36 @@ def test_a_reused_mapping_still_carries_its_parsed_values(
     assert mappings[4151].name == "Abyssal whip"
     assert mappings[4151].buy_limit == 70
     assert mappings[4151].high_alch == 72_000
+
+
+def test_the_timeseries_cache_is_pruned_to_a_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One file is written per item whose details are opened, and nothing used to remove
+    them — on a server where anyone can browse to any item, that only grows."""
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for n in range(MAX_TIMESERIES_CACHE_FILES + 20):
+        (cache_dir / f"timeseries_6h_{n}.json").write_text("{}", encoding="utf-8")
+    client = WikiMarketClient(cache_dir=cache_dir)
+    _serve(monkeypatch, {"data": []})
+
+    client.fetch_timeseries(999_999)
+
+    remaining = list(cache_dir.glob("timeseries_*.json"))
+    assert len(remaining) == MAX_TIMESERIES_CACHE_FILES
+
+
+def test_pruning_keeps_the_file_just_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    for n in range(MAX_TIMESERIES_CACHE_FILES + 5):
+        (cache_dir / f"timeseries_6h_{n}.json").write_text("{}", encoding="utf-8")
+    client = WikiMarketClient(cache_dir=cache_dir)
+    _serve(monkeypatch, {"data": []})
+
+    client.fetch_timeseries(999_999)
+
+    assert (cache_dir / "timeseries_6h_999999.json").exists()

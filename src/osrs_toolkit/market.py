@@ -25,6 +25,11 @@ class MarketDataError(RuntimeError):
 #: history to act on regardless.
 MAPPING_TTL_SECONDS = 86_400
 
+#: How many per-item price-history files the cache keeps. One is written per item whose
+#: details are opened, and they are a fallback for when the wiki is unreachable rather than
+#: something worth keeping forever.
+MAX_TIMESERIES_CACHE_FILES = 200
+
 
 class WikiMarketClient:
     BASE_URL = "https://prices.runescape.wiki/api/v1/osrs"
@@ -175,7 +180,30 @@ class WikiMarketClient:
             f"timeseries?timestep={timestep}&id={item_id}",
             cache_key=f"timeseries_{timestep}_{item_id}",
         )
+        self._prune_timeseries_cache()
         return _parse_timeseries(payload)
+
+    def _prune_timeseries_cache(self) -> None:
+        """Keep the newest ``MAX_TIMESERIES_CACHE_FILES`` per-item history files.
+
+        One file lands here for every item whose page is opened, ~45KB each, and nothing
+        ever removed them — on a server where anyone can browse to any item, that is a
+        directory that only grows. Pruning here rather than on a timer keeps it in the one
+        place that creates them, and it costs a directory listing on a call that has just
+        done a network fetch anyway.
+        """
+        try:
+            files = sorted(
+                self.cache_dir.glob("timeseries_*.json"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+            for stale in files[MAX_TIMESERIES_CACHE_FILES:]:
+                stale.unlink(missing_ok=True)
+        except OSError:
+            # Housekeeping only -- the caller already has the data it asked for, and a cache
+            # directory that could not be tidied is not a reason to fail their request.
+            pass
 
 
 def _parse_timeseries(payload: object) -> list[TimeseriesPoint]:
