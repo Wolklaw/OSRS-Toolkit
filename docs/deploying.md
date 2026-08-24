@@ -274,7 +274,7 @@ account does not have without a password prompt.
 | `ModemManager` | No modem devices present (`/dev/ttyUSB*`, `/dev/cdc-wdm*` are absent). ~14MB. |
 | `open-iscsi`, `multipathd` | Zero iSCSI sessions, no multipath storage. |
 | `cloud-init` (5 units) | This is not a cloud instance. |
-| `smbd` / `nmbd` | Samba, ~30MB, no visible connections — **left alone deliberately**, since whether this laptop is used for LAN file sharing is not something the audit could determine. |
+| `smbd` / `nmbd` | Samba, ~30MB, no connections. Confirmed 2026-08-24 that this machine is server-only and shares no files, so both can go. |
 | journald | Uncapped; 96MB today against a ~9.8GB default ceiling. `SystemMaxUse=200M` in `/etc/systemd/journald.conf`. |
 
 ### Rate limiting is a Cloudflare-side job
@@ -323,6 +323,44 @@ Every signed-in page is account-specific. The default cache level only caches st
 extensions, so this is safe as it stands — but a page rule or cache rule that caches HTML for
 `runescope.app` could serve one account's dashboard to another. The app does not currently send
 `Cache-Control: no-store` of its own, so nothing in the response would prevent it.
+
+## What this machine has left to give
+
+Measured 2026-08-24, with both services and the tunnel running:
+
+| | |
+|---|---|
+| CPU | AMD Athlon II P340, 2 cores, ~2.2GHz — 2010-era |
+| Load average | 0.06 / 0.04 / 0.00 |
+| Memory | 3,334MB total, 656MB used, **2,678MB available** |
+| Swap | 3.6GB, **0B used** — never touched since boot |
+| The whole stack | cloudflared 41MB + sync service 58MB + web app 74MB = **173MB** |
+
+So the constraint here is not memory. It is the CPU, and only for work that is actually
+CPU-bound — everything running today is I/O-wait, which is why a fourteen-year-old dual core
+sits at a load average of 0.00 serving a public site.
+
+### Adding a Discord bot
+
+Fits, with one thing to watch. A gateway bot holds a WebSocket open and reacts to events, so
+it is idle almost all the time: a command-and-response bot costs roughly 60–90MB resident and
+near-zero CPU. Against 2,678MB free that is not a close call, and disabling `kdump` above
+would hand back another 320MB on its own.
+
+The caveat is that this CPU is slow in absolute terms. A bot that answers `/price whip` from
+the market cache is fine. A bot that renders images, does anything ML-shaped, or runs work
+over every message in a busy guild is the kind of thing that will find the limit — not by
+running out of memory, but by being noticeably slow at it.
+
+Two things worth knowing before building one:
+
+- **Alerts do not need a bot.** `discord_webhook.py` already posts outbound messages, and
+  `/internal/check-alerts` already drives them. A bot is only required for *inbound* commands.
+- **A bot token is a different credential** from the OAuth client id and secret already in the
+  unit file. Same Discord application, different tab, and it needs the bot to be invited to
+  the guild.
+
+Run it as its own `systemctl --user` unit beside the other two, matching everything else here.
 
 ## Backups
 
