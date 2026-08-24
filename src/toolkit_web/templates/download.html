@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set page_title = "Desktop app" %}
-{% set page_sub = "OSRS Toolkit for Windows — the same tools in their own window, sharing one journal with this site." %}
+{% set page_sub = "OSRS Toolkit for Windows: the same tools in their own window, sharing one journal with this site." %}
 {% set main_class = "narrow" %}
 
 {% block content %}
@@ -33,22 +33,22 @@
     Windows 10 or 11, 64-bit. The portable zip runs from a folder without installing anything.
     <a href="{{ releases_url }}" target="_blank" rel="noopener">All versions and release notes</a>.
   </p>
-  <p class="hint">Windows shows a "don't run this" prompt for apps it hasn't seen before — choose
-    More info, then Run anyway. The build isn't signed yet.</p>
+  <p class="hint">Windows will show a "don't run this" prompt, since it hasn't seen this app
+    before. Just choose More info, then Run anyway. The build isn't signed yet.</p>
 </div>
 
 <div class="grid-2">
   <div class="panel">
     <h2>Do I need it?</h2>
     <p class="hint tight">No. Everything on this site works in the browser, on any device, with
-      nothing installed. The desktop app is for people who would rather have a window beside
-      the game than a tab.</p>
+      nothing installed. The desktop app is for people who'd rather have a window sitting
+      beside the game than a browser tab.</p>
   </div>
   <div class="panel">
     <h2>One journal, both places</h2>
     <p class="hint tight">Paste a desktop token from your <a href="/profile">profile</a> and the
-      two stay level: a trade recorded in either shows up in the other within a minute.
-      <a href="/help">How to connect it</a>.</p>
+      two stay level with each other: a trade recorded in either one shows up in the other
+      within a minute. <a href="/help">How to connect it</a>.</p>
   </div>
 </div>
 
@@ -56,20 +56,20 @@
   <div class="prose">
     <h2 style="margin-top:0">Set it up</h2>
     <ol class="steps">
-      <li><strong>Install it</strong> and open it. It works on its own from here — a local
-        journal on your PC, nothing connected.</li>
+      <li><strong>Install it</strong> and open it. It works fine on its own from here, with a
+        local journal on your PC and nothing connected yet.</li>
       <li><strong>Get a desktop token.</strong> On your <a href="/profile">profile</a>, under
         <strong>Desktop app</strong>, name it after this PC and press <strong>Get a
-        token</strong>. Copy it — it is shown once.</li>
+        token</strong>. Copy it now, it's only shown once.</li>
       <li><strong>Paste it in</strong> under <strong>Settings &rarr; Website</strong> in the
-        app. Leave the website address alone unless you run your own copy of RuneScope.</li>
-      <li><strong>That is it.</strong> A trade recorded in either place reaches the other
-        within a minute, and deleting one removes it from both. Your Dashboard here shows
-        whether the app is currently connected.</li>
+        app. Leave the website address alone unless you're running your own copy of RuneScope.</li>
+      <li><strong>That's it.</strong> A trade recorded in either place reaches the other within
+        a minute, and deleting one removes it from both. Your Dashboard here shows whether the
+        app is currently connected.</li>
     </ol>
-    <p>This token is separate from the RuneLite plugin's pairing token — the plugin feeds the
-      sync service, this proves the app to your account.
-      <a href="/plugin">Installing the plugin</a> is a different job.</p>
+    <p>This token is separate from the RuneLite plugin's pairing token. The plugin feeds the
+      sync service, while this one proves the app belongs to your account.
+      <a href="/plugin">Installing the plugin</a> is a different job entirely.</p>
   </div>
 </div>
 
@@ -77,10 +77,11 @@
   <div class="prose">
     <h2 style="margin-top:0">What it does differently</h2>
     <ul>
-      <li>Runs in its own window, so it sits beside the game rather than behind a browser tab.</li>
-      <li>Keeps its journal in a file on your PC, mirrored here while it is connected.</li>
-      <li>Works offline with the prices it last fetched.</li>
-      <li>Same calculations as this site — the two share the code that does the maths.</li>
+      <li>Runs in its own window, so it sits beside the game instead of behind a browser tab.</li>
+      <li>Keeps its journal in a file on your PC, mirrored here while it's connected.</li>
+      <li>Works offline with whatever prices it last fetched.</li>
+      <li>Runs the same calculations as this site, since the two share the code that does the
+        maths.</li>
     </ul>
     <p>Open source, GPLv3:
       <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">github.com/Wolklaw/OSRS-Toolkit</a>.</p>
