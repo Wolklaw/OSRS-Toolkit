@@ -317,6 +317,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Web front end for the OSRS Toolkit trade journal.",
     )
 
+    @app.middleware("http")
+    async def no_store_when_signed_in(request: Request, call_next):
+        """Mark every response carrying account data as uncacheable.
+
+        Every signed-in page here is account-specific, and nothing in the response previously
+        said so — docs/deploying.md flags that as the reason a cache rule covering HTML on
+        this domain could serve one account's dashboard to another. Cloudflare's default
+        cache level does not cache HTML, so this changes nothing today; it is what makes
+        turning caching on for the public pages a safe thing to do rather than a sharp edge.
+        """
+        response = await call_next(request)
+        signed_in = COOKIE_NAME in request.cookies or request.headers.get("authorization")
+        if signed_in:
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
+
     def desktop_token_account_id(authorization: str | None) -> str | None:
         """Whose account an ``Authorization: Bearer`` header names, if anyone's.
 

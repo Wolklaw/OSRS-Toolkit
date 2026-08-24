@@ -251,6 +251,44 @@ sudo systemctl restart packagekit
 
 If a future reinstall brings NetworkManager back, this is the page that will break first.
 
+**It came back.** As of 2026-08-24 `NetworkManager.service` is `enabled` and `active` again —
+presumably re-enabled by a package update — so the Software Updates page is broken again by
+exactly the mechanism described above. To put it back:
+
+```bash
+sudo systemctl disable --now NetworkManager
+sudo systemctl restart packagekit
+```
+
+Worth re-checking after any round of updates, since nothing prevents it returning a third time.
+
+### Housekeeping this machine is still carrying
+
+Found in an audit on 2026-08-24 and not yet done — all of it needs `sudo`, which the deploy
+account does not have without a password prompt.
+
+| | |
+|---|---|
+| `kdump-tools` | Reserves **320MB** of a 3.4GB machine (`crashkernel=2G-4G:320M`, confirmed via `/sys/kernel/kexec_crash_size`) to capture a kernel crash dump nobody here will analyse. `sudo systemctl disable --now kdump-tools` and drop the `crashkernel=` boot arg. |
+| `open-vm-tools` | VMware guest tooling. `systemd-detect-virt` reports `none` — this is a physical machine. |
+| `ModemManager` | No modem devices present (`/dev/ttyUSB*`, `/dev/cdc-wdm*` are absent). ~14MB. |
+| `open-iscsi`, `multipathd` | Zero iSCSI sessions, no multipath storage. |
+| `cloud-init` (5 units) | This is not a cloud instance. |
+| `smbd` / `nmbd` | Samba, ~30MB, no visible connections — **left alone deliberately**, since whether this laptop is used for LAN file sharing is not something the audit could determine. |
+| journald | Uncapped; 96MB today against a ~9.8GB default ceiling. `SystemMaxUse=200M` in `/etc/systemd/journald.conf`. |
+
+### Rate limiting is a Cloudflare-side job
+
+There is none today. On 2026-08-23 the app served a burst of ~34,600 requests to `/` in five
+minutes — that one turned out to be **local** (from `127.0.0.1`, no `X-Forwarded-For`, so not
+tunnel traffic), and the app absorbed it without dropping a request or leaking memory. But
+nothing would throttle the same thing arriving from outside. A rate-limiting rule on
+`runescope.app` belongs in the Cloudflare dashboard; the origin cannot do it usefully, since
+every request arrives from the tunnel.
+
+Client IPs are already logged correctly — uvicorn honours the `X-Forwarded-For` cloudflared
+sets, verified by forging one against loopback and watching it appear in the log.
+
 ### Phased updates break "Install all updates"
 
 Cockpit lists an update as available whenever the archive has a newer version, but Ubuntu
