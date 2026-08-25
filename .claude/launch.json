@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "toolkit-web-dev",
+      "runtimeExecutable": "E:\\Personal Projects\\osrs-toolkit-web\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "D:\\Temp\\claude\\E--Personal-Projects-OSRS-Toolkit\\7b36b21c-e139-4ea7-beba-30cdcd8df2a8\\scratchpad\\run_dev_server.py"
+      ],
+      "port": 8100
+    }
+  ]
+}

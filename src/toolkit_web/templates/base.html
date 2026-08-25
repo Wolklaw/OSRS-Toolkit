@@ -681,6 +681,31 @@
     document.body.classList.toggle('nav-open', open);
   }
 
+  // The plugin badge is rendered server-side, so without this it is a snapshot of whenever
+  // the page loaded: someone watching it while the plugin reconnects sees "idle" for as long
+  // as they leave the tab open, next to a desktop app that noticed within seconds. Each page
+  // carries its own wording on the element, since "idle" reads differently on a dashboard
+  // than on the profile page that explains what to do about it.
+  (function () {
+    const badge = document.querySelector('[data-plugin-badge]');
+    if (!badge) { return; }
+    const CLASSES = { live: 'badge ok', idle: 'badge', unreachable: 'badge bad' };
+    async function refresh() {
+      try {
+        const response = await fetch('/api/plugin-state');
+        if (!response.ok) { return; }
+        const state = (await response.json()).state;
+        const label = badge.getAttribute('data-label-' + state);
+        // No label for this state means the page does not draw it -- "none" has its own
+        // panel rather than a badge -- so leave what is there rather than blanking it.
+        if (!label) { return; }
+        badge.textContent = label;
+        badge.className = CLASSES[state] || 'badge';
+      } catch (e) { /* offline or navigating away; the next tick tries again */ }
+    }
+    setInterval(refresh, 20000);
+  })();
+
   // Three states, in the order someone actually wants to click through them: whatever the
   // operating system says, then the two explicit overrides. Stored rather than inferred so a
   // choice survives the next page load — the <head> script is what reads it back.

@@ -21,9 +21,10 @@
   </div>
 
   <div class="conn-row">
-    {% if plugin_state == "live" %}<span class="badge ok">Sending now</span>
-    {% elif plugin_state == "idle" %}<span class="badge">Idle</span>
-    {% elif plugin_state == "unreachable" %}<span class="badge bad">No answer</span>
+    {% set badge_labels = 'data-plugin-badge data-label-live="Sending now" data-label-idle="Idle" data-label-unreachable="No answer"' %}
+    {% if plugin_state == "live" %}<span class="badge ok" {{ badge_labels|safe }}>Sending now</span>
+    {% elif plugin_state == "idle" %}<span class="badge" {{ badge_labels|safe }}>Idle</span>
+    {% elif plugin_state == "unreachable" %}<span class="badge bad" {{ badge_labels|safe }}>No answer</span>
     {% else %}<span class="badge">Not set up</span>{% endif %}
     <div class="grow">
       <strong>RuneLite plugin</strong>

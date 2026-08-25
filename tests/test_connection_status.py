@@ -7,6 +7,8 @@ with the game shut. Configured and arriving are two different facts and both are
 
 from __future__ import annotations
 
+import re
+
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
@@ -89,11 +91,11 @@ def test_the_dashboard_says_sending_only_when_the_plugin_is_sending(signed_in: T
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     with patch("toolkit_web.app.plugin_activity", return_value="live"):
-        assert "Sending now" in signed_in.get("/").text
+        assert badge_text(signed_in.get("/").text) == "Sending now"
 
     with patch("toolkit_web.app.plugin_activity", return_value="idle"):
         page = signed_in.get("/").text
-    assert "Sending now" not in page
+    assert badge_text(page) != "Sending now"
     assert "Idle" in page
 
 
@@ -240,3 +242,15 @@ def test_the_dashboard_reports_a_connected_desktop_app(signed_in: TestClient):
     # Asserted on the row's own sentence rather than on the badge word: "Connected" also
     # appears in a script on this page, so matching it would pass with the row still wrong.
     assert "Mirroring this journal" in signed_in.get("/").text
+
+
+def badge_text(page: str) -> str:
+    """What the plugin badge actually reads on screen.
+
+    Checked against the element rather than by searching the whole page: the badge carries
+    every state's wording in data- attributes so it can relabel itself without a reload, so
+    "Sending now" appears in the markup of an idle page too. The rendered text is the thing
+    these tests are really about.
+    """
+    match = re.search(r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page)
+    return match.group(1).strip() if match else ""

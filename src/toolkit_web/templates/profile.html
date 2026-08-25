@@ -56,9 +56,10 @@
       Three states, not two. "A token is saved" is not "something is arriving", and showing
       the first as the second is what let the dashboard claim a live plugin with the game shut.
     #}
-    {% if plugin_state == "live" %}<span class="badge ok">Sending now</span>
-    {% elif plugin_state == "idle" %}<span class="badge">Idle, nothing arriving</span>
-    {% elif plugin_state == "unreachable" %}<span class="badge bad">Sync service not answering</span>
+    {% set badge_labels = 'data-plugin-badge data-label-live="Sending now" data-label-idle="Idle, nothing arriving" data-label-unreachable="Sync service not answering"' %}
+    {% if plugin_state == "live" %}<span class="badge ok" {{ badge_labels|safe }}>Sending now</span>
+    {% elif plugin_state == "idle" %}<span class="badge" {{ badge_labels|safe }}>Idle, nothing arriving</span>
+    {% elif plugin_state == "unreachable" %}<span class="badge bad" {{ badge_labels|safe }}>Sync service not answering</span>
     {% else %}<span class="badge">Not connected</span>{% endif %}
   </div>
 

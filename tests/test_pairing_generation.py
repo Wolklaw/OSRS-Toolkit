@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import json
 import urllib.error
 from unittest.mock import MagicMock, patch
@@ -100,8 +102,7 @@ def test_a_paired_account_is_not_told_it_is_connected_until_something_arrives(
     with patch("toolkit_web.app.plugin_activity", return_value="idle"):
         response = signed_in.get("/")
 
-    assert "Sending now" not in response.text
-    assert "Idle" in response.text
+    assert badge_text(response.text) == "Idle"
     assert "Get a token" not in response.text
 
 
@@ -179,3 +180,15 @@ def test_what_the_plugin_already_sent_is_drained_before_the_token_dies(signed_in
         signed_in.post("/api/pairing-token/generate")
 
     importer.return_value.import_pending.assert_called_once()
+
+
+def badge_text(page: str) -> str:
+    """What the plugin badge actually reads on screen.
+
+    Checked against the element rather than by searching the whole page: the badge carries
+    every state's wording in data- attributes so it can relabel itself without a reload, so
+    "Sending now" appears in the markup of an idle page too. The rendered text is the thing
+    these tests are really about.
+    """
+    match = re.search(r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page)
+    return match.group(1).strip() if match else ""

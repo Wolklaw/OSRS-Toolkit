@@ -1701,6 +1701,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "characters": synced,
         }
 
+    @app.get("/api/plugin-state")
+    def plugin_state_now(account: Account = CurrentAccount) -> dict:
+        """Whether the plugin is sending, for a badge that has to stop lying as it sits.
+
+        The badge is rendered server-side, so before this it was a snapshot of whenever the
+        page happened to load and stayed that way until a reload -- someone watching it while
+        the plugin reconnected saw "idle" indefinitely, next to a desktop app that had already
+        noticed. ``plugin_activity`` caches for half a minute, so polling this is cheap and
+        costs the sync service nothing beyond that.
+        """
+        return {"state": plugin_activity(settings, account)}
+
     @app.get("/api/accounts")
     def characters(account: Account = CurrentAccount) -> dict:
         """Every RuneLite character seen under this pairing, for a character switcher."""
