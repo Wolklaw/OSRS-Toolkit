@@ -583,6 +583,20 @@ class AccountsDB:
             )
             return cursor.rowcount > 0
 
+    def delete_account(self, discord_user_id: str) -> bool:
+        """Remove this account and everything that references it.
+
+        Characters, trade attributions, desktop tokens and watchlist items all carry
+        ``ON DELETE CASCADE`` back to this row, so removing it removes all of them in one
+        statement. The journal itself lives in its own file outside this database and is not
+        touched here -- the caller deletes that separately.
+        """
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                "DELETE FROM account WHERE discord_user_id = ?", (discord_user_id,)
+            )
+            return cursor.rowcount > 0
+
 
 def _digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()

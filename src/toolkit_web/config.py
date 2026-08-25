@@ -76,6 +76,9 @@ class Settings:
             internal_task_token=os.environ.get("TOOLKIT_INTERNAL_TASK_TOKEN") or None,
         )
 
-    def journal_path(self, discord_user_id: str) -> Path:
+    def journal_dir(self, discord_user_id: str) -> Path:
         safe = "".join(c for c in discord_user_id if c.isalnum()) or "unknown"
-        return self.data_dir / "journals" / safe / "toolkit.db"
+        return self.data_dir / "journals" / safe
+
+    def journal_path(self, discord_user_id: str) -> Path:
+        return self.journal_dir(discord_user_id) / "toolkit.db"

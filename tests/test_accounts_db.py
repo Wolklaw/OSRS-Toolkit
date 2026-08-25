@@ -195,3 +195,46 @@ def test_stamp_alert_sent_records_when_it_last_fired(tmp_path: Path):
 
     [alert] = db.list_watchlist_alerts("111")
     assert alert.last_alerted_at is not None
+
+
+# -- deleting an account ------------------------------------------------------------------------
+
+
+def test_deleting_an_account_removes_it(tmp_path: Path):
+    db = AccountsDB(tmp_path / "accounts.db")
+    db.upsert_login("111", "Wolklaw", None)
+
+    assert db.delete_account("111") is True
+    assert db.get("111") is None
+
+
+def test_deleting_an_account_that_never_existed_is_harmless(tmp_path: Path):
+    db = AccountsDB(tmp_path / "accounts.db")
+
+    assert db.delete_account("111") is False
+
+
+def test_deleting_an_account_cascades_everything_that_references_it(tmp_path: Path):
+    db = AccountsDB(tmp_path / "accounts.db")
+    db.upsert_login("111", "Wolklaw", None)
+    db.add_character("111", "Wolklaw")
+    db.add_watchlist_item("111", 4151)
+    db.create_desktop_token("111", "This PC")
+
+    db.delete_account("111")
+
+    assert db.list_characters("111") == []
+    assert db.list_watchlist_item_ids("111") == []
+    assert db.list_desktop_tokens("111") == []
+
+
+def test_deleting_an_account_does_not_disturb_another_account(tmp_path: Path):
+    db = AccountsDB(tmp_path / "accounts.db")
+    db.upsert_login("111", "First", None)
+    db.upsert_login("222", "Second", None)
+    db.add_character("222", "Survivor")
+
+    db.delete_account("111")
+
+    assert db.get("222") is not None
+    assert [c.name for c in db.list_characters("222")] == ["Survivor"]

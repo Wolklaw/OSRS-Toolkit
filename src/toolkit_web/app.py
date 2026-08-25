@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -1513,6 +1514,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail="Enter a display name.")
         accounts.set_display_name(account.discord_user_id, username.strip()[:40])
         return {"ok": True}
+
+    @app.post("/api/account/delete")
+    def delete_account(account: Account = CurrentAccount) -> Response:
+        """Erase this account: journal, watchlist, characters, tokens, everything.
+
+        Revokes the pairing token at the sync service first, so nothing the plugin already
+        sent outlives this account waiting to be collected, then deletes the journal file and
+        the account row -- which cascades characters, trade attributions, desktop tokens and
+        watchlist items in one statement. Irreversible on purpose: the CSV export is the copy
+        worth keeping if there is one, the same as it is for a departure that stops short of
+        this.
+        """
+        if account.pairing_token:
+            revoke_pairing_token(settings.sync_base_url, account.pairing_token)
+        shutil.rmtree(settings.journal_dir(account.discord_user_id), ignore_errors=True)
+        accounts.delete_account(account.discord_user_id)
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(COOKIE_NAME)
+        return response
 
     @app.put("/api/pairing-token")
     def set_pairing_token(payload: dict, account: Account = CurrentAccount) -> dict:

@@ -233,6 +233,12 @@
   <p class="hint">One database file on this server per account. The CSV export is the whole
     journal, positions and manual trades both, in a format a spreadsheet opens.
     <a href="/about">What is stored</a>.</p>
+  <hr style="margin:1rem 0;border-color:var(--border)">
+  <p class="hint tight"><strong>Delete everything.</strong> Removes your journal, watchlist,
+    named characters, saved tokens and this account. Unpairs the plugin first, so nothing it
+    already sent is left waiting for an account that no longer exists. There is no undo — export
+    first if you want to keep anything.</p>
+  <button class="button danger small" style="margin-top:0.5rem" onclick="deleteAccount()">Delete my account and data</button>
 </div>
 
 <div class="panel">
@@ -374,6 +380,16 @@
     if (!confirm('Remove this character? Trades already logged under it are kept, just unlabeled.')) { return; }
     await api('DELETE', `/api/characters/${characterId}`);
     location.reload();
+  }
+
+  async function deleteAccount() {
+    const typed = prompt(
+      'This deletes your journal, watchlist, characters, tokens and this account. '
+      + 'It cannot be undone.\n\nType DELETE to confirm.'
+    );
+    if (typed !== 'DELETE') { return; }
+    await api('POST', '/api/account/delete');
+    location.href = '/';
   }
 </script>
 {% endblock %}
