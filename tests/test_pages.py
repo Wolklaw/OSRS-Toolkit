@@ -16,6 +16,16 @@ def test_the_landing_page_shows_a_sign_in_link_when_signed_out(client: TestClien
     assert "/auth/discord/login" in response.text
 
 
+def test_the_landing_page_says_the_plugin_is_on_the_hub(client: TestClient):
+    """A stranger's shortest read on whether this is worth trusting: RuneLite reviewed the
+    plugin and lists it. Worth saying where they decide, not only on the page they reach
+    afterwards."""
+    page = client.get("/").text
+
+    assert "Plugin Hub" in page
+    assert 'href="/plugin"' in page
+
+
 def test_the_root_page_shows_the_dashboard_once_signed_in(signed_in: TestClient):
     response = signed_in.get("/")
 
