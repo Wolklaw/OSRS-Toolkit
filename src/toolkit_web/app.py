@@ -1516,7 +1516,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.post("/api/account/delete")
-    def delete_account(account: Account = CurrentAccount) -> Response:
+    def delete_account(account: Account = BrowserAccount) -> Response:
         """Erase this account: journal, watchlist, characters, tokens, everything.
 
         Revokes the pairing token at the sync service first, so nothing the plugin already
@@ -1525,6 +1525,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         watchlist items in one statement. Irreversible on purpose: the CSV export is the copy
         worth keeping if there is one, the same as it is for a departure that stops short of
         this.
+
+        A browser session, not a desktop credential -- for the same reason minting and revoking
+        those credentials is browser-only. A leaked desktop token may read and write the journal;
+        it may not destroy it and the account with it, which is the one thing no re-pairing
+        could undo.
         """
         if account.pairing_token:
             revoke_pairing_token(settings.sync_base_url, account.pairing_token)

@@ -32,6 +32,24 @@ def test_deleting_needs_a_session(client: TestClient) -> None:
     assert client.post("/api/account/delete").status_code == 401
 
 
+def test_a_desktop_token_cannot_delete_the_account(
+    signed_in: TestClient, settings: Settings
+) -> None:
+    """The one thing re-pairing could not undo, so it is browser-only -- the same line drawn
+    around minting and revoking desktop credentials themselves."""
+    token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
+    signed_in.post(
+        "/api/trades",
+        json={"item_name": "Whip", "quantity": 1, "buy_price": 100, "sell_price": 200},
+    )
+
+    bare = TestClient(signed_in.app, base_url="https://testserver")
+    response = bare.post("/api/account/delete", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401
+    assert settings.journal_path("111").exists()
+
+
 def test_deleting_cascades_characters_and_desktop_tokens(signed_in: TestClient) -> None:
     signed_in.post("/api/characters", json={"name": "Wolklaw"})
     signed_in.post("/api/desktop-tokens", json={"label": "This PC"})
