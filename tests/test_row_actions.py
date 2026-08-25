@@ -109,7 +109,6 @@ def test_every_table_of_rows_answers_enter(window: MainWindow) -> None:
         window.flip_table,
         window.watchlist_table,
         window.journal_table,
-        window.synced_trade_table,
         window.alch_table,
         window.skill_table,
         window.pvm_table,
@@ -271,7 +270,6 @@ def test_every_table_of_rows_answers_a_right_click(window: MainWindow) -> None:
         window.flip_table,
         window.watchlist_table,
         window.journal_table,
-        window.synced_trade_table,
         window.alch_table,
         window.skill_table,
         window.pvm_table,
@@ -286,8 +284,6 @@ def test_the_row_buttons_start_out_of_reach(window: MainWindow) -> None:
     """Nothing is selected on a freshly opened journal, so nothing can act on a selection."""
     assert window._journal_row_buttons
     assert not any(button.isEnabled() for button in window._journal_row_buttons)
-    assert window._activity_row_buttons
-    assert not any(button.isEnabled() for button in window._activity_row_buttons)
 
 
 def test_selecting_a_row_puts_them_within_it(window: MainWindow) -> None:
@@ -332,7 +328,7 @@ def _delete_shortcuts(table) -> list[QShortcut]:  # type: ignore[no-untyped-def]
 def test_delete_removes_the_selected_row_from_the_table_that_has_focus(
     window: MainWindow,
 ) -> None:
-    for table in (window.journal_table, window.synced_trade_table):
+    for table in (window.journal_table,):
         shortcuts = _delete_shortcuts(table)
         assert len(shortcuts) == 1
         # Scoped to the widget, or Delete pressed anywhere in the window would reach into a

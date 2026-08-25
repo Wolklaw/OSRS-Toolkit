@@ -85,6 +85,7 @@ from osrs_toolkit.calculators import (
     skill_results,
 )
 from osrs_toolkit.csv_export import journal_csv
+from osrs_toolkit.csv_import import CsvImportError, parse_journal_csv, summarise
 from osrs_toolkit.formatting import (
     attention_tooltip as _attention_tooltip,
 )
@@ -116,9 +117,6 @@ from osrs_toolkit.formatting import (
     hold_time as _hold_time,
 )
 from osrs_toolkit.formatting import (
-    item_detail_lines as _item_detail_lines,
-)
-from osrs_toolkit.formatting import (
     percent as _percent,
 )
 from osrs_toolkit.formatting import (
@@ -127,14 +125,9 @@ from osrs_toolkit.formatting import (
 from osrs_toolkit.formatting import (
     signed_gp as _signed_gp,
 )
-from osrs_toolkit.formatting import (
-    synced_trade_label as _synced_trade_label,
-)
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import (
     JournalRepository,
-    SyncedItem,
-    SyncedTrade,
     TrackedTrade,
 )
 from osrs_toolkit.journal_mirror import JournalMirror, MirrorResult
@@ -1082,46 +1075,6 @@ class RuneLiteConnectionDialog(QDialog):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.importer.sync_root)))
 
 
-class SyncedTradeDetailsDialog(QDialog):
-    def __init__(self, trade: SyncedTrade, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Trade details")
-        self.setMinimumSize(560, 420)
-        layout = QVBoxLayout(self)
-        heading = "Grand Exchange fill" if trade.event_type == "ge_fill" else "Player trade"
-        layout.addWidget(QLabel(f"<h2>{heading}</h2>"))
-        lines = [
-            f"Time: {trade.occurred_at}",
-            f"Character: {trade.account_name}",
-        ]
-        if trade.counterparty:
-            lines.append(f"Other player: {trade.counterparty}")
-        lines.extend(["", "Given:"])
-        lines.extend(_item_detail_lines(trade.given))
-        lines.extend(["", "Received:"])
-        lines.extend(_item_detail_lines(trade.received))
-        if trade.event_type == "player_trade":
-            lines.extend(
-                [
-                    "",
-                    f"Estimated given value: {_gp(trade.given_value)}",
-                    f"Estimated received value: {_gp(trade.received_value)}",
-                    f"Estimated difference: {_signed_gp(trade.estimated_difference)}",
-                    "Item values are RuneLite guide-price estimates captured at trade time.",
-                ]
-            )
-        details = QLabel("\n".join(lines))
-        details.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-            | Qt.TextInteractionFlag.TextSelectableByKeyboard
-        )
-        details.setAlignment(Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(details, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-
 class TradeEntryDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1968,7 +1921,6 @@ class MainWindow(QMainWindow):
         self._flips: list[FlipCandidate] = []
         self._portfolio: list[FlipCandidate] = []
         self._excluded_item_ids: set[int] = set()
-        self._synced_trade_rows: dict[str, tuple[SyncedTrade, tuple[str, ...]]] = {}
         self._theme = str(QSettings().value("appearance/theme", "Dark"))
         saved_watchlist = QSettings().value("market/watchlist", [])
         if not isinstance(saved_watchlist, list):
@@ -2044,7 +1996,6 @@ class MainWindow(QMainWindow):
         # Buttons that act on "the selected row" -- held here so selection changes can
         # enable/disable them together, rather than each failing with "select a row first".
         self._journal_row_buttons: list[QPushButton] = []
-        self._activity_row_buttons: list[QPushButton] = []
         self._loot_log_row_buttons: list[QPushButton] = []
         self._death_log_row_buttons: list[QPushButton] = []
         # The Journal page is built first and renders itself as it is built, which reaches
@@ -2287,24 +2238,12 @@ class MainWindow(QMainWindow):
         for button in self._journal_row_buttons:
             button.setEnabled(selected)
 
-    def _activity_selection_changed(self) -> None:
-        selected = bool(self.synced_trade_table.selectionModel().hasSelection())
-        for button in self._activity_row_buttons:
-            button.setEnabled(selected)
-
     def _build_journal_row_menu(self, menu: QMenu, row: int) -> None:
         """The row menu for a journal entry: the two buttons above it, on the row itself."""
         menu.addAction("Update trade…", self._update_selected_trade)
         menu.addAction("Delete trade…", self._delete_selected_trade)
         menu.addSeparator()
         self._add_copy_action(menu, self.journal_table, row, 2)
-
-    def _build_activity_row_menu(self, menu: QMenu, row: int) -> None:
-        """The row menu for an imported RuneLite event."""
-        menu.addAction("View details…", self._open_selected_synced_trade)
-        menu.addAction("Delete entry…", self._delete_selected_synced_trade)
-        menu.addSeparator()
-        self._add_copy_action(menu, self.synced_trade_table, row, 3)
 
     def _loot_log_selection_changed(self) -> None:
         selected = bool(self.loot_log_table.selectionModel().hasSelection())
@@ -2605,10 +2544,17 @@ class MainWindow(QMainWindow):
             "regardless of the status and period filters selected below."
         )
         export_button.clicked.connect(self._export_journal_csv)
+        import_button = QPushButton("Import CSV", objectName="secondary")
+        import_button.setToolTip(
+            "Read a Trade Journal CSV back in. You choose whether to add it to what is "
+            "already here or replace it, and nothing is written until you confirm."
+        )
+        import_button.clicked.connect(self._import_journal_csv)
         actions.addWidget(add_button)
         actions.addWidget(update_button)
         actions.addWidget(delete_button)
         actions.addWidget(export_button)
+        actions.addWidget(import_button)
         actions.addStretch()
         actions.addWidget(QLabel("Status", objectName="muted"))
         self.journal_status_filter = QComboBox()
@@ -2626,6 +2572,12 @@ class MainWindow(QMainWindow):
         self.journal_status_filter.currentTextChanged.connect(self._journal_status_filter_changed)
         actions.addWidget(self.journal_status_filter)
         plans_layout.addLayout(actions)
+        # Lived in the RuneLite activity tab until that tab was removed. Still worth showing
+        # on this page: it is what says whether the fills filling this table are still
+        # arriving, and _update_runelite_status has written to it all along.
+        self.runelite_status = QLabel("RuneLite not connected", objectName="status")
+        self.runelite_status.setWordWrap(True)
+        plans_layout.addWidget(self.runelite_status)
         self.journal_filter_empty = QLabel(
             "No journal entries match this status and period filter.", objectName="status"
         )
@@ -2654,43 +2606,6 @@ class MainWindow(QMainWindow):
         self._journal_selection_changed()
         plans_layout.addWidget(self.journal_table, 1)
         self.journal_tabs.addTab(plans_tab, _PLANS_TAB_TITLE)
-
-        activity_tab = QWidget()
-        activity_layout = QVBoxLayout(activity_tab)
-        sync_controls = QHBoxLayout()
-        self.runelite_status = QLabel("RuneLite not connected", objectName="status")
-        self.runelite_filter = QComboBox()
-        self.runelite_filter.addItems(["All activity", "Grand Exchange", "Player trades"])
-        self.runelite_filter.currentTextChanged.connect(self._render_synced_trades)
-        import_button = QPushButton("Import now", objectName="secondary")
-        import_button.clicked.connect(self._import_runelite_events)
-        details_button = QPushButton("View details", objectName="secondary")
-        details_button.clicked.connect(self._open_selected_synced_trade)
-        remove_button = QPushButton("Delete entry", objectName="secondary")
-        remove_button.clicked.connect(self._delete_selected_synced_trade)
-        self._activity_row_buttons += [details_button, remove_button]
-        sync_controls.addWidget(self.runelite_status, 1)
-        sync_controls.addWidget(self.runelite_filter)
-        sync_controls.addWidget(import_button)
-        sync_controls.addWidget(details_button)
-        sync_controls.addWidget(remove_button)
-        activity_layout.addLayout(sync_controls)
-        self.synced_trade_table = self._table(
-            ["Time", "Source", "Character", "Trade", "Given", "Received", "Est. difference"],
-            minimum_widths={0: 145, 2: 140, 3: 220, 4: 180, 5: 180, 6: 130},
-            text_columns={1, 2, 3, 4, 5},
-        )
-        self._open_rows_with(
-            self.synced_trade_table, lambda _row, _column: self._open_selected_synced_trade()
-        )
-        self._install_row_menu(self.synced_trade_table, self._build_activity_row_menu)
-        self._delete_selected_row_on_delete_key(
-            self.synced_trade_table, self._delete_selected_synced_trade
-        )
-        self.synced_trade_table.itemSelectionChanged.connect(self._activity_selection_changed)
-        self._activity_selection_changed()
-        activity_layout.addWidget(self.synced_trade_table, 1)
-        self.journal_tabs.addTab(activity_tab, "RuneLite activity")
 
         loot_log_tab = QWidget()
         loot_log_layout = QVBoxLayout(loot_log_tab)
@@ -2784,7 +2699,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.journal_tabs, 1)
         page.setLayout(layout)
         self._render_journal()
-        self._render_synced_trades()
         self._render_loot_log()
         self._render_death_log()
         self._render_buy_limits()
@@ -3408,7 +3322,6 @@ class MainWindow(QMainWindow):
         self._journal = new_repository
         QSettings().setValue("journal/database_path", str(new_path))
         self._render_journal()
-        self._render_synced_trades()
         QMessageBox.information(
             self,
             "Database location updated",
@@ -4246,7 +4159,6 @@ class MainWindow(QMainWindow):
             self._last_sync_message = " • already up to date"
         self._update_runelite_status()
         if result.imported or result.duplicates:
-            self._render_synced_trades()
             self._render_loot_log()
             self._render_death_log()
         if result.imported:
@@ -4729,107 +4641,6 @@ class MainWindow(QMainWindow):
         ):
             self._start_account_lookup(account_name, automatic=True)
 
-    def _render_synced_trades(self) -> None:
-        event_type = {
-            "Grand Exchange": "ge_fill",
-            "Player trades": "player_trade",
-        }.get(self.runelite_filter.currentText())
-        trades = self._journal.list_synced_trades(event_type)
-        # A partially filling GE offer reports one event per fill tick, so fills sharing
-        # an offer_id are folded into one growing row. Events without an offer_id (player
-        # trades, or pre-offer_id history) are shown individually as before.
-        rows: list[tuple[SyncedTrade, tuple[str, ...]]] = []
-        offer_row_index: dict[str, int] = {}
-        for trade in trades:
-            offer_id = trade.metadata.get("offer_id") if trade.event_type == "ge_fill" else None
-            index = (
-                offer_row_index.get(offer_id) if isinstance(offer_id, str) and offer_id else None
-            )
-            if index is None:
-                if isinstance(offer_id, str) and offer_id:
-                    offer_row_index[offer_id] = len(rows)
-                rows.append((trade, (trade.event_id,)))
-            else:
-                # `trades` is newest-first, so the row already at `index` is always the more
-                # recent side of the merge and its occurred_at/event_id stay the display values.
-                existing_trade, existing_ids = rows[index]
-                rows[index] = (
-                    _merge_synced_trades(existing_trade, trade),
-                    existing_ids + (trade.event_id,),
-                )
-        # Keyed by the row's displayed event_id rather than its position: this table is
-        # sortable, so a visual row index stops matching this order the moment the user
-        # clicks a header — and acting on the wrong key here deletes the wrong trade.
-        self._synced_trade_rows = {trade.event_id: (trade, ids) for trade, ids in rows}
-        values = [
-            [
-                _display_timestamp(trade.occurred_at),
-                trade.source,
-                trade.account_name,
-                _synced_trade_label(trade),
-                _compact_items(trade.given),
-                _compact_items(trade.received),
-                _signed_gp(trade.estimated_difference)
-                if trade.event_type == "player_trade"
-                else "—",
-            ]
-            for trade, _event_ids in rows
-        ]
-        self._fill_table(
-            self.synced_trade_table,
-            values,
-            green_columns=set(),
-            row_ids=[trade.event_id for trade, _event_ids in rows],
-        )
-        self._activity_selection_changed()
-
-    def _selected_synced_trade(self) -> tuple[SyncedTrade, tuple[str, ...]] | None:
-        row = self.synced_trade_table.currentRow()
-        if row < 0 or row >= self.synced_trade_table.rowCount():
-            return None
-        event_id = self.synced_trade_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        if not isinstance(event_id, str):
-            return None
-        return self._synced_trade_rows.get(event_id)
-
-    def _open_selected_synced_trade(self) -> None:
-        selected = self._selected_synced_trade()
-        if selected is None:
-            QMessageBox.information(
-                self, "No activity selected", "Select a RuneLite activity row first."
-            )
-            return
-        trade, _event_ids = selected
-        SyncedTradeDetailsDialog(trade, self).exec()
-
-    def _delete_selected_synced_trade(self) -> None:
-        selected = self._selected_synced_trade()
-        if selected is None:
-            QMessageBox.information(
-                self, "No activity selected", "Select a RuneLite activity row first."
-            )
-            return
-        _trade, event_ids = selected
-        prompt = (
-            "Remove this imported trade from the journal? This does not affect RuneLite or the game."
-            if len(event_ids) == 1
-            else (
-                f"Remove all {len(event_ids)} imported fills behind this row from the journal? "
-                "This does not affect RuneLite or the game."
-            )
-        )
-        answer = QMessageBox.question(
-            self,
-            "Delete imported activity",
-            prompt,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer == QMessageBox.StandardButton.Yes:
-            for event_id in event_ids:
-                self._journal.delete_synced_trade(event_id)
-            self._render_synced_trades()
-
     def _render_loot_log(self) -> None:
         events = self._journal.list_npc_loot_events()
         values = [
@@ -5000,6 +4811,86 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Export failed", f"Could not write the file: {exc}")
             return
         QMessageBox.information(self, "Export complete", f"Journal exported to {path}")
+
+    def _import_journal_csv(self) -> None:
+        """Read a journal CSV back in, adding to this journal or replacing it.
+
+        Nothing is written before the confirmation, and the confirmation names the number of
+        trades replacing would delete -- the file is chosen in one dialog and the destructive
+        option lives in the next, so "replace" is never a thing that happens because somebody
+        clicked through a file picker on autopilot.
+        """
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self, "Import Trade Journal", "", "CSV files (*.csv);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            content = Path(path).read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError) as exc:
+            QMessageBox.warning(self, "Import failed", f"Could not read the file: {exc}")
+            return
+        try:
+            parsed = parse_journal_csv(content)
+        except CsvImportError as exc:
+            QMessageBox.warning(self, "Import failed", str(exc))
+            return
+        if not parsed.trades:
+            detail = "\n".join(parsed.skipped[:10]) or "The file has no rows."
+            QMessageBox.warning(
+                self,
+                "Nothing to import",
+                "No completed trades were found in that file, so there is nothing to "
+                f"import.\n\n{detail}",
+            )
+            return
+
+        existing = len(self._journal.list_all())
+        box = QMessageBox(self)
+        box.setWindowTitle("Import Trade Journal")
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText(f"Import {len(parsed.trades)} trade(s) from this file?")
+        box.setInformativeText(summarise(parsed, replacing=False, existing=existing))
+        if parsed.skipped:
+            box.setDetailedText("\n".join(parsed.skipped))
+        add = box.addButton("Add to journal", QMessageBox.ButtonRole.AcceptRole)
+        replace = box.addButton("Replace journal…", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(add)
+        box.exec()
+        chosen = box.clickedButton()
+        if chosen is None or chosen not in (add, replace):
+            return
+
+        if chosen is replace:
+            # Asked twice on purpose. The first dialog is about a file; this one is about
+            # deleting trades that are already here, which is the part with no undo.
+            confirm = QMessageBox.warning(
+                self,
+                "Replace the journal?",
+                summarise(parsed, replacing=True, existing=existing),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if confirm != QMessageBox.StandardButton.Yes:
+                return
+            for record in self._journal.list_all():
+                self._journal.delete(record.trade_id)
+
+        for trade in parsed.trades:
+            self._journal.add(
+                trade.item_name, trade.quantity, trade.buy_price, trade.sell_price
+            )
+        self._render_journal()
+        self._render_performance()
+        skipped_note = (
+            f"\n\n{len(parsed.skipped)} row(s) were skipped." if parsed.skipped else ""
+        )
+        QMessageBox.information(
+            self,
+            "Import complete",
+            f"Imported {len(parsed.trades)} trade(s).{skipped_note}",
+        )
 
     def _update_selected_trade(self) -> None:
         row = self.journal_table.currentRow()
@@ -5537,39 +5428,6 @@ def _leading_number(value: str) -> float:
         return float(token)
     except ValueError:
         return 0.0
-
-
-def _merge_synced_trades(recent: SyncedTrade, older: SyncedTrade) -> SyncedTrade:
-    """Combine two fills of the same GE offer into one: keeps ``recent``'s identity
-    (event_id, occurred_at), sums quantities/values item by item, and recomputes the unit
-    price as a quantity-weighted average."""
-    combined: dict[tuple[str, int], SyncedItem] = {}
-    for item in (*older.items, *recent.items):
-        key = (item.flow, item.item_id)
-        existing = combined.get(key)
-        if existing is None:
-            combined[key] = item
-            continue
-        total_quantity = existing.quantity + item.quantity
-        total_value = existing.total_value + item.total_value
-        combined[key] = SyncedItem(
-            flow=item.flow,
-            item_id=item.item_id,
-            item_name=item.item_name,
-            quantity=total_quantity,
-            unit_value=round(total_value / total_quantity) if total_quantity else 0,
-        )
-    return SyncedTrade(
-        event_id=recent.event_id,
-        occurred_at=recent.occurred_at,
-        event_type=recent.event_type,
-        account_hash=recent.account_hash,
-        account_name=recent.account_name,
-        counterparty=recent.counterparty,
-        direction=recent.direction,
-        metadata=recent.metadata,
-        items=tuple(combined.values()),
-    )
 
 
 def _table_sort_value(value: str) -> tuple[int, float | str]:

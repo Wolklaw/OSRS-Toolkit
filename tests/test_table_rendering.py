@@ -91,49 +91,40 @@ def test_pvm_readiness_colour_follows_its_row_after_a_user_sort(window: MainWind
         )
 
 
-def test_selected_synced_trade_survives_a_user_sort(window: MainWindow) -> None:
-    """Regression: deleting a sorted activity row must not delete a different trade."""
-    from osrs_toolkit.journal import SyncedItem, SyncedTrade
+def test_a_selected_row_survives_a_user_sort(window: MainWindow) -> None:
+    """Regression: the row a delete acts on must be the row on screen, not whatever sat at
+    that index before the user clicked a column header.
 
-    def fill(event_id: str, occurred_at: str, item_name: str) -> SyncedTrade:
-        return SyncedTrade(
+    Written originally against the RuneLite activity table, which no longer exists -- the
+    plugin feeds the website now, so nothing populated it. Retargeted rather than dropped:
+    the row_ids mechanism it guards still carries every other table on the page.
+    """
+    from osrs_toolkit.journal import LoadoutItem, NpcLootRecord
+
+    def kill(event_id: str, occurred_at: str, npc_name: str) -> NpcLootRecord:
+        return NpcLootRecord(
             event_id=event_id,
             occurred_at=occurred_at,
-            event_type="ge_fill",
             account_hash="hash",
             account_name="Zed",
-            counterparty=None,
-            direction="buy",
-            metadata={},
-            items=(
-                SyncedItem("given", 995, "Coins", 1_000, 1),
-                SyncedItem("received", 1, item_name, 1, 1_000),
-            ),
+            npc_name=npc_name,
+            items=(LoadoutItem(1, "Bones", 1, 100),),
         )
 
-    window._journal.add_synced_trades(
-        [
-            fill(
-                "11111111-1111-4111-8111-111111111111", "2026-01-01T10:00:00+00:00", "Zulrah scale"
-            ),
-            fill(
-                "22222222-2222-4222-8222-222222222222", "2026-01-02T10:00:00+00:00", "Abyssal whip"
-            ),
-        ]
-    )
-    window._render_synced_trades()
-    table = window.synced_trade_table
+    for event in (
+        kill("11111111-1111-4111-8111-111111111111", "2026-01-01T10:00:00+00:00", "Zulrah"),
+        kill("22222222-2222-4222-8222-222222222222", "2026-01-02T10:00:00+00:00", "Vorkath"),
+    ):
+        window._journal.add_npc_loot_event(event)
+    window._render_loot_log()
+    table = window.loot_log_table
     assert table.rowCount() == 2
 
-    # Newest-first by default puts "Abyssal whip" (Jan 2) on row 0; sorting by Time
-    # ascending swaps them.
+    # Newest-first by default puts Vorkath (Jan 2) on row 0; sorting by Time ascending swaps.
     table.sortItems(0, Qt.SortOrder.AscendingOrder)
     table.setCurrentCell(0, 0)
 
-    selected = window._selected_synced_trade()
-    assert selected is not None
-    trade, event_ids = selected
-    # Row 0 now displays the older Jan 1 fill; the selection must agree with the screen.
-    assert table.item(0, 3).text() == "Bought Zulrah scale"
-    assert trade.received[0].item_name == "Zulrah scale"
-    assert event_ids == ("11111111-1111-4111-8111-111111111111",)
+    # Row 0 now displays the older Jan 1 kill; the selection must agree with the screen.
+    assert table.item(0, 1).text() == "Zulrah"
+    assert window._selected_loot_log_event_id() == "11111111-1111-4111-8111-111111111111"
+
