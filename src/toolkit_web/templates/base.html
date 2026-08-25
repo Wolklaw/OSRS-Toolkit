@@ -10,7 +10,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% if page_title is defined and page_title %}{{ page_title }} · RuneScope{% else %}RuneScope{% endif %}</title>
-  <meta name="description" content="RuneScope — Grand Exchange research and a trade journal for Old School RuneScape.">
+  <meta name="description" content="RuneScope: Grand Exchange research and a trade journal for Old School RuneScape.">
   <link rel="manifest" href="/static/manifest.webmanifest">
   <meta name="theme-color" content="#101217">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
@@ -719,11 +719,11 @@
       let payload = null;
       try { payload = await response.json(); } catch (e) { payload = null; }
       if (!response.ok) {
-        return { ok: false, error: (payload && payload.detail) || 'That did not work — try again in a moment.' };
+        return { ok: false, error: (payload && payload.detail) || "That didn't work, try again in a moment." };
       }
       return { ok: true, data: payload };
     } catch (error) {
-      return { ok: false, error: 'Could not reach the server — try again in a moment.' };
+      return { ok: false, error: "Couldn't reach the server, try again in a moment." };
     }
   }
 

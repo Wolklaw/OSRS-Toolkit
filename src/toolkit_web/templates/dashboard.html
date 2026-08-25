@@ -29,8 +29,8 @@
       <strong>RuneLite plugin</strong>
       <div class="hint tight">
         {% if plugin_state == "live" %}Fills, offer slots and gear are arriving on their own.
-        {% elif plugin_state == "idle" %}Set up, but nothing is arriving right now — RuneLite is
-          closed, or the plugin is switched off.
+        {% elif plugin_state == "idle" %}Set up, but nothing is arriving right now. Either
+          RuneLite is closed, or the plugin is switched off.
         {% elif plugin_state == "unreachable" %}The sync service did not answer. Nothing is lost:
           the plugin holds events until it is back.
         {% else %}Get a token, paste it into the plugin, and your journal starts filling itself in.
@@ -70,7 +70,7 @@
     <div class="grow">
       <strong>Windows app</strong>
       <div class="hint tight">
-        {% if desktop_state == "live" %}Mirroring this journal — a trade recorded in either place
+        {% if desktop_state == "live" %}Mirroring this journal. A trade recorded in either place
           reaches the other within a minute.
         {% elif desktop_state == "idle" %}Connected, but not running. Last checked in
           {{ desktop_last_seen[:16].replace("T", " ") }} UTC.
@@ -126,7 +126,7 @@
 <div class="panel">
   <div class="panel-head">
     <div class="grow">
-      <h2>Grand Exchange — live</h2>
+      <h2>Grand Exchange, live</h2>
       <p class="hint tight">The eight slots as the plugin last saw them.</p>
     </div>
     <a class="button ghost small" href="/buy-limits">Buy limits</a>
@@ -135,7 +135,7 @@
   <div class="empty">
     {% if synced_characters|length > 1 %}
     <strong>Pick a character</strong>
-    Live slots belong to one account at a time — choose one in the header to see them.
+    Live slots belong to one account at a time, so choose one in the header to see them.
     {% else %}
     <strong>Nothing live yet</strong>
     This fills in once the plugin reports a session.
@@ -186,8 +186,8 @@
   <div class="panel-head">
     <div class="grow">
       <h2>Positions</h2>
-      <p class="hint tight">Every flip you are part-way through. Update one with what it
-        actually filled at — that is what Performance grades later.</p>
+      <p class="hint tight">Every flip you're part-way through. Update one with what it
+        actually filled at, that's what Performance grades later.</p>
     </div>
     {% if positions %}
     <input type="search" class="filter-input" placeholder="Filter positions…"
@@ -304,7 +304,7 @@
           <input type="number" id="position-quantity" min="1" step="1">
         </div>
       </div>
-      <p class="hint">Reduce the quantity if a buy order was cancelled part-filled — the position
+      <p class="hint">Reduce the quantity if a buy order was cancelled part-filled. The position
         becomes the amount you actually hold, so it can still be listed and sold.</p>
 
       <div class="section-label">Buy fills</div>

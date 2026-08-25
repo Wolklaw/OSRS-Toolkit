@@ -15,7 +15,7 @@
 <div class="feature-grid">
   <div class="feature">
     <h3>GE Flipper</h3>
-    <p>What to buy right now with the cash and free slots you have — sized to stay inside buy
+    <p>What to buy right now with the cash and free slots you have, sized to stay inside buy
       limits, with tax already taken out.</p>
   </div>
   <div class="feature">
@@ -60,7 +60,7 @@
 <div class="grid-2">
   <div class="panel" id="create-panel">
     <h2>New here?</h2>
-    <p class="hint">You get a recovery code instead of a password. Save it somewhere — it is
+    <p class="hint">You get a recovery code instead of a password. Save it somewhere, it's
       the only way back into the account.</p>
     <div class="row" style="margin-top:0.8rem">
       <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off" style="max-width:190px">
@@ -100,14 +100,14 @@
 </div>
 
 <div class="panel" id="code-reveal-panel" style="display:none">
-  <h2>Your recovery code — save it now</h2>
-  <p class="hint">This is the only time it is shown, and it is all anyone needs to sign in as you.</p>
+  <h2>Your recovery code, save it now</h2>
+  <p class="hint">This is the only time it's shown, and it's all anyone needs to sign in as you.</p>
   <div class="code-box">
     <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
     <button class="button secondary small" onclick="copyValue('revealed-code', this)">Copy</button>
   </div>
   <div class="row" style="margin-top:0.9rem">
-    <button class="button" onclick="location.href='/'">I&#39;ve saved it — continue</button>
+    <button class="button" onclick="location.href='/'">I&#39;ve saved it, continue</button>
   </div>
 </div>
 
@@ -140,7 +140,7 @@
 
   function onTurnstileSolved() { setStatus('create-status', ''); }
   function onTurnstileExpired() {
-    setStatus('create-status', 'That check expired — tick the box again.', 'error');
+    setStatus('create-status', "That check expired, tick the box again.", 'error');
   }
 
   /** The widget's token, or '' when it is present and unsolved. Undefined when there is no

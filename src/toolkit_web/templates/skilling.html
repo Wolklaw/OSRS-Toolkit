@@ -9,14 +9,14 @@
     <div class="field" style="min-width:14rem">
       <label for="character">Character name</label>
       <input type="text" id="character" name="character" value="{{ character }}"
-             placeholder="For eligibility — optional" autocomplete="off">
+             placeholder="For eligibility, optional" autocomplete="off">
     </div>
     <button class="button secondary" type="submit">Look up</button>
   </form>
   {% if lookup_error %}
   <div class="status-msg error">{{ lookup_error }}</div>
   {% elif has_skills %}
-  <div class="status-msg ok">Levels found — methods you don't have the level for are marked below.</div>
+  <div class="status-msg ok">Levels found. Methods you don't have the level for are marked below.</div>
   {% else %}
   <p class="hint">Read from the public OSRS hiscores. Nothing is stored.</p>
   {% endif %}
@@ -82,7 +82,7 @@
   {% else %}
   <div class="empty">
     <strong>No method currently prices out</strong>
-    Every input and output needs a recent trade to price against — check back once the market
+    Every input and output needs a recent trade to price against, check back once the market
     refreshes.
   </div>
   {% endif %}

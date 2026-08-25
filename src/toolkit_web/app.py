@@ -1026,7 +1026,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             mappings, _points = market.snapshot()
         except MarketDataError:
             raise HTTPException(
-                status_code=502, detail="Could not reach live prices — try again shortly."
+                status_code=502, detail="Couldn't reach live prices, try again shortly."
             ) from None
         if item_id is not None:
             if not isinstance(item_id, int):
@@ -1436,7 +1436,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             if verdict is None:
                 raise HTTPException(
-                    status_code=503, detail="Could not check the box just now — try again."
+                    status_code=503, detail="Couldn't check the box just now, try again."
                 )
             if not verdict:
                 raise HTTPException(
@@ -1506,7 +1506,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not account.discord_user_id.startswith(_RECOVERY_ID_PREFIX):
             raise HTTPException(
                 status_code=409,
-                detail="Your name comes from Discord — change it there and sign in again.",
+                detail="Your name comes from Discord, change it there and sign in again.",
             )
         username = payload.get("username")
         if not isinstance(username, str) or not username.strip():
@@ -1574,7 +1574,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         token = mint_pairing_token(settings.sync_base_url, settings.sync_invite_code)
         if token is None:
             raise HTTPException(
-                status_code=502, detail="Could not reach the sync service — try again shortly."
+                status_code=502, detail="Couldn't reach the sync service, try again shortly."
             )
         accounts.set_pairing_token(account.discord_user_id, token)
         # Only once the replacement is safely minted and saved. Revoking first would leave an
@@ -1840,7 +1840,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             market.snapshot()
         except MarketDataError:
             raise HTTPException(
-                status_code=502, detail="Could not reach live prices — try again shortly."
+                status_code=502, detail="Couldn't reach live prices, try again shortly."
             ) from None
         return {"ok": True, "age_seconds": market.age_seconds()}
 
@@ -1972,7 +1972,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 continue
             message = (
                 f"**{item.name}** is now {alert.direction} your target of "
-                f"{alert.target_price:,} gp — currently {current_price:,} gp. "
+                f"{alert.target_price:,} gp, currently {current_price:,} gp. "
                 f"https://runescope.app/item/{alert.item_id}"
             )
             if send_webhook_message(alert.discord_webhook_url, message):

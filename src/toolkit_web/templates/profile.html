@@ -57,7 +57,7 @@
       the first as the second is what let the dashboard claim a live plugin with the game shut.
     #}
     {% if plugin_state == "live" %}<span class="badge ok">Sending now</span>
-    {% elif plugin_state == "idle" %}<span class="badge">Idle — nothing arriving</span>
+    {% elif plugin_state == "idle" %}<span class="badge">Idle, nothing arriving</span>
     {% elif plugin_state == "unreachable" %}<span class="badge bad">Sync service not answering</span>
     {% else %}<span class="badge">Not connected</span>{% endif %}
   </div>
@@ -71,8 +71,8 @@
     {% endif %}
   </div>
   {% if account.paired %}
-  <p class="hint">A new token replaces the old one — the plugin needs it re-pasted wherever it
-    is currently connected.</p>
+  <p class="hint">A new token replaces the old one, so the plugin needs it re-pasted wherever
+    it's currently connected.</p>
   {% endif %}
   <div id="generated-token-box" style="display:none">
     <div class="code-box">
@@ -89,7 +89,7 @@
   </div>
   <div class="status-msg" id="pairing-status"></div>
   {% if plugin_state == "idle" %}
-  <p class="hint">A token is saved, but nothing is being sent — RuneLite is closed, or
+  <p class="hint">A token is saved, but nothing is being sent. Either RuneLite is closed, or
     <strong>Send to OSRS Toolkit Sync</strong> is switched off.</p>
   {% elif plugin_state == "unreachable" %}
   <p class="hint">The sync service did not answer just now. Nothing is lost: the plugin holds
@@ -175,7 +175,7 @@
     </div>
     {% else %}
     <div class="empty" style="padding:1.1rem 0">
-      Nothing yet — log in to the game with the plugin connected and your character appears here.
+      Nothing yet. Log in to the game with the plugin connected and your character will show up here.
     </div>
     {% endif %}
   </div>
@@ -231,7 +231,7 @@
     </div>
   </div>
   <p class="hint">One database file on this server per account. The CSV export is the whole
-    journal — positions and manual trades both — in a format a spreadsheet opens.
+    journal, positions and manual trades both, in a format a spreadsheet opens.
     <a href="/about">What is stored</a>.</p>
 </div>
 
@@ -312,7 +312,7 @@
   }
 
   async function disconnectPlugin() {
-    if (!confirm('Disconnect the plugin? Nothing already imported is deleted — new events just stop arriving.')) { return; }
+    if (!confirm("Disconnect the plugin? Nothing already imported is deleted, new events just stop arriving.")) { return; }
     await api('DELETE', '/api/pairing-token');
     location.reload();
   }
@@ -348,7 +348,7 @@
     document.getElementById('generated-desktop-token-box').style.display = 'block';
     setStatus(
       'desktop-token-status',
-      "Copy this now — it will not be shown again. Paste it into the desktop app.",
+      "Copy this now, it won't be shown again. Paste it into the desktop app.",
       'ok'
     );
   }
