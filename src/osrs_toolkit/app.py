@@ -2022,6 +2022,9 @@ class MainWindow(QMainWindow):
         # Items currently finished-but-uncollected on the GE. None means "not read yet",
         # same convention as _ge_slot_states.
         self._ge_terminal_items: frozenset[int] | None = None
+        # The character the Grand Exchange panel is drawing, held across a moment where the
+        # website could not be reached -- see _synced_account_hash.
+        self._last_synced_account_hash: str | None = None
         # What the Needs attention card is counting, so clicking it can show them.
         self._attention_positions: set[int] = set()
         # Where the plugin says the player is in the GE, the offers on the slots as of the
@@ -4306,7 +4309,7 @@ class MainWindow(QMainWindow):
 
         Read once per render and asked several questions, because it is a file read.
         """
-        account_hash = self._sync_importer.connection_status().account_hash
+        account_hash = self._synced_account_hash()
         if account_hash is None:
             return None
         return self._sync_importer.read_placed_offers(account_hash)
@@ -4356,8 +4359,29 @@ class MainWindow(QMainWindow):
             changed = True
         return changed
 
+    def _synced_account_hash(self) -> str | None:
+        """Whose Grand Exchange state to draw, held steady through a moment offline.
+
+        ``connection_status`` reports no character at all when the source did not answer,
+        which is a different thing from there being no character to report. Since the desktop
+        reads through the website rather than off disk, "did not answer" is now an ordinary
+        event -- one slow request over a home connection -- and ``WebAppSource`` caches the
+        empty answer for a couple of seconds on top, so every consumer in that window agrees
+        there is nobody. Taken literally, that emptied the Grand Exchange panel mid-session,
+        over and over, while the plugin was sending perfectly the whole time.
+
+        So a blip keeps the last character, and only an answer that genuinely names nobody --
+        the token cleared, or a pairing nobody has played -- puts the panel back to empty.
+        """
+        connection = self._sync_importer.connection_status()
+        if connection.account_hash is not None:
+            self._last_synced_account_hash = connection.account_hash
+        elif connection.source_reachable:
+            self._last_synced_account_hash = None
+        return self._last_synced_account_hash
+
     def _render_ge_offers(self) -> None:
-        account_hash = self._sync_importer.connection_status().account_hash
+        account_hash = self._synced_account_hash()
         self.ge_offers_empty.setVisible(account_hash is None)
         self.ge_slots_frame.setVisible(account_hash is not None)
         if account_hash is None:
@@ -4410,7 +4434,7 @@ class MainWindow(QMainWindow):
         Redraws only when the answer actually changes -- re-rendering every 3-second tick
         would fight the table's selection and scroll position while the player is reading it.
         """
-        account_hash = self._sync_importer.connection_status().account_hash
+        account_hash = self._synced_account_hash()
         screen = (
             None if account_hash is None else self._sync_importer.read_offer_screen(account_hash)
         )

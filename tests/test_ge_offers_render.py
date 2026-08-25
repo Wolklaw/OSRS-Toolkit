@@ -129,3 +129,83 @@ def test_a_long_item_name_does_not_stretch_its_slot(
     assert card._item.toolTip() == long_name, "the full name should survive in the tooltip"
     assert card._item.text() != long_name, "the label should have elided"
     assert card.width() <= window.ge_slot_cards[0].width() + 2, "the long name widened its own slot"
+
+
+# -- holding the panel through a moment offline ------------------------------------------------
+
+
+class _FlakySource:
+    """A source that answers normally, then goes unreachable, the way the website does when a
+    request loses a race with a home connection."""
+
+    def __init__(self, account_hash: str = "abc123") -> None:
+        self.account_hash = account_hash
+        self.reachable = True
+
+    def status_payload(self) -> tuple[bool, dict | None, bool]:
+        if not self.reachable:
+            # Detected, but nothing came back -- exactly what WebAppSource returns for a
+            # failed fetch, and what it then serves from its own cache for a second or two.
+            return (True, None, False)
+        return (
+            True,
+            {
+                "schema_version": 1,
+                "active": True,
+                "account_hash": self.account_hash,
+                "account_name": "Example Player",
+            },
+            True,
+        )
+
+    def offer_state_payload(self, account_hash: str) -> dict | None:
+        return None
+
+    def offer_screen_payload(self, account_hash: str) -> dict | None:
+        return None
+
+    def pending(self, scan_limit: int):
+        return iter(())
+
+    def collected(self, handles: list[str]) -> None:
+        return
+
+    def quarantine(self, event) -> None:
+        return
+
+    def housekeeping(self) -> None:
+        return
+
+
+def test_the_panel_survives_the_website_being_unreachable_for_a_moment(
+    window: MainWindow,
+) -> None:
+    """The reported bug: the Grand Exchange panel vanished repeatedly during a buying
+    session. Every failed poll reported no character, and the panel took that literally."""
+    source = _FlakySource()
+    window._sync_importer = RuneLiteSyncImporter(source=source)
+    window._render_ge_offers()
+    assert window.ge_slots_frame.isHidden() is False
+
+    source.reachable = False
+    window._render_ge_offers()
+
+    assert window.ge_slots_frame.isHidden() is False
+    assert window.ge_offers_empty.isHidden() is True
+
+
+def test_the_panel_empties_once_the_source_really_says_there_is_nobody(
+    window: MainWindow,
+) -> None:
+    """The other half: a reachable source naming no character is a real answer -- the token
+    was cleared, or nobody has played this pairing -- and must still empty the panel."""
+    source = _FlakySource()
+    window._sync_importer = RuneLiteSyncImporter(source=source)
+    window._render_ge_offers()
+    assert window.ge_slots_frame.isHidden() is False
+
+    source.account_hash = None
+    window._render_ge_offers()
+
+    assert window.ge_slots_frame.isHidden() is True
+    assert window.ge_offers_empty.isHidden() is False
