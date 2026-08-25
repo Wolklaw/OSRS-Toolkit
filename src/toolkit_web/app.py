@@ -62,25 +62,22 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 STATE_COOKIE = "oauth_state"
 
-#: The companion plugin's own repository — where the build-it-yourself instructions point
-#: while the Plugin Hub submission is still in review.
+#: The companion plugin's own repository. Since the Plugin Hub merged it on 2026-08-25 nobody
+#: installs from here -- the Hub does that -- so this is a "read what you are installing" link
+#: rather than a step anybody has to follow.
 PLUGIN_REPO_URL = "https://github.com/Wolklaw/osrs-toolkit-runelite"
 
-#: Which branch the install instructions build from. Named explicitly rather than left to the
-#: repository's default, because a source ZIP URL has to carry a branch either way and because
-#: this went wrong once already: until 2026-08-23 that repo's default branch was still the
-#: pre-web plugin -- no ``SyncClient``, and neither the Pairing token nor the master-switch
-#: setting the guide tells people to fill in -- so "download it from the front
-#: page" handed somebody a build that could not reach this site at all. ``main`` was
-#: fast-forwarded to the web-era plugin that day and is now the one to build. Anything that
-#: leaves this branch behind again breaks the guide silently, which is the failure worth
-#: remembering: the page still renders, the build still succeeds, and the settings are absent.
+#: Which branch that link points at. Kept as its own constant even though only one URL is built
+#: from it now, because this went wrong once already: until 2026-08-23 the repo's default branch
+#: was still the pre-web plugin -- no ``SyncClient``, and neither the Pairing token nor the
+#: master-switch setting the guide tells people to fill in -- so a source link handed somebody a
+#: plugin that could not reach this site at all.
 PLUGIN_BRANCH = "main"
 PLUGIN_SOURCE_URL = f"{PLUGIN_REPO_URL}/tree/{PLUGIN_BRANCH}"
-PLUGIN_ZIP_URL = f"{PLUGIN_REPO_URL}/archive/refs/heads/{PLUGIN_BRANCH}.zip"
 
-#: What the built jar is called, from ``rootProject.name`` and ``version`` in its build.gradle.
-PLUGIN_JAR_NAME = "osrs-toolkit-sync-1.0.0-all.jar"
+#: The plugin's name on the Plugin Hub, which is what people type into its search box. Matches
+#: the manifest filename in runelite/plugin-hub, not the display name RuneLite shows.
+PLUGIN_HUB_NAME = "osrs-toolkit-sync"
 #: Which synced character's data to show. Plain, not signed: it names nothing but an
 #: account_hash the caller's own pairing token already has full read access to, so there is
 #: nothing here worth protecting from the browser that couldn't already be read straight from
@@ -626,11 +623,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         account: Account | None = OptionalAccount,
         active: str | None = ActiveCharacter,
     ) -> HTMLResponse:
-        """How to actually get the RuneLite plugin, including the way that works today.
+        """How to get the RuneLite plugin, which is now just "install it from the Plugin Hub".
 
-        Signed out as well as in. The Plugin Hub submission is not approved yet and reviews
-        run long, so the honest answer to "how do I install this" is currently "build it
-        yourself", and a page that only listed the hub would be a page that helps nobody.
+        Signed out as well as in: somebody deciding whether this is worth an account is exactly
+        who needs to read it.
         """
         return templates.TemplateResponse(
             request,
@@ -638,10 +634,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "account": account,
                 "plugin_repo_url": PLUGIN_REPO_URL,
-                "plugin_branch": PLUGIN_BRANCH,
                 "plugin_source_url": PLUGIN_SOURCE_URL,
-                "plugin_zip_url": PLUGIN_ZIP_URL,
-                "plugin_jar_name": PLUGIN_JAR_NAME,
+                "plugin_hub_name": PLUGIN_HUB_NAME,
                 **_optional_switcher(account, active),
             },
         )

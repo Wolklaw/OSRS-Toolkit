@@ -1,157 +1,32 @@
 {% extends "base.html" %}
 {% set page_title = "RuneLite plugin" %}
-{% set page_sub = "The companion plugin fills your journal in by itself. Here is how to install it today." %}
+{% set page_sub = "The companion plugin fills your journal in by itself. Here is how to get it." %}
 {% set main_class = "narrow" %}
 
 {% block content %}
 
 <div class="panel">
-  <div class="callout info">
-    <strong>Not on the Plugin Hub yet.</strong>
-    <p>The submission is in review, and reviews take a while, so this could be the install
-      method for a good while yet. Until it lands, you build the plugin yourself. It takes about
-      ten minutes: a free Java install, and opening a terminal window once. Don't worry if
-      you've never done that, every step below walks you through it. Everything on this site
-      still works without the plugin in the meantime, it just saves you some typing.</p>
-  </div>
-</div>
-
-<div class="panel">
   <div class="prose">
-    <h2 style="margin-top:0">Build it yourself</h2>
+    <h2 style="margin-top:0">Install it</h2>
+    <p>It's on the RuneLite Plugin Hub, so this is a two-minute job inside RuneLite itself.
+      Nothing to download from here, and nothing to build.</p>
     <ol class="steps">
-      <li><strong>Install Java 11 or newer.</strong> RuneLite comes with its own Java built in,
-        so you almost certainly don't have this yet. Grab
-        <a href="https://adoptium.net/" target="_blank" rel="noopener">Temurin</a>, it's free,
-        open source, and unlike java.com's download it can actually build software, not just
-        run it. Default install options are fine, just click through.</li>
-      {#
-        Every link here is built from PLUGIN_BRANCH rather than written out, so the ZIP, the
-        clone and the folder name cannot drift apart -- see the note beside that constant for
-        the time they did, and what it cost.
-      #}
-      <li><strong>Download the plugin.</strong>
-        Grab <a href="{{ plugin_zip_url }}"><strong>the ZIP</strong></a>, then right-click it
-        and choose <strong>Extract All</strong> (on macOS, just double-click it). You'll end up
-        with a folder called <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. If you'd
-        rather use git:
-        <p class="hint">Windows' extractor puts that folder <em>inside</em> another folder with
-          the same name, so you may see
-          <code>osrs-toolkit-runelite-{{ plugin_branch }}\osrs-toolkit-runelite-{{ plugin_branch }}</code>.
-          Keep opening folders until you see a file called <code>build.gradle</code> sitting
-          right there -- that's the one you want for the next step.</p>
-        <div class="code-box cmd">
-          <code id="clone-cmd">git clone {{ plugin_repo_url }}.git</code>
-          <button class="button secondary small" onclick="copyValue('clone-cmd', this)">Copy</button>
-        </div>
-        <p class="hint"><a href="{{ plugin_source_url }}" target="_blank" rel="noopener">Browse
-          the source</a> first if you'd like to see what you're building before you build it.</p>
-      </li>
-      <li><strong>Open a terminal in that folder.</strong> This sounds scarier than it is.
-        Open the folder in File Explorer, click once in the empty address bar at the top (it'll
-        highlight blue), type <code>cmd</code>, and hit Enter. A black window pops up already
-        sitting in the right folder. (On Windows 11 you can also just right-click empty space
-        inside the folder and pick <strong>Open in Terminal</strong>, same result.)
-        <p class="hint">To check Java installed properly, type <code>java -version</code> in
-          that window and press Enter. You should see a version number pop up. If it says
-          something like "not recognized" instead, restart your computer and try again, that
-          usually fixes it.</p>
-        <details class="faq">
-          <summary>Using macOS or Linux instead?</summary>
-          <p><strong>macOS:</strong> open Terminal (Applications, then Utilities, then
-            Terminal), type <code>cd </code> followed by a space, then drag the unzipped folder
-            into the Terminal window and press Enter.</p>
-          <p><strong>Linux:</strong> most file managers have an <strong>Open Terminal
-            Here</strong> option when you right-click inside the folder. Otherwise just
-            <code>cd</code> to it yourself.</p>
-        </details>
-      </li>
-      <li><strong>Build it.</strong> Still in that same terminal window, run:
-        <div class="code-box cmd">
-          <code id="build-cmd">gradlew shadowJar</code>
-          <button class="button secondary small" onclick="copyValue('build-cmd', this)">Copy</button>
-        </div>
-        <p class="hint">On macOS or Linux it's <code>./gradlew shadowJar</code> instead. The
-          first build downloads Gradle and the RuneLite client, so give it a few minutes. It can
-          look stuck, but it's working. After that, builds only take seconds.</p>
-        <p class="hint">Got <strong>"'gradlew' is not recognized"</strong>? You're a folder too
-          high. Close the terminal, open the folder that has <code>build.gradle</code> in it
-          (it's probably one level deeper than where you started), and open a terminal there
-          instead.</p>
-      </li>
-      <li><strong>Run it.</strong> Same terminal window again:
-        <div class="code-box cmd">
-          <code id="run-cmd">java -ea -jar build/libs/{{ plugin_jar_name }}</code>
-          <button class="button secondary small" onclick="copyValue('run-cmd', this)">Copy</button>
-        </div>
-        <p class="hint">RuneLite opens with the plugin already loaded. Look for
-          <strong>OSRS Toolkit Sync</strong> in the plugin list, no hub install needed. If your
-          filename looks different, just check what's actually sitting in
-          <code>build/libs</code>.</p>
-        <p class="hint">Got <strong>"Assertions are not enabled"</strong> instead? You dropped
-          the <code>-ea</code> flag -- RuneLite's own plugin loader refuses to start without it.
-          Copy the command above again, <code>-ea</code> included.</p>
-      </li>
+      <li><strong>Open RuneLite</strong> the way you normally play.</li>
+      <li><strong>Click the wrench icon</strong> in the sidebar on the right.</li>
+      <li><strong>Scroll to the bottom and click <em>Plugin Hub</em>.</strong></li>
+      <li><strong>Search for <em>OSRS Toolkit Sync</em></strong> and press
+        <strong>Install</strong>.</li>
     </ol>
-
-    <div class="callout">
-      <strong>This starts its own copy of RuneLite.</strong>
-      <p>It doesn't add the plugin to a RuneLite you already have installed. Only the Plugin Hub
-        can do that, which is what the submission is for. Until then, just launch the game
-        through the command above whenever you want the plugin running.</p>
-    </div>
-
-    <h3>Updating it later</h3>
-    <p><a href="{{ plugin_zip_url }}">Download the ZIP again</a> (or <code>git pull</code> in
-      that folder), run the build command once more, and run the jar. Your settings and your
-      journal are untouched by a rebuild.</p>
-
-    <details class="faq">
-      <summary>If you play on a Jagex account, one more step</summary>
-      <p class="hint tight">If you log in through the separate Jagex Launcher app instead of
-        typing a username and password straight into RuneLite, this part's for you. If not,
-        skip ahead.</p>
-      <p>The Jagex Launcher normally hands RuneLite your login for you. A client started from
-        the command line misses out on that, so you'd land on the old username-and-password
-        screen with no way through. Luckily RuneLite has a supported way around it: you tell the
-        launcher to write your credentials to a file, and any RuneLite on that machine can read
-        it. These steps come straight from RuneLite's own
-        <a href="https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts" target="_blank" rel="noopener">Using
-        Jagex Accounts</a> guide.</p>
-      <ol class="steps">
-        <li><strong>Check your RuneLite launcher is 2.6.3 or newer.</strong> That's the
-          launcher, not the client itself. Older launchers can't do this.</li>
-        <li><strong>Open the launcher's configuration.</strong> On Windows that is <strong>RuneLite
-          (configure)</strong> in the Start menu. On macOS, run
-          <code>/Applications/RuneLite.app/Contents/MacOS/RuneLite --configure</code>; on Linux,
-          pass <code>--configure</code> to the launcher the same way.</li>
-        <li><strong>Add the flag.</strong> In the <strong>Client arguments</strong> box put:
-          <div class="code-box cmd">
-            <code id="jagex-flag">--insecure-write-credentials</code>
-            <button class="button secondary small" onclick="copyValue('jagex-flag', this)">Copy</button>
-          </div>
-          Save, and close the configuration window.
-        </li>
-        <li><strong>Launch RuneLite through the Jagex Launcher once</strong>, the way you
-          normally play. It writes your credentials to
-          <code>.runelite/credentials.properties</code>.</li>
-        <li><strong>Now run the jar the same way as before</strong> (the "Run it" step above).
-          It reads that file and signs in as your Jagex account, plugin and all.</li>
-      </ol>
-
-      <div class="callout">
-        <strong>That file is a login bypass, so treat it like a password.</strong>
-        <p>Anyone holding <code>credentials.properties</code> can sign into your account without
-          knowing your password, which is why the flag has "insecure" in its name. Don't share
-          it, and keep it out of screenshots and support posts.</p>
-        <p>When you're done, delete the file and take
-          <code>--insecure-write-credentials</code> back out of the launcher's client arguments,
-          or it gets written again on every launch. If you think anyone else has seen the file,
-          use <strong>End sessions</strong> in your account settings on
-          <a href="https://secure.runescape.com/m=account-settings/" target="_blank" rel="noopener">runescape.com</a>
-          to invalidate it.</p>
-      </div>
-    </details>
+    <p>RuneLite shows a warning before it installs, saying the plugin submits your
+      <strong>IP address</strong> and may submit account data to a server RuneLite doesn't
+      control. That server is this site, and the warning is accurate.
+      <a href="/about">Here's exactly what gets sent, and how long it's kept</a>.</p>
+    <p class="hint">Just merged, so give the Hub a little while if it doesn't turn up in the
+      list yet. RuneLite refreshes its plugin list on its own schedule, and restarting the
+      client is usually enough to hurry it along.</p>
+    <p class="hint">Updates come down through the Hub from now on. You don't have to come back
+      here for them. <a href="{{ plugin_source_url }}" target="_blank" rel="noopener">The source
+      is on GitHub</a> if you want to read what you're installing.</p>
   </div>
 </div>
 

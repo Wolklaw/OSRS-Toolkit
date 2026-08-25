@@ -1,8 +1,16 @@
+"""The plugin page after the Plugin Hub merged the submission on 2026-08-25.
+
+What this page used to be -- Java, a source ZIP, ``gradlew shadowJar``, running a jar that
+started its own client, and the Jagex Launcher credentials dance that a command-line client
+forced on people -- is all gone, because the Hub does it now. These cover what replaced it and,
+just as importantly, that none of the old story came back.
+"""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from toolkit_web.app import PLUGIN_BRANCH, PLUGIN_SOURCE_URL, PLUGIN_ZIP_URL
+from toolkit_web.app import PLUGIN_BRANCH, PLUGIN_HUB_NAME, PLUGIN_SOURCE_URL
 
 
 def test_the_plugin_page_reads_signed_out(client: TestClient):
@@ -13,84 +21,83 @@ def test_the_plugin_page_reads_signed_out(client: TestClient):
     assert "Sign in with Discord" not in response.text
 
 
-def test_it_says_the_hub_listing_is_not_available_yet(client: TestClient):
-    """The page would be useless if it only listed a route that does not work yet."""
+def test_it_sends_people_to_the_plugin_hub(client: TestClient):
     page = client.get("/plugin").text
 
-    assert "Not on the Plugin Hub yet" in page
+    assert "Plugin Hub" in page
+    assert "OSRS Toolkit Sync" in page
 
 
-def test_it_carries_the_build_and_run_commands(client: TestClient):
+def test_it_names_the_wrench_and_the_search(client: TestClient):
+    """"Install it from the Hub" is not directions. Where to click is."""
     page = client.get("/plugin").text
 
-    assert "gradlew shadowJar" in page
-    assert "java -ea -jar build/libs/osrs-toolkit-sync-1.0.0-all.jar" in page
+    assert "wrench" in page
+    assert "Install" in page
 
 
-def test_it_warns_about_windows_extracting_a_doubled_folder(client: TestClient):
-    """Windows' own extractor nests the zip's single top folder inside a second folder of the
-    same name, so people open a terminal one level above gradlew and get "not recognized"."""
+def test_it_prepares_people_for_runelites_own_install_warning(client: TestClient):
+    """RuneLite shows the manifest's warning line before installing. Somebody who meets that
+    cold reads it as "this plugin is dodgy" rather than "this is the site I just signed up
+    for", so the page says it first and links what is actually sent."""
     page = client.get("/plugin").text
 
-    assert "build.gradle" in page
-    assert "not recognized" in page
+    assert "IP address" in page
+    assert 'href="/about"' in page
 
 
-def test_it_warns_that_the_jar_needs_assertions_enabled(client: TestClient):
-    """RuneLite's own ExternalPluginManager.loadBuiltin refuses to start without -ea, and a
-    plain `java -jar` copy-paste drops it, so people hit that crash with no clue why."""
+def test_it_does_not_tell_anyone_to_build_it(client: TestClient):
+    """The whole point of the Hub listing. Any of this surviving sends somebody off to install
+    Java for a plugin they can get in two clicks."""
     page = client.get("/plugin").text
 
-    assert "Assertions are not enabled" in page
+    assert "gradlew" not in page
+    assert "shadowJar" not in page
+    assert "Temurin" not in page
+    assert "build.gradle" not in page
+    assert "java -ea" not in page
+
+
+def test_it_no_longer_walks_anyone_through_writing_jagex_credentials_to_disk(
+    client: TestClient,
+):
+    """That section only ever existed because a command-line client got no login from the
+    Jagex Launcher. A Hub install is just RuneLite, so telling people to turn on a flag whose
+    own name is "insecure" would now be advice with no upside at all."""
+    page = client.get("/plugin").text
+
+    assert "--insecure-write-credentials" not in page
+    assert "credentials.properties" not in page
+
+
+def test_it_does_not_still_claim_the_submission_is_pending(client: TestClient):
+    page = client.get("/plugin").text
+
+    assert "Not on the Plugin Hub yet" not in page
+    assert "in review" not in page
 
 
 def test_it_links_the_plugin_repository(client: TestClient):
     assert "https://github.com/Wolklaw/osrs-toolkit-runelite" in client.get("/plugin").text
 
 
-def test_the_download_the_browse_link_and_the_folder_agree_on_a_branch(client: TestClient):
-    """These three drifting apart is what broke this page once already: the ZIP came from one
-    branch and the instructions described another, so people built a plugin with none of the
-    settings the next section told them to fill in. All three are derived from one constant."""
-    page = client.get("/plugin").text
-
-    assert PLUGIN_ZIP_URL in page
-    assert PLUGIN_SOURCE_URL in page
-    assert f"osrs-toolkit-runelite-{PLUGIN_BRANCH}" in page
-
-
-def test_the_source_urls_are_built_from_the_branch_rather_than_written_out():
-    assert PLUGIN_ZIP_URL.endswith(f"/archive/refs/heads/{PLUGIN_BRANCH}.zip")
+def test_the_source_link_is_built_from_the_branch_rather_than_written_out():
+    """Nobody builds from it now, but a source link pointing at a branch that predates the web
+    plugin would still be showing people the wrong code."""
     assert PLUGIN_SOURCE_URL.endswith(f"/tree/{PLUGIN_BRANCH}")
 
 
-def test_it_does_not_promise_the_plugin_lands_in_an_existing_runelite(client: TestClient):
-    """The jar starts its own client. Saying otherwise would send people hunting a plugin
-    list it was never added to."""
-    assert "starts its own copy of RuneLite" in client.get("/plugin").text
+def test_the_hub_name_matches_the_manifest_filename():
+    """What people type into the Hub's search box, and the filename in runelite/plugin-hub."""
+    assert PLUGIN_HUB_NAME == "osrs-toolkit-sync"
 
 
-def test_it_gives_real_steps_for_a_jagex_account(client: TestClient):
-    """A command-line client gets no login from the Jagex Launcher, which is a dead end for
-    most players. Naming the flag and where it writes is the whole answer."""
+def test_it_still_explains_pairing(client: TestClient):
+    """Installing is only half of it: a plugin with no token sends nowhere."""
     page = client.get("/plugin").text
 
-    assert "--insecure-write-credentials" in page
-    assert ".runelite/credentials.properties" in page
-    assert "2.6.3" in page
-
-
-def test_it_credits_runelites_own_guide_for_those_steps(client: TestClient):
-    assert "runelite/wiki/Using-Jagex-Accounts" in client.get("/plugin").text
-
-
-def test_it_warns_that_the_credentials_file_bypasses_a_password(client: TestClient):
-    """The flag is called "insecure" for a reason, and the page has to say why before
-    somebody pastes the file into a support thread."""
-    page = client.get("/plugin").text
-
-    assert "login bypass" in page
-    assert "End sessions" in page
+    assert "Pairing token" in page
+    assert "Send to OSRS Toolkit Sync" in page
 
 
 def test_both_setup_pages_are_reachable_from_the_navigation(signed_in: TestClient):
