@@ -368,6 +368,64 @@ Run it as its own `systemctl --user` unit beside the other two, matching everyth
 here that cannot be recreated. `accounts.db` beside it costs a re-login and a re-pasted pairing
 token. `market-cache/` is disposable.
 
+Automated nightly since 2026-08-25, the day the RuneLite plugin was listed on the Plugin Hub
+and the journals here stopped being only mine.
+
+```bash
+python -m toolkit_web.backup
+```
+
+Writes `~/backups/runescope-<utc-stamp>.tar.gz` holding `accounts.db`, every account's
+`journals/<id>/toolkit.db`, and the sync service's `sync.db` from next door. Keeps the newest
+14 and deletes the rest; files in that directory that are not ours are left alone.
+
+**It copies through SQLite's backup API rather than copying the files.** Everything here runs
+in WAL mode with the services still writing, so the `.db` on disk is only part of the truth
+until a checkpoint — a `cp` or a `tar` of the raw file can restore missing whatever arrived
+most recently, and it looks fine until somebody goes looking for it.
+
+`~/.config/systemd/user/toolkit-backup.service`:
+
+```ini
+[Unit]
+Description=Back up RuneScope journals and the sync queue
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/osrs-web
+Environment=TOOLKIT_DATA_DIR=%h/.local/share/toolkit-web
+Environment=TOOLKIT_BACKUP_DIR=%h/backups
+ExecStart=%h/osrs-web/.venv/bin/python -m toolkit_web.backup
+```
+
+`~/.config/systemd/user/toolkit-backup.timer`:
+
+```ini
+[Unit]
+Description=Nightly RuneScope backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now toolkit-backup.timer
+systemctl --user start toolkit-backup.service   # take one now
+journalctl --user -u toolkit-backup -n 20
+```
+
+`Persistent=true` matters on a laptop: a missed run fires once at the next boot instead of
+being skipped silently.
+
+**This is still one disk.** It protects against a bad deploy, a wrong `DELETE`, or somebody
+asking for their data back. It does not protect against that laptop dying. Copying the newest
+archive somewhere else is a separate job and is not done yet.
+
 ## Operational notes
 
 - **Sleep is disabled, deliberately.** `sleep.target`, `suspend.target`, `hibernate.target`
