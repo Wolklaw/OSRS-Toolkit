@@ -4,6 +4,28 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-25
+
+### Highlights
+
+- **The Trade Journal can now import a CSV, not just export one.** Choose whether to add the
+  file to what is already there or replace it; replacing asks a second time and tells you how
+  many trades it would delete first. Completed trades come back exactly. Positions still in
+  flight are listed as skipped rather than half-restored, because a CSV does not carry the
+  fills, the listed price or the status that make a position a position.
+- **The RuneLite activity tab is gone.** It had stopped being able to receive anything: since
+  this app started reading through the website, the journal it mirrors carries your trades and
+  positions but not the raw event feed, so that tab was permanently empty. Its connection
+  status moved to the journal toolbar, where it still tells you whether fills are arriving.
+
+### Fixed
+
+- The Grand Exchange panel no longer blanks itself for a moment whenever a request to the
+  website is slow. It read "the website did not answer" as "no character is logged in" and
+  hid the slots, which during a busy Grand Exchange session meant the panel disappearing over
+  and over while the plugin was sending perfectly. The last known character is held through a
+  blip now, and only a real answer naming nobody empties the panel.
+
 ## [1.2.3] - 2026-08-23
 
 ### Highlights
