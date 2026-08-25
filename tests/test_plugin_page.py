@@ -27,6 +27,15 @@ def test_it_carries_the_build_and_run_commands(client: TestClient):
     assert "java -jar build/libs/osrs-toolkit-sync-1.0.0-all.jar" in page
 
 
+def test_it_warns_about_windows_extracting_a_doubled_folder(client: TestClient):
+    """Windows' own extractor nests the zip's single top folder inside a second folder of the
+    same name, so people open a terminal one level above gradlew and get "not recognized"."""
+    page = client.get("/plugin").text
+
+    assert "build.gradle" in page
+    assert "not recognized" in page
+
+
 def test_it_links_the_plugin_repository(client: TestClient):
     assert "https://github.com/Wolklaw/osrs-toolkit-runelite" in client.get("/plugin").text
 

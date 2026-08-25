@@ -35,6 +35,11 @@
         and choose <strong>Extract All</strong> (on macOS, just double-click it). You'll end up
         with a folder called <code>osrs-toolkit-runelite-{{ plugin_branch }}</code>. If you'd
         rather use git:
+        <p class="hint">Windows' extractor puts that folder <em>inside</em> another folder with
+          the same name, so you may see
+          <code>osrs-toolkit-runelite-{{ plugin_branch }}\osrs-toolkit-runelite-{{ plugin_branch }}</code>.
+          Keep opening folders until you see a file called <code>build.gradle</code> sitting
+          right there -- that's the one you want for the next step.</p>
         <div class="code-box cmd">
           <code id="clone-cmd">git clone {{ plugin_repo_url }}.git</code>
           <button class="button secondary small" onclick="copyValue('clone-cmd', this)">Copy</button>
@@ -69,6 +74,10 @@
         <p class="hint">On macOS or Linux it's <code>./gradlew shadowJar</code> instead. The
           first build downloads Gradle and the RuneLite client, so give it a few minutes. It can
           look stuck, but it's working. After that, builds only take seconds.</p>
+        <p class="hint">Got <strong>"'gradlew' is not recognized"</strong>? You're a folder too
+          high. Close the terminal, open the folder that has <code>build.gradle</code> in it
+          (it's probably one level deeper than where you started), and open a terminal there
+          instead.</p>
       </li>
       <li><strong>Run it.</strong> Same terminal window again:
         <div class="code-box cmd">
