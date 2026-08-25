@@ -7,3 +7,6 @@ dist/
 .pytest_cache/
 .ruff_cache/
 data/
+
+# Local dev launcher config, machine-specific.
+.claude/
