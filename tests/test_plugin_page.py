@@ -24,7 +24,7 @@ def test_it_carries_the_build_and_run_commands(client: TestClient):
     page = client.get("/plugin").text
 
     assert "gradlew shadowJar" in page
-    assert "java -jar build/libs/osrs-toolkit-sync-1.0.0-all.jar" in page
+    assert "java -ea -jar build/libs/osrs-toolkit-sync-1.0.0-all.jar" in page
 
 
 def test_it_warns_about_windows_extracting_a_doubled_folder(client: TestClient):
@@ -34,6 +34,14 @@ def test_it_warns_about_windows_extracting_a_doubled_folder(client: TestClient):
 
     assert "build.gradle" in page
     assert "not recognized" in page
+
+
+def test_it_warns_that_the_jar_needs_assertions_enabled(client: TestClient):
+    """RuneLite's own ExternalPluginManager.loadBuiltin refuses to start without -ea, and a
+    plain `java -jar` copy-paste drops it, so people hit that crash with no clue why."""
+    page = client.get("/plugin").text
+
+    assert "Assertions are not enabled" in page
 
 
 def test_it_links_the_plugin_repository(client: TestClient):

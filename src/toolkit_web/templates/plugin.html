@@ -81,13 +81,16 @@
       </li>
       <li><strong>Run it.</strong> Same terminal window again:
         <div class="code-box cmd">
-          <code id="run-cmd">java -jar build/libs/{{ plugin_jar_name }}</code>
+          <code id="run-cmd">java -ea -jar build/libs/{{ plugin_jar_name }}</code>
           <button class="button secondary small" onclick="copyValue('run-cmd', this)">Copy</button>
         </div>
         <p class="hint">RuneLite opens with the plugin already loaded. Look for
           <strong>OSRS Toolkit Sync</strong> in the plugin list, no hub install needed. If your
           filename looks different, just check what's actually sitting in
           <code>build/libs</code>.</p>
+        <p class="hint">Got <strong>"Assertions are not enabled"</strong> instead? You dropped
+          the <code>-ea</code> flag -- RuneLite's own plugin loader refuses to start without it.
+          Copy the command above again, <code>-ea</code> included.</p>
       </li>
     </ol>
 
