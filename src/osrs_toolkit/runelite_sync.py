@@ -47,9 +47,13 @@ GE_SLOT_COUNT = 8
 
 _BUY_OFFER_STATES = frozenset({"BUYING", "BOUGHT", "CANCELLED_BUY"})
 _SELL_OFFER_STATES = frozenset({"SELLING", "SOLD", "CANCELLED_SELL"})
-# Public: the dashboard flashes a slot the instant it lands in one of these (offer finished,
-# goods uncollected).
-TERMINAL_OFFER_STATES = frozenset({"BOUGHT", "SOLD", "CANCELLED_BUY", "CANCELLED_SELL"})
+# Public: an offer that filled completely. This is the only outcome the dashboard blinks a
+# slot for -- a cancelled offer is finished too, but the player is the one who cancelled it,
+# so telling them about it is telling them what they just did.
+FILLED_OFFER_STATES = frozenset({"BOUGHT", "SOLD"})
+# Public: finished, whether it filled or was cancelled. Either way the goods or the coins are
+# still sitting in the slot waiting to be collected.
+TERMINAL_OFFER_STATES = FILLED_OFFER_STATES | frozenset({"CANCELLED_BUY", "CANCELLED_SELL"})
 
 ParsedEvent = (
     SyncedTrade
@@ -105,6 +109,11 @@ class GEOfferSlot:
     def is_terminal(self) -> bool:
         """Finished but still uncollected — the plugin only clears a slot once collected in-game."""
         return self.state in TERMINAL_OFFER_STATES
+
+    @property
+    def is_filled(self) -> bool:
+        """Bought or sold in full, as opposed to cancelled part-way."""
+        return self.state in FILLED_OFFER_STATES
 
     @property
     def percent_filled(self) -> float:

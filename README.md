@@ -116,14 +116,15 @@ was suggested with. From there it moves through **Bought**, **Listed for sale**,
 
 - All eight GE slots sit above the journal, laid out the way the game lays them out, colour-coded
   for buying, selling, and done-and-waiting-to-collect.
-- When a buy finishes and the item is yours to sell, the slot and its journal row flash yellow
-  together. The same flash marks a sale finishing, and any rows a newly tracked plan just
-  created. If it happens while you're in-game, the sidebar holds a dot until you come back and
-  look, then plays it.
-- Standing at the Grand Exchange in-game, the rows you're trading highlight themselves: the row
-  turns blue, with the quantity and the price for whichever side you're on picked out inside it.
-  It follows the whole trade — the "Set up offer" box narrows it to the one item while you type,
-  it stays put while the offer fills and while you collect, and it clears when you walk away.
+- When a buy fills and the item is yours to sell, the slot and its journal row flash yellow
+  together. The same flash marks a sale filling, and any rows a newly tracked plan just created.
+  A cancelled offer doesn't flash — you cancelled it, you already know. If it happens while
+  you're in-game, the sidebar holds a dot until you come back and look, then plays it.
+- While the Grand Exchange is buying or selling something, the journal picks out the one price
+  that trade is working towards, in blue: the buy price for a buy, the ask for a sale, on every
+  row for that item. It holds for the whole trade — from the "Set up offer" box opening while
+  you type, through the offer filling, until you collect the slot — and it doesn't care whether
+  you're still standing at the GE while that happens.
 - Click a GE slot to jump to that item's journal row. If your filters were hiding it, they open up.
 - Record as many buy fills and sale fills as you need, at whatever quantities and prices you got.
   Both sides average out by quantity.
@@ -212,8 +213,8 @@ plugin is there so you don't have to type in what you just did in-game.
 - Positions that open the moment you place an offer, and move to Listed for sale when you list
   something.
 - The live eight-slot Grand Exchange panel above the journal.
-- The yellow flash when a buy finishes or a sale closes out.
-- The blue highlight that follows the row you're trading while you're stood at the GE.
+- The yellow flash when a buy fills or a sale closes out.
+- The blue price highlight that follows a trade from the offer box to collecting the slot.
 - The RuneLite activity page itself, and player-to-player trade records (a second switch, also off
   by default).
 - PvM Readiness verdicts. Without gear sync every boss reads **Unknown** — you still get the

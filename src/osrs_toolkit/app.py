@@ -139,9 +139,7 @@ from osrs_toolkit.journal_presentation import (
     journal_display_status,
     journal_pl_presentation,
     journal_status_matches,
-    live_offer_positions,
-    offer_screen_is_sell_side,
-    offer_screen_positions,
+    live_price_highlights,
     tracked_position_within_period,
     trade_needs_attention,
     trade_within_period,
@@ -172,8 +170,8 @@ from osrs_toolkit.release_notes import (
     load_release_notes,
 )
 from osrs_toolkit.runelite_sync import (
+    FILLED_OFFER_STATES,
     GE_SLOT_COUNT,
-    TERMINAL_OFFER_STATES,
     GEOfferScreen,
     GEOfferSlot,
     RuneLiteSyncImporter,
@@ -581,10 +579,9 @@ class _Palette(NamedTuple):
     # (a tint, not a fill, so the row's own status/P&L colour stays readable).
     flash: str = "#ffd34d"
     flash_row: str = "#4a3c14"
-    # The row for the GE offer currently open in game. Deliberately a different colour from
-    # flash, since this holds for as long as the offer is open rather than blinking briefly.
+    # The price a live Grand Exchange offer is working on. Deliberately a different colour
+    # from flash, since this holds for as long as the offer does rather than blinking briefly.
     live_offer: str = "#65a9ff"
-    live_offer_row: str = "#16304d"
     button_border: str = "0"
     focus: str = "#d5ad52"
     text_selection: str = "#765f2d"
@@ -648,7 +645,6 @@ _PALETTES: dict[str, _Palette] = {
         flash="#a86a00",
         flash_row="#ffeeb0",
         live_offer="#1f64a8",
-        live_offer_row="#d5e6f8",
         icon_variant="-dark",
     ),
     # Styled after the game's own interfaces: stone panels, square corners, interface
@@ -679,7 +675,6 @@ _PALETTES: dict[str, _Palette] = {
         flash="#ff981f",
         flash_row="#5c4318",
         live_offer="#7ab4ff",
-        live_offer_row="#26374d",
         button_border="1px solid #1b1710",
         focus="#ff981f",
         text_selection="#6b5a34",
@@ -1962,7 +1957,6 @@ class MainWindow(QMainWindow):
         self._flash_color = "#ffd34d"
         self._flash_row_color = "#4a3c14"
         self._live_offer_color = "#65a9ff"
-        self._live_offer_row_color = "#16304d"
         # The last state each renderer saw, so the next pass can tell what changed. None
         # means "nothing seen yet" -- the first look after startup seeds these silently,
         # so nothing left finished overnight blinks the moment the app opens.
@@ -1977,19 +1971,21 @@ class MainWindow(QMainWindow):
         # The character the Grand Exchange panel is drawing, held across a moment where the
         # website could not be reached -- see _synced_account_hash.
         self._last_synced_account_hash: str | None = None
-        # What the Needs attention card is counting, so clicking it can show them.
-        self._attention_positions: set[int] = set()
-        # Where the plugin says the player is in the GE, the offers on the slots as of the
-        # last look, and the journal rows they map to (resolved by _render_journal).
+        # What the Needs attention card is counting, so clicking it can show them. Newest
+        # first, the order the table itself is in -- a set would hand back an arbitrary one.
+        self._attention_positions: list[int] = []
+        # Where the plugin says the player is in the GE interface, every buy or sale the
+        # Grand Exchange has going as (item id, side), and which of each journal row's two
+        # price cells that marks (resolved by _render_journal).
         self._offer_screen: GEOfferScreen | None = None
-        self._offer_screen_offers: frozenset[tuple[int, str | None]] = frozenset()
-        self._offer_screen_positions: frozenset[int] = frozenset()
+        self._live_offers: frozenset[tuple[int, str | None]] = frozenset()
+        self._live_price_sides: dict[int, frozenset[str]] = {}
         # Held until the surface each points at is actually being looked at — see
         # _release_pending_flashes.
         self._pending_journal_flash: set[int] = set()
         self._pending_slot_flash: set[int] = set()
         self._journal_flasher = AttentionFlasher(self)
-        self._journal_flasher.pulsed.connect(self._paint_journal_row_backgrounds)
+        self._journal_flasher.pulsed.connect(self._paint_journal_flash)
         self._slot_flasher = AttentionFlasher(self)
         self._slot_flasher.pulsed.connect(self._paint_slot_flash)
         self._market_buttons: list[QPushButton] = []
@@ -3821,8 +3817,12 @@ class MainWindow(QMainWindow):
         if self._adopt_live_asks(tracked, self._live_sell_asks(slots)):
             tracked = self._journal.list_tracked()
         # Over every tracked position, not just the rendered ones -- a hidden row doesn't
-        # stop the player standing in front of that offer.
-        self._offer_screen_positions = self._positions_being_traded(tracked, slots)
+        # stop the Grand Exchange working on that item.
+        self._live_offers = self._ge_offers_in_flight(slots, self._offer_screen)
+        self._live_price_sides = live_price_highlights(
+            self._live_offers,
+            [(trade.position_id, trade.item_id, trade.status) for trade in tracked],
+        )
 
         def _live_sell_price(trade: TrackedTrade) -> int | None:
             point = point_by_id.get(trade.item_id) if trade.item_id is not None else None
@@ -3997,11 +3997,10 @@ class MainWindow(QMainWindow):
                     self.journal_table.item(row_index, column).setToolTip(attention)
 
             # Runs last so its tooltip joins rather than replaces what the blocks above set.
-            if (
-                row.raw_status in UpdateTrackedTradeDialog.STATUSES
-                and row.record_id in self._offer_screen_positions
-            ):
-                self._mark_offer_screen_row(row_index, row)
+            if row.raw_status in UpdateTrackedTradeDialog.STATUSES:
+                self._mark_live_prices(
+                    row_index, row, self._live_price_sides.get(row.record_id, frozenset())
+                )
 
             profit_cell = self.journal_table.item(row_index, 8)
             profit_cell.setData(Qt.ItemDataRole.UserRole, row.profit.tone)
@@ -4027,9 +4026,8 @@ class MainWindow(QMainWindow):
             row_ids=[row.record_id for row in rendered_rows],
             decorate=decorate_row,
         )
-        # Fresh cells have no background, so any active wash (a blink, an offer box open
-        # on the row) has to be reapplied.
-        self._paint_journal_row_backgrounds()
+        # Fresh cells have no background, so a blink part-way through has to be reapplied.
+        self._paint_journal_flash()
 
         # Same summarize/realized_results helpers the Performance page uses, so the two
         # pages' figures for the same period always agree.
@@ -4045,7 +4043,8 @@ class MainWindow(QMainWindow):
         self._set_money_state(self.journal_profit, summary.realized_profit)
         self.journal_win_rate.setText(f"Win rate\n{_percent(summary.win_rate)}")
         self.journal_invested.setText(f"Capital traded\n{_gp(summary.capital_traded)}")
-        self._attention_positions = attention_positions
+        # From the dict, not the set: list_tracked is newest first and dicts keep that.
+        self._attention_positions = list(attention_detail)
         self.journal_attention.set_live(bool(attention_positions))
         self.journal_attention.setText(f"Needs attention\n{len(attention_positions):,}")
         # Negated: any positive count should read as the card's "negative" (warning) tone;
@@ -4171,7 +4170,7 @@ class MainWindow(QMainWindow):
         self._render_buy_limits()
         # Also unconditional: the plugin's offer-state file can change without a sync event.
         self._render_ge_offers()
-        self._refresh_offer_screen()
+        self._refresh_live_offers()
 
     def _render_buy_limits(self) -> None:
         limits = {
@@ -4303,7 +4302,9 @@ class MainWindow(QMainWindow):
             return
         slots = self._sync_importer.read_offer_state(account_hash)
         states = {slot_index: slot.state for slot_index, slot in slots.items()}
-        self._flash_ge_slots(newly_reached(self._ge_slot_states, states, TERMINAL_OFFER_STATES))
+        # Filled, not merely finished: a cancelled offer is uncollected too, but the player
+        # cancelled it a second ago and does not need calling back to look at it.
+        self._flash_ge_slots(newly_reached(self._ge_slot_states, states, FILLED_OFFER_STATES))
         self._ge_slot_states = states
         terminal_items = frozenset(
             slot.item_id for slot in slots.values() if slot.is_terminal and slot.item_id > 0
@@ -4321,50 +4322,43 @@ class MainWindow(QMainWindow):
         # has to be put back on top of it.
         self._paint_slot_flash()
 
-    def _positions_being_traded(
-        self, tracked: list[TrackedTrade], slots: dict[int, GEOfferSlot] | None
-    ) -> frozenset[int]:
-        """The journal rows the player is working on at the Grand Exchange right now.
+    @staticmethod
+    def _ge_offers_in_flight(
+        slots: dict[int, GEOfferSlot] | None, screen: GEOfferScreen | None
+    ) -> frozenset[tuple[int, str | None]]:
+        """Every buy or sale the Grand Exchange has going, as (item id, side).
 
-        Empty unless they're actually at the GE. With a "Set up offer" box open on an item,
-        just that item's rows; otherwise the rows behind whatever's on the slots.
+        One entry per occupied slot -- which is the trade itself, and lasts from confirming
+        the offer until collecting it, whether or not the player is standing at the GE --
+        plus the "Set up offer" box while one is open, which is the moment before the offer
+        exists and the one where the price is actually being typed.
+
+        A union, not a choice between the two. Opening a box on one item does not stop the
+        other seven slots filling, and a highlight that jumped to whichever screen was up
+        was following the player around rather than following the trade.
         """
-        screen = self._offer_screen
-        if screen is None:
-            return frozenset()
-        candidates = [(trade.position_id, trade.item_id, trade.status) for trade in tracked]
-        if screen.focused:
-            return offer_screen_positions(screen.item_id, screen.side, candidates)
-        return live_offer_positions(
-            [(slot.item_id, slot.side) for slot in (slots or {}).values() if slot.item_id > 0],
-            candidates,
-        )
+        offers = {(slot.item_id, slot.side) for slot in (slots or {}).values() if slot.item_id > 0}
+        if screen is not None and screen.focused:
+            offers.add((screen.item_id, screen.side))
+        return frozenset(offers)
 
-    def _refresh_offer_screen(self) -> None:
-        """Re-read which Grand Exchange offer box is open in game, and redraw if it moved.
+    def _refresh_live_offers(self) -> None:
+        """Re-read what the Grand Exchange is working on, and redraw the journal if it moved.
 
         Redraws only when the answer actually changes -- re-rendering every 3-second tick
         would fight the table's selection and scroll position while the player is reading it.
+        Polled rather than event-driven because collecting an offer empties a slot without
+        producing any event the journal would otherwise hear about.
         """
         account_hash = self._synced_account_hash()
         screen = (
             None if account_hash is None else self._sync_importer.read_offer_screen(account_hash)
         )
-        # With no box open, lit rows follow the slots rather than the screen -- collecting
-        # an offer empties a slot without producing an event that would redraw the journal.
-        offers = (
-            frozenset()
-            if screen is None or screen.focused
-            else frozenset(
-                (slot.item_id, slot.side)
-                for slot in (self._placed_offers() or {}).values()
-                if slot.item_id > 0
-            )
-        )
-        if (screen, offers) == (self._offer_screen, self._offer_screen_offers):
+        offers = self._ge_offers_in_flight(self._placed_offers(), screen)
+        if (screen, offers) == (self._offer_screen, self._live_offers):
             return
         self._offer_screen = screen
-        self._offer_screen_offers = offers
+        self._live_offers = offers
         self._render_journal()
 
     def _flash_journal_rows(self, position_ids: Iterable[int]) -> None:
@@ -4468,57 +4462,52 @@ class MainWindow(QMainWindow):
             _PLANS_TAB_TITLE + ("  ●" if self._pending_journal_flash else ""),
         )
 
-    def _mark_offer_screen_row(self, row_index: int, row: _JournalRow) -> None:
-        """Pick out the two figures the offer box open in game is asking for: quantity, and
-        whichever price column matches the side being filled in.
+    # Journal columns holding the price each side of a trade is working towards.
+    _PRICE_COLUMN: ClassVar[dict[str, int]] = {"buy": 4, "sell": 6}
 
-        A price cell already carrying the "ready to list" colour keeps it -- that colour
-        says something (whether the price clears what was paid) this highlight can't.
+    def _mark_live_prices(self, row_index: int, row: _JournalRow, sides: frozenset[str]) -> None:
+        """Pick out the price a live Grand Exchange offer is working on, and only that.
+
+        The whole point of the mark is "this is the number to type", so it goes on the one
+        cell holding that number and nothing else -- no row wash, no second figure. It holds
+        for the whole buy or sale, from opening the offer box to collecting the slot.
+
+        A price cell already carrying the "ready to list" colour keeps it: that colour says
+        something (whether the price clears what was paid) this mark can't.
         """
-        sell_side = offer_screen_is_sell_side(row.raw_status)
-        price_column = 6 if sell_side else 4
-        screen = self._offer_screen
-        hint = (
-            f"The Grand Exchange offer box is open on {screen.item_name} in game. "
-            "The quantity and price picked out here are what this row is planned at."
-            if screen is not None and screen.focused
-            else "You are at the Grand Exchange and this row's offer is on the slots. "
-            "The quantity and price picked out here are what it is planned at."
-        )
-        already_coloured = price_column == 6 and row.raw_status == READY_TO_SELL_STATUS
-        for column in (3, price_column):
+        for side in sorted(sides):
+            column = self._PRICE_COLUMN[side]
             cell = self.journal_table.item(row_index, column)
+            if cell is None:
+                continue
             cell_font = cell.font()
             cell_font.setBold(True)
             cell.setFont(cell_font)
-            if not (column == price_column and already_coloured):
+            already_coloured = column == 6 and row.raw_status == READY_TO_SELL_STATUS
+            if not already_coloured:
                 cell.setForeground(QColor(self._live_offer_color))
+            hint = (
+                "The Grand Exchange is buying this item right now — this is the price the "
+                "row is planned to buy at."
+                if side == "buy"
+                else "The Grand Exchange is selling this item right now — this is the price "
+                "the row is asking."
+            )
             existing = cell.toolTip()
             cell.setToolTip("\n\n".join(part for part in (hint, existing) if part))
 
-    def _paint_journal_row_backgrounds(self) -> None:
-        """Wash the blinking rows and the rows the open offer box is about, clearing each
-        wash when it stops applying.
-
-        One pass for both since a row can want both at once and only one can win: the
-        blink takes priority, and the steady wash returns underneath once it's over.
-        """
+    def _paint_journal_flash(self) -> None:
+        """Wash the blinking rows, and clear the wash the beat it stops applying."""
         table = self.journal_table
         lit_brush = QBrush(QColor(self._flash_row_color))
-        open_brush = QBrush(QColor(self._live_offer_row_color))
         for row in range(table.rowCount()):
             anchor = table.item(row, 0)
             if anchor is None:
                 continue
-            key = anchor.data(_FLASH_KEY_ROLE)
             # Null brush, not the table's background colour, hands the row back to the
             # alternating-row colours instead of freezing it on one.
-            if self._journal_flasher.is_lit(key):
-                brush = lit_brush
-            elif key is not None and key in self._offer_screen_positions:
-                brush = open_brush
-            else:
-                brush = QBrush()
+            lit = self._journal_flasher.is_lit(anchor.data(_FLASH_KEY_ROLE))
+            brush = lit_brush if lit else QBrush()
             for column in range(table.columnCount()):
                 cell = table.item(row, column)
                 # Only where it actually changes -- setting a cell to a brush it already
@@ -4564,11 +4553,16 @@ class MainWindow(QMainWindow):
         """
         if not self._attention_positions:
             return
+        newest = self._attention_positions[0]
         self.journal_tabs.setCurrentIndex(_PLANS_TAB_INDEX)
-        if not self._select_journal_position(next(iter(self._attention_positions))):
+        if not self._select_journal_position(newest):
             self.journal_status_filter.setCurrentText(JOURNAL_STATUS_FILTERS[0])
             self.journal_period_filter.setCurrentText(PERIOD_FILTERS[0])
-            if not self._select_journal_position(next(iter(self._attention_positions))):
+            # Each setter re-renders on its way through, which rebuilds the list.
+            if not self._attention_positions:
+                return
+            newest = self._attention_positions[0]
+            if not self._select_journal_position(newest):
                 return
         self._journal_flasher.focus(self._attention_positions)
 
@@ -5191,7 +5185,6 @@ class MainWindow(QMainWindow):
         self._flash_color = palette.flash
         self._flash_row_color = palette.flash_row
         self._live_offer_color = palette.live_offer
-        self._live_offer_row_color = palette.live_offer_row
         self._update_journal_badge()
         # The game draws interfaces with hard pixel edges, so the Old School theme squares
         # off the corners the modern themes round.

@@ -250,6 +250,70 @@ def test_an_offer_that_just_finished_lights_up_its_slot(
     assert window.ge_slot_cards[0].property("flash") == ""
 
 
+def test_a_sale_that_filled_lights_up_its_slot(
+    window: MainWindow, qt_app: QApplication, tmp_path: Path
+) -> None:
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"1": _offer(1, "SELLING")})
+    window._render_ge_offers()
+    _watching(window, qt_app)
+
+    _write_slots(root, {"1": _offer(1, "SOLD")})
+    window._render_ge_offers()
+
+    assert window.ge_slot_cards[1].property("flash") == "on"
+
+
+def test_a_cancelled_offer_does_not_blink_its_slot(
+    window: MainWindow, qt_app: QApplication, tmp_path: Path
+) -> None:
+    """The blink means "come and look, this filled". Cancelling is the player's own doing,
+    a second ago, in front of them — calling them back to see it says nothing."""
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "BUYING")})
+    window._render_ge_offers()
+    _watching(window, qt_app)
+
+    _write_slots(root, {"3": _offer(3, "CANCELLED_BUY")})
+    window._render_ge_offers()
+
+    assert window.ge_slot_cards[3].property("flash") == ""
+    assert window._pending_slot_flash == set()
+    # Still shown as needing collecting, though: the part-filled goods are in the slot.
+    assert window.ge_slot_cards[3].property("slotState") == "collect"
+
+
+def test_a_cancelled_sale_does_not_blink_its_slot(
+    window: MainWindow, qt_app: QApplication, tmp_path: Path
+) -> None:
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "SELLING")})
+    window._render_ge_offers()
+    _watching(window, qt_app)
+
+    _write_slots(root, {"3": _offer(3, "CANCELLED_SELL")})
+    window._render_ge_offers()
+
+    assert window.ge_slot_cards[3].property("flash") == ""
+    assert window._pending_slot_flash == set()
+
+
+def test_a_cancel_does_not_queue_a_dot_for_later(
+    window: MainWindow, qt_app: QApplication, tmp_path: Path
+) -> None:
+    """Nothing is queued while the player is in-game either, so no sidebar dot calls them
+    back to a slot they cancelled themselves."""
+    root = _connect(window, tmp_path)
+    _write_slots(root, {"3": _offer(3, "BUYING")})
+    window._render_ge_offers()
+
+    _write_slots(root, {"3": _offer(3, "CANCELLED_SELL")})
+    window._render_ge_offers()
+
+    assert window._pending_slot_flash == set()
+    assert window.nav.item(_JOURNAL_PAGE).text() == MainWindow.NAV_ITEMS[_JOURNAL_PAGE]
+
+
 def test_the_slot_goes_back_to_its_collect_colours_afterwards(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:

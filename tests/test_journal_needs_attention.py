@@ -10,6 +10,8 @@ warning about a price the player had already stopped asking.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import Qt
 
 from osrs_toolkit.app import MainWindow
@@ -152,3 +154,34 @@ def test_the_tooltip_is_broken_into_short_lines(window: MainWindow) -> None:
     lines = tooltip.splitlines()
     assert len(lines) == 3
     assert max(len(line) for line in lines) <= 60
+
+
+def _stale_position_for(window: MainWindow, item_id: int, name: str) -> int:
+    """Another position asking 8,180, on its own item so it gets its own row."""
+    position_id = window._journal.track(item_id, name, 70, 7_125, 8_180)
+    window._journal.update_tracked(
+        position_id, "Partially sold", None, None, [(1, 8_180)], [(70, 7_125)]
+    )
+    return position_id
+
+
+def test_clicking_the_card_reveals_the_newest_flagged_row(window: MainWindow) -> None:
+    """The card says it selects the newest of what it is counting. It kept the set of them,
+    which has no order at all, and then took whichever one came out first — reliably the
+    lowest position id, which is the oldest row on the table."""
+    oldest = _stale_position(window)
+    newest = _stale_position_for(window, 5678, "Antidote++(4)")
+    _set_live_point(window, 1234, sell_target=7_600)
+    only_point = window._points[0]
+    window._points = [only_point, replace(only_point, item_id=5678)]
+    window._render_journal()
+    assert window._attention_positions[0] == newest
+
+    window._reveal_attention_positions()
+
+    selected = window.journal_table.selectionModel().selectedRows()
+    assert [index.row() for index in selected] == [_row_of(window, newest)]
+    assert _row_of(window, newest) != _row_of(window, oldest)
+    # The whole count blinks, though — pointing at one would only answer half of it.
+    assert window._journal_flasher.is_lit(oldest)
+    assert window._journal_flasher.is_lit(newest)

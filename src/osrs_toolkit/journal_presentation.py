@@ -155,69 +155,65 @@ def journal_display_status(
     return PLANNED_STATUS
 
 
-# Where a position's next move is to buy vs. to sell — a row is a candidate for the open
-# offer box on whichever side it still has something left to do.
+# Where a position's next move is to buy vs. to sell. A status outside both (Supplies, or a
+# finished flip) has no next move and so no price worth pointing at on its own.
 _BUY_SIDE_STATUSES = frozenset({"Pending buy"})
 _SELL_SIDE_STATUSES = frozenset({"Bought", "Listed for sale", "Partially sold"})
+_SIDES = ("buy", "sell")
 
 
-def offer_screen_is_sell_side(status: str) -> bool:
-    """Whether a position needs a sale next rather than a buy — decides which price
-    column the highlight belongs on."""
-    return status in _SELL_SIDE_STATUSES
+def next_move(status: str) -> str | None:
+    """Which side of the trade a position still owes: ``"buy"``, ``"sell"``, or neither."""
+    if status in _BUY_SIDE_STATUSES:
+        return "buy"
+    if status in _SELL_SIDE_STATUSES:
+        return "sell"
+    return None
 
 
-def offer_screen_positions(
-    item_id: int | None,
-    side: str | None,
+def live_price_highlights(
+    offers: Iterable[tuple[int, str | None]],
     candidates: Iterable[tuple[int, int | None, str]],
-) -> frozenset[int]:
-    """The journal rows an open Grand Exchange offer box is about.
+) -> dict[int, frozenset[str]]:
+    """Which of a journal row's two prices the Grand Exchange is working on right now.
 
-    ``candidates`` is ``(position id, item id, stored status)``; the stored status, not the
-    displayed one, since "Planned" is a table label rather than a real state.
+    ``offers`` is ``(item id, side)`` for everything the game currently has going: one entry
+    per occupied slot, plus the "Set up offer" box if one is open. ``candidates`` is
+    ``(position id, item id, stored status)`` -- the stored status, not the displayed one,
+    since "Planned" is a table label rather than a real state.
 
-    Narrows to rows whose next move is the side being offered, but falls back to every row
-    for the item if none match — an item whose only rows are on the other side (or in a
-    status with no side, like Supplies) should still light up, since that's likelier to be
-    the wanted row than nothing at all. Several rows for one item all return; picking one
-    would mean guessing which the player means.
+    Returns position id -> the sides whose price cell should be picked out. Offers are
+    unioned rather than ranked: a buy filling on one slot and a sale on another are both
+    happening, so both rows stay marked, and one item bought and sold at once marks both of
+    its prices. That is the difference from pointing at wherever the player happens to be
+    standing, which moves for reasons the trade knows nothing about.
+
+    A row whose own next move is the side being offered wins the offer outright. Only if no
+    row for that item is on that side does the whole item take it -- an item whose only rows
+    are Supplies, or finished, is still a likelier answer than nothing at all.
     """
-    if not item_id:
-        return frozenset()
-    matches = {
-        position_id: status
-        for position_id, candidate_item_id, status in candidates
-        if candidate_item_id == item_id
-    }
-    wanted = (
-        _BUY_SIDE_STATUSES if side == "buy" else _SELL_SIDE_STATUSES if side == "sell" else None
-    )
-    if wanted is not None:
-        on_side = frozenset(
-            position_id for position_id, status in matches.items() if status in wanted
-        )
-        if on_side:
-            return on_side
-    return frozenset(matches)
-
-
-def live_offer_positions(
-    live_offers: Iterable[tuple[int, str | None]],
-    candidates: Iterable[tuple[int, int | None, str]],
-) -> frozenset[int]:
-    """The journal rows the offers already out on the GE are about.
-
-    What the highlight falls back to once a box is confirmed and the interface no longer
-    names an item, only the slots do. ``live_offers`` is ``(item id, side)`` per occupied
-    slot, matched to rows the same way an open box would be.
-
-    ``candidates`` is consumed once per offer, so it must be a sequence, not an iterator.
-    """
-    return frozenset().union(
-        *(offer_screen_positions(item_id, side, candidates) for item_id, side in live_offers),
-        frozenset(),
-    )
+    rows = [(position_id, item_id, status) for position_id, item_id, status in candidates]
+    highlights: dict[int, set[str]] = {}
+    for item_id, side in offers:
+        if not item_id:
+            continue
+        matches = [
+            (position_id, status) for position_id, row_item, status in rows if row_item == item_id
+        ]
+        if not matches:
+            continue
+        if side not in _SIDES:
+            # The box is open on an item without saying which way round -- give each row the
+            # price for whatever it still owes.
+            for position_id, status in matches:
+                move = next_move(status)
+                if move is not None:
+                    highlights.setdefault(position_id, set()).add(move)
+            continue
+        on_side = [pid for pid, status in matches if next_move(status) == side]
+        for position_id in on_side or [pid for pid, _status in matches]:
+            highlights.setdefault(position_id, set()).add(side)
+    return {position_id: frozenset(sides) for position_id, sides in highlights.items()}
 
 
 _ATTENTION_STATUSES = frozenset({"Listed for sale", "Partially sold"})
