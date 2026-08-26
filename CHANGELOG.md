@@ -4,6 +4,30 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-26
+
+### Changed
+
+- **The journal now picks out one thing while you trade: the price.** The old highlight washed
+  the whole row blue and bolded the quantity beside the price, and it followed wherever you were
+  standing rather than what the Grand Exchange was doing — opening a "Set up offer" box on one
+  item dropped every other offer that was still filling, and walking away from the GE put the
+  lot out. It is now driven by the offers themselves. While the Grand Exchange is buying
+  something, the buy price is marked on every journal row for that item; while it is selling,
+  the ask is. It starts when the offer box opens, holds while the offer fills and while you are
+  off doing something else, and clears when you collect the slot. Nothing else on the row is
+  touched — the background belongs to the flash, which is saying a different thing.
+- **A Grand Exchange slot only blinks when its offer filled.** It used to blink for any finished
+  offer, cancelling included — calling you back to look at something you cancelled yourself a
+  second earlier. Cancelled offers still show as waiting to be collected; they just don't ask
+  for your attention.
+
+### Fixed
+
+- Clicking the **Needs attention** card jumped to the oldest flagged position rather than the
+  newest, whatever the card said. It kept the rows it was counting in a set, which has no order,
+  and then took whichever one came out first.
+
 ## [1.3.0] - 2026-08-25
 
 ### Highlights
