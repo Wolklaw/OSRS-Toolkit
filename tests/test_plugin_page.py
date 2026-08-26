@@ -96,7 +96,8 @@ def test_it_still_explains_pairing(client: TestClient):
     """Installing is only half of it: a plugin with no token sends nowhere."""
     page = client.get("/plugin").text
 
-    assert "Pairing token" in page
+    assert "Get a token" in page
+    assert "Paste the token" in page
     assert "Send to OSRS Toolkit Sync" in page
 
 

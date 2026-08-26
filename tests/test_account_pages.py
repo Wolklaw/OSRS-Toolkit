@@ -65,11 +65,14 @@ def test_the_profile_page_counts_what_it_is_holding(signed_in: TestClient, setti
 
 def test_the_profile_page_says_whether_the_plugin_is_connected(signed_in: TestClient):
     assert "Not connected" in signed_in.get("/profile").text
+    assert "Replace token" not in signed_in.get("/profile").text
 
     with patch("toolkit_web.app.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
-    assert "Connected" in signed_in.get("/profile").text
+    page = signed_in.get("/profile").text
+    assert "Replace token" in page
+    assert "Disconnect" in page
 
 
 def test_named_characters_are_managed_from_the_profile(signed_in: TestClient):

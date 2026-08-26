@@ -33,6 +33,7 @@
       <h2>Watched items</h2>
       <p class="hint tight">{{ rows | length }} item{{ '' if rows | length == 1 else 's' }}, priced from the current snapshot.</p>
     </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
     {% if rows %}
     <input type="search" class="filter-input" placeholder="Filter…"
            oninput="filterTable(this, 'watchlist-table')" aria-label="Filter watchlist">

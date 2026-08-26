@@ -38,6 +38,7 @@
       <p class="hint tight">{{ results | length }} priced right now, best hourly profit first.
         Method names link to the wiki guide.</p>
     </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
     {% if results %}
     <input type="search" class="filter-input" placeholder="Search methods or skills…"
            oninput="filterTable(this, 'skilling-table')" aria-label="Search methods">

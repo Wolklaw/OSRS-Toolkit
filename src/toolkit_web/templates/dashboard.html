@@ -56,11 +56,6 @@
     </div>
   </div>
   <div class="status-msg" id="generate-status" style="min-height:0"></div>
-  <div class="row" style="margin-top:0.5rem">
-    <input type="text" id="pairing-token" placeholder="Or paste a token you already have" autocomplete="off" style="max-width:280px">
-    <button class="button secondary small" onclick="savePairingToken()">Connect</button>
-  </div>
-  <div class="status-msg" id="pairing-status"></div>
   {% endif %}
 
   <div class="conn-row">
@@ -130,6 +125,7 @@
       <h2>Grand Exchange, live</h2>
       <p class="hint tight">The eight slots as the plugin last saw them.</p>
     </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
     <a class="button ghost small" href="/buy-limits">Buy limits</a>
   </div>
   {% if not live_character_selected %}
@@ -425,20 +421,7 @@
     }
     document.getElementById('generated-token').textContent = result.data.token;
     document.getElementById('generated-token-box').style.display = 'block';
-    setStatus('generate-status', "Paste this into the plugin's settings.", 'ok');
-  }
-
-  async function savePairingToken() {
-    const token = document.getElementById('pairing-token').value.trim();
-    if (!token) { return; }
-    setStatus('pairing-status', 'Checking…');
-    const result = await api('PUT', '/api/pairing-token', { token });
-    if (!result.ok) {
-      setStatus('pairing-status', result.error, 'error');
-      return;
-    }
-    setStatus('pairing-status', 'Connected.', 'ok');
-    setTimeout(() => location.reload(), 600);
+    setStatus('generate-status', "Paste this into the plugin's sidebar panel.", 'ok');
   }
 </script>
 {% endblock %}

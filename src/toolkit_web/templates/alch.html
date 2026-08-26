@@ -46,6 +46,7 @@
         1,200 casts, the four-hour buy limit, what your cash buys, and this policy's share of
         the hour's volume.</p>
     </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
     {% if candidates %}
     <input type="search" class="filter-input" placeholder="Search items…"
            oninput="filterTable(this, 'alch-table')" aria-label="Search items">

@@ -11,6 +11,7 @@
       <p class="hint tight">Only items you have bought appear; anything untouched is at its
         full limit.</p>
     </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
     {% if statuses %}
     <input type="search" class="filter-input" placeholder="Filter items…"
            oninput="filterTable(this, 'limits-table')" aria-label="Filter items">

@@ -83,12 +83,6 @@
   </div>
   <div class="status-msg" id="generate-status"></div>
 
-  <p class="hint">Already have a token from somewhere else?</p>
-  <div class="row">
-    <input type="text" id="pairing-token" placeholder="Pairing token" autocomplete="off" style="max-width:280px">
-    <button class="button secondary" onclick="savePairingToken()">Connect</button>
-  </div>
-  <div class="status-msg" id="pairing-status"></div>
   {% if plugin_state == "idle" %}
   <p class="hint">A token is saved, but nothing is being sent. Either RuneLite is closed, or
     <strong>Send to OSRS Toolkit Sync</strong> is switched off.</p>
@@ -302,20 +296,7 @@
       ? ' Your previous token no longer works.'
       : '';
     setStatus(
-      'generate-status', "Paste this into the plugin's settings." + retired, 'ok');
-  }
-
-  async function savePairingToken() {
-    const token = document.getElementById('pairing-token').value.trim();
-    if (!token) { return; }
-    setStatus('pairing-status', 'Checking…');
-    const result = await api('PUT', '/api/pairing-token', { token });
-    if (!result.ok) {
-      setStatus('pairing-status', result.error, 'error');
-      return;
-    }
-    setStatus('pairing-status', 'Connected.', 'ok');
-    setTimeout(() => location.reload(), 600);
+      'generate-status', "Paste this into the plugin's sidebar panel." + retired, 'ok');
   }
 
   async function disconnectPlugin() {
