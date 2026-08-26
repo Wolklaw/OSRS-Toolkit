@@ -81,10 +81,7 @@ def test_numbers_a_spreadsheet_reformatted_still_read():
 
 
 def test_columns_may_be_reordered_or_have_extras():
-    content = (
-        "Item,Notes,Actual sell (avg),Quantity,Actual buy (avg)\n"
-        "Whip,mine,150,2,100\n"
-    )
+    content = "Item,Notes,Actual sell (avg),Quantity,Actual buy (avg)\nWhip,mine,150,2,100\n"
 
     [trade] = parse_journal_csv(content).trades
 

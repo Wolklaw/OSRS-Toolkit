@@ -466,9 +466,13 @@ def test_imports_npc_loot_and_lists_it(tmp_path: Path) -> None:
 
 def test_duplicate_npc_loot_event_is_idempotent(tmp_path: Path) -> None:
     root = tmp_path / "sync"
-    event = _event("npc_loot", {"npc_name": "Zulrah", "items": [
-        {"item_id": 995, "item_name": "Coins", "quantity": 1_000, "unit_value": 1}
-    ]})
+    event = _event(
+        "npc_loot",
+        {
+            "npc_name": "Zulrah",
+            "items": [{"item_id": 995, "item_name": "Coins", "quantity": 1_000, "unit_value": 1}],
+        },
+    )
     _write_event(root, event)
     repository = JournalRepository(tmp_path / "journal.db")
     importer = RuneLiteSyncImporter(root)
@@ -500,7 +504,12 @@ def test_imports_player_death_and_lists_it(tmp_path: Path) -> None:
         {
             "skulled": True,
             "equipment": [
-                {"item_id": 4_151, "item_name": "Abyssal whip", "quantity": 1, "unit_value": 1_500_000}
+                {
+                    "item_id": 4_151,
+                    "item_name": "Abyssal whip",
+                    "quantity": 1,
+                    "unit_value": 1_500_000,
+                }
             ],
             "inventory": [
                 {"item_id": 995, "item_name": "Coins", "quantity": 5_000, "unit_value": 1}

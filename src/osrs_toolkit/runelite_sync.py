@@ -56,12 +56,7 @@ FILLED_OFFER_STATES = frozenset({"BOUGHT", "SOLD"})
 TERMINAL_OFFER_STATES = FILLED_OFFER_STATES | frozenset({"CANCELLED_BUY", "CANCELLED_SELL"})
 
 ParsedEvent = (
-    SyncedTrade
-    | LoadoutSnapshot
-    | OfferOpened
-    | OfferCancelled
-    | NpcLootRecord
-    | PlayerDeathRecord
+    SyncedTrade | LoadoutSnapshot | OfferOpened | OfferCancelled | NpcLootRecord | PlayerDeathRecord
 )
 
 

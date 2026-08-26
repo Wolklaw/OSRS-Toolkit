@@ -95,7 +95,10 @@ class WikiMarketClient:
         Cached as the built dict, not the raw payload, so a reuse skips the parse too.
         """
         cached = self._mappings
-        if cached is not None and time.monotonic() - self._mappings_fetched_at < MAPPING_TTL_SECONDS:
+        if (
+            cached is not None
+            and time.monotonic() - self._mappings_fetched_at < MAPPING_TTL_SECONDS
+        ):
             return cached
         mapping_raw = self._get("mapping")
         if not isinstance(mapping_raw, list):

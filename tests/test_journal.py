@@ -1052,9 +1052,7 @@ def _player_death_event(event_id: str, skulled: bool = False) -> PlayerDeathReco
         account_hash="hash",
         account_name="Player",
         skulled=skulled,
-        equipment=(
-            LoadoutItem(item_id=4151, item_name="Whip", quantity=1, unit_value=1_500_000),
-        ),
+        equipment=(LoadoutItem(item_id=4151, item_name="Whip", quantity=1, unit_value=1_500_000),),
         inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=500, unit_value=1),),
     )
 

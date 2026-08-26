@@ -17,9 +17,7 @@ def _death(event_id: str, skulled: bool = True) -> PlayerDeathRecord:
         account_hash="hash",
         account_name="Player",
         skulled=skulled,
-        equipment=(
-            LoadoutItem(item_id=4151, item_name="Whip", quantity=1, unit_value=1_500_000),
-        ),
+        equipment=(LoadoutItem(item_id=4151, item_name="Whip", quantity=1, unit_value=1_500_000),),
         inventory=(),
     )
 

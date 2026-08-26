@@ -22,9 +22,10 @@ osrs-toolkit
 ```bash
 pytest
 ruff check .
+ruff format --check .
 ```
 
-Both must pass. Tests live in `tests/` and run without network access or a real GE account —
+All three must pass. Tests live in `tests/` and run without network access or a real GE account —
 market responses are stubbed, so a failing test always means a real behavior change, not a
 quiet market. Keep it that way; anything that fetches from the OSRS Wiki API belongs behind a
 stub.

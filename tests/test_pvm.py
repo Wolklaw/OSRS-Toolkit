@@ -218,4 +218,3 @@ def test_observed_gp_per_hour_is_order_independent() -> None:
     earlier = _loot("b", "2026-08-15T00:00:00+00:00", 500_000)
 
     assert observed_gp_per_hour([later, earlier]) == 500_000
-

@@ -127,4 +127,3 @@ def test_a_selected_row_survives_a_user_sort(window: MainWindow) -> None:
     # Row 0 now displays the older Jan 1 kill; the selection must agree with the screen.
     assert table.item(0, 1).text() == "Zulrah"
     assert window._selected_loot_log_event_id() == "11111111-1111-4111-8111-111111111111"
-

@@ -273,9 +273,7 @@ def test_two_edits_landing_on_the_same_millisecond_still_both_apply(tmp_path):
     destination.sync_apply(source.sync_export())
 
     with sqlite3.connect(destination.database_path) as connection:
-        total = connection.execute(
-            "SELECT SUM(quantity) FROM tracked_buy_fills"
-        ).fetchone()[0]
+        total = connection.execute("SELECT SUM(quantity) FROM tracked_buy_fills").fetchone()[0]
     assert total == 577
 
 

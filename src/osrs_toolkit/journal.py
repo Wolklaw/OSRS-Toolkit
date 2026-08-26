@@ -899,8 +899,7 @@ class JournalRepository:
                 """
             )
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS skills_history_captured "
-                "ON skills_history(captured_at)"
+                "CREATE INDEX IF NOT EXISTS skills_history_captured ON skills_history(captured_at)"
             )
             connection.execute(
                 """
@@ -2135,9 +2134,7 @@ class JournalRepository:
 
     def delete_player_death_event(self, event_id: str) -> None:
         with self._connect() as connection:
-            connection.execute(
-                "DELETE FROM player_death_events WHERE event_id = ?", (event_id,)
-            )
+            connection.execute("DELETE FROM player_death_events WHERE event_id = ?", (event_id,))
 
     def save_loadout_snapshot(self, snapshot: LoadoutSnapshot) -> None:
         """Replace the previous snapshot for this account and append its total value to

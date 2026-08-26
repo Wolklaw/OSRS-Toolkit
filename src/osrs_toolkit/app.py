@@ -4872,14 +4872,10 @@ class MainWindow(QMainWindow):
                 self._journal.delete(record.trade_id)
 
         for trade in parsed.trades:
-            self._journal.add(
-                trade.item_name, trade.quantity, trade.buy_price, trade.sell_price
-            )
+            self._journal.add(trade.item_name, trade.quantity, trade.buy_price, trade.sell_price)
         self._render_journal()
         self._render_performance()
-        skipped_note = (
-            f"\n\n{len(parsed.skipped)} row(s) were skipped." if parsed.skipped else ""
-        )
+        skipped_note = f"\n\n{len(parsed.skipped)} row(s) were skipped." if parsed.skipped else ""
         QMessageBox.information(
             self,
             "Import complete",

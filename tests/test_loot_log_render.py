@@ -17,9 +17,7 @@ def _loot(event_id: str, npc_name: str = "Vorkath") -> NpcLootRecord:
         account_hash="hash",
         account_name="Player",
         npc_name=npc_name,
-        items=(
-            LoadoutItem(item_id=995, item_name="Coins", quantity=10_000, unit_value=1),
-        ),
+        items=(LoadoutItem(item_id=995, item_name="Coins", quantity=10_000, unit_value=1),),
     )
 
 
