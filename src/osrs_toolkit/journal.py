@@ -380,12 +380,19 @@ class OfferCancelled:
 
 
 def _is_newer(incoming: object, existing: object) -> bool:
-    """Whether ``incoming`` was written after ``existing``.
+    """Whether ``incoming`` is at least as current as ``existing``.
+
+    Ties count as newer, not just strictly-after: the touch trigger stamps ``updated_at`` to
+    millisecond precision, and two edits to the same row inside one import pass -- two fills
+    landing back to back -- routinely collide on that stamp. A strict ``>`` reads a tie as
+    nothing changed and skips the row, fills included, which does not correct itself: every
+    later export of that same server-side state carries the identical timestamp, so the row
+    stays stuck at whichever version was first observed, forever.
 
     Parsed rather than compared as text, since "+00:00" vs "Z" would sort wrong as strings
     despite meaning the same instant.
     """
-    return _as_moment(incoming) > _as_moment(existing)
+    return _as_moment(incoming) >= _as_moment(existing)
 
 
 def _as_moment(stamp: object) -> datetime:

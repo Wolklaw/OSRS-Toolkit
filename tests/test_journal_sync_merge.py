@@ -236,6 +236,49 @@ def test_fills_are_replaced_not_accumulated(tmp_path):
     assert total == 1
 
 
+def test_two_edits_landing_on_the_same_millisecond_still_both_apply(tmp_path):
+    """The touch trigger stamps updated_at to millisecond precision. Two fills on the same
+    position, applied back to back inside one import pass, can land in the same millisecond --
+    a real burst of small partial GE fills does this routinely.
+
+    A strict "incoming > existing" comparison drops the second one: once the destination
+    already holds a row stamped equal to what just arrived, the tie reads as "nothing new" and
+    the row -- fills included -- is skipped forever. Nothing corrects itself on a later poll,
+    because every later export of the same server-side row carries that identical timestamp.
+    """
+    source = _repo(tmp_path, "desktop")
+    position_id = source.track(
+        item_id=4151, item_name="Abyssal whip", quantity=100, target_buy=100, target_sell=200
+    )
+    with sqlite3.connect(source.database_path) as connection:
+        connection.execute(
+            "INSERT INTO tracked_buy_fills (position_id, quantity, buy_price) VALUES (?, ?, ?)",
+            (position_id, 31, 100),
+        )
+    uid = _uid_of(source, "tracked_trades")
+    _set_stamp(source, "tracked_trades", uid, "2026-08-26T05:07:30.465000+00:00")
+
+    destination = _repo(tmp_path, "website")
+    destination.sync_apply(source.sync_export())
+
+    # A second fill lands. Inserting into tracked_buy_fills alone doesn't touch
+    # tracked_trades.updated_at, which is the collision: the position's own row is still
+    # stamped identically to what the destination already applied.
+    with sqlite3.connect(source.database_path) as connection:
+        connection.execute(
+            "INSERT INTO tracked_buy_fills (position_id, quantity, buy_price) VALUES (?, ?, ?)",
+            (position_id, 546, 100),
+        )
+
+    destination.sync_apply(source.sync_export())
+
+    with sqlite3.connect(destination.database_path) as connection:
+        total = connection.execute(
+            "SELECT SUM(quantity) FROM tracked_buy_fills"
+        ).fetchone()[0]
+    assert total == 577
+
+
 # -- tolerance -----------------------------------------------------------------------------
 
 
