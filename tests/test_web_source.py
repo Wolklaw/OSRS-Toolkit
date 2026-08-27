@@ -119,6 +119,47 @@ def test_a_stale_status_is_reported_as_not_fresh():
     assert fresh is False
 
 
+def test_one_dropped_poll_reuses_the_last_good_state(monkeypatch):
+    """A poll every few seconds over a home internet connection drops one occasionally --
+    that should not flash "Website unreachable" for a tick and then flip straight back."""
+    payload = {"status": {"account_name": "Wolklaw", "active": True}, "status_fresh": True}
+    clock = iter([0.0, 10.0])
+    monkeypatch.setattr("osrs_toolkit.web_source.time.monotonic", lambda: next(clock))
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response(payload)):
+        first = source.status_payload()
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("blip")):
+        second = source.status_payload()
+
+    assert first == (True, payload["status"], True)
+    assert second == first
+
+
+def test_two_dropped_polls_in_a_row_do_report_unreachable(monkeypatch):
+    payload = {"status": {"account_name": "Wolklaw"}, "status_fresh": True}
+    clock = iter([0.0, 10.0, 20.0])
+    monkeypatch.setattr("osrs_toolkit.web_source.time.monotonic", lambda: next(clock))
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response(payload)):
+        source.status_payload()
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("blip")):
+        source.status_payload()
+        assert source.status_payload() == (True, None, False)
+
+
+def test_a_dropped_poll_is_not_reused_for_a_different_character(monkeypatch):
+    """The last good state belongs to whichever character it was fetched for -- reusing it
+    for a character switch made mid-blip would show one player's slots under another's."""
+    payload = {"offers": {"3": {"itemId": 4151}}}
+    clock = iter([0.0, 10.0])
+    monkeypatch.setattr("osrs_toolkit.web_source.time.monotonic", lambda: next(clock))
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response(payload)):
+        source.offer_state_payload("abc123")
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("blip")):
+        assert source.offer_state_payload("def456") is None
+
+
 # -- offers ------------------------------------------------------------------------------
 
 

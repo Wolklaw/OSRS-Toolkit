@@ -122,6 +122,8 @@ class WebAppSource:
     def __init__(self, client: ToolkitWebClient) -> None:
         self.client = client
         self._cached: tuple[float, str, dict] | None = None
+        self._last_good: tuple[str, dict] | None = None
+        self._consecutive_failures = 0
 
     @property
     def configured(self) -> bool:
@@ -139,7 +141,21 @@ class WebAppSource:
             if cached_hash == account_hash and now - cached_at < STATE_CACHE_SECONDS:
                 return payload
         fetched = self.client.get("/api/sync-state", account_hash=account_hash)
-        payload = fetched if isinstance(fetched, dict) else {}
+        if isinstance(fetched, dict):
+            self._consecutive_failures = 0
+            self._last_good = (account_hash, fetched)
+            payload = fetched
+        else:
+            self._consecutive_failures += 1
+            # One failed poll over a home internet connection is a dropped packet, not an
+            # outage -- reusing the last good state for it is what stops "Website unreachable"
+            # flapping on and off every few seconds. A second failure in a row still reports
+            # it: this tolerates a blip, not a real interruption.
+            if self._consecutive_failures <= 1 and self._last_good is not None:
+                last_hash, last_payload = self._last_good
+                payload = last_payload if last_hash == account_hash else {}
+            else:
+                payload = {}
         self._cached = (now, account_hash, payload)
         return payload
 

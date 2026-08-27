@@ -4,6 +4,16 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-26
+
+### Fixed
+
+- **The "Website unreachable" banner stopped flickering on and off.** It polls the site every
+  few seconds, and a single dropped request over a home internet connection — a lost packet, a
+  slow handshake — was enough to flip the whole connection banner for a tick before flipping
+  back on the next successful poll. It now reuses the last known state for a single failed poll,
+  so only two failures in a row are reported as a real interruption.
+
 ## [1.3.1] - 2026-08-26
 
 ### Changed
