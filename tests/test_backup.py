@@ -19,9 +19,7 @@ def _make_db(path: Path, rows: int = 3) -> None:
     with sqlite3.connect(path) as db:
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("CREATE TABLE thing (id INTEGER PRIMARY KEY, label TEXT)")
-        db.executemany(
-            "INSERT INTO thing (label) VALUES (?)", [(f"row-{n}",) for n in range(rows)]
-        )
+        db.executemany("INSERT INTO thing (label) VALUES (?)", [(f"row-{n}",) for n in range(rows)])
 
 
 def _names(archive: Path) -> set[str]:

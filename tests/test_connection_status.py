@@ -252,5 +252,7 @@ def badge_text(page: str) -> str:
     "Sending now" appears in the markup of an idle page too. The rendered text is the thing
     these tests are really about.
     """
-    match = re.search(r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page)
+    match = re.search(
+        r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page
+    )
     return match.group(1).strip() if match else ""

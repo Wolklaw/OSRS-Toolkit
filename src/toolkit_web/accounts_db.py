@@ -192,9 +192,7 @@ class AccountsDB:
             }
             for column, sql_type in _WATCHLIST_MIGRATION_COLUMNS.items():
                 if column not in existing_watchlist_columns:
-                    connection.execute(
-                        f"ALTER TABLE watchlist_item ADD COLUMN {column} {sql_type}"
-                    )
+                    connection.execute(f"ALTER TABLE watchlist_item ADD COLUMN {column} {sql_type}")
             self._rekey_trade_characters(connection)
 
     def _rekey_trade_characters(self, connection: sqlite3.Connection) -> None:

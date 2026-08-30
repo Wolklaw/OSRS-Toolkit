@@ -29,7 +29,7 @@ def test_it_sends_people_to_the_plugin_hub(client: TestClient):
 
 
 def test_it_names_the_wrench_and_the_search(client: TestClient):
-    """"Install it from the Hub" is not directions. Where to click is."""
+    """ "Install it from the Hub" is not directions. Where to click is."""
     page = client.get("/plugin").text
 
     assert "wrench" in page

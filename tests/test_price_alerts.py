@@ -153,9 +153,7 @@ def test_check_alerts_is_missing_without_a_configured_token(client: TestClient):
 
 
 def test_check_alerts_refuses_the_wrong_token(alerting_client: TestClient):
-    response = alerting_client.post(
-        "/internal/check-alerts", headers={"X-Internal-Token": "wrong"}
-    )
+    response = alerting_client.post("/internal/check-alerts", headers={"X-Internal-Token": "wrong"})
 
     assert response.status_code == 401
 

@@ -5,7 +5,13 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from osrs_toolkit.journal import JournalRepository, LoadoutItem, LoadoutSnapshot, SyncedItem, SyncedTrade
+from osrs_toolkit.journal import (
+    JournalRepository,
+    LoadoutItem,
+    LoadoutSnapshot,
+    SyncedItem,
+    SyncedTrade,
+)
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.models import ItemMapping, MarketPoint
 
@@ -241,7 +247,9 @@ def test_flips_page_prefills_cash_stack_from_synced_coins(
             account_name="Wolklaw",
             captured_at=datetime.now(UTC).isoformat(),
             equipment=(),
-            inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),),
+            inventory=(
+                LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),
+            ),
             bank=(),
             skills={},
         )
@@ -265,7 +273,9 @@ def test_an_explicitly_typed_cash_stack_is_not_overridden_by_synced_coins(
             account_name="Wolklaw",
             captured_at=datetime.now(UTC).isoformat(),
             equipment=(),
-            inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),),
+            inventory=(
+                LoadoutItem(item_id=995, item_name="Coins", quantity=42_000_000, unit_value=1),
+            ),
             bank=(),
             skills={},
         )

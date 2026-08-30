@@ -189,12 +189,18 @@ def test_the_item_history_page_shows_volume_and_spread_stats(signed_in: TestClie
     # Sunday and Monday, per the timestamps below.
     points = [
         TimeseriesPoint(
-            timestamp=1755392400, average_high=100, average_low=80,
-            high_volume=100, low_volume=50,
+            timestamp=1755392400,
+            average_high=100,
+            average_low=80,
+            high_volume=100,
+            low_volume=50,
         ),
         TimeseriesPoint(
-            timestamp=1755478800, average_high=120, average_low=100,
-            high_volume=200, low_volume=100,
+            timestamp=1755478800,
+            average_high=120,
+            average_low=100,
+            high_volume=200,
+            low_volume=100,
         ),
     ]
     with patch("toolkit_web.market_cache.WikiMarketClient.fetch_timeseries", return_value=points):

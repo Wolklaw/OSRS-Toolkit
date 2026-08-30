@@ -16,7 +16,9 @@ def _snapshot() -> LoadoutSnapshot:
         equipment=(),
         inventory=(),
         bank=(
-            LoadoutItem(item_id=11802, item_name="Armadyl godsword", quantity=1, unit_value=40_000_000),
+            LoadoutItem(
+                item_id=11802, item_name="Armadyl godsword", quantity=1, unit_value=40_000_000
+            ),
             LoadoutItem(item_id=995, item_name="Coins", quantity=5_000_000, unit_value=1),
         ),
         skills={"Attack": 75, "Strength": 80},

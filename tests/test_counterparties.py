@@ -22,8 +22,16 @@ def _player_trade(
         direction="exchange",
         metadata={},
         items=(
-            SyncedItem(flow="given", item_id=995, item_name="Coins", quantity=given_value, unit_value=1),
-            SyncedItem(flow="received", item_id=996, item_name="Item", quantity=1, unit_value=received_value),
+            SyncedItem(
+                flow="given", item_id=995, item_name="Coins", quantity=given_value, unit_value=1
+            ),
+            SyncedItem(
+                flow="received",
+                item_id=996,
+                item_name="Item",
+                quantity=1,
+                unit_value=received_value,
+            ),
         ),
     )
 
@@ -41,8 +49,12 @@ def test_trades_with_the_same_person_are_grouped_and_netted(
     repository = JournalRepository(settings.journal_path("111"))
     repository.add_synced_trades(
         [
-            _player_trade("t1", "Zezima", given_value=1_000, received_value=1_500, ago=timedelta(days=2)),
-            _player_trade("t2", "Zezima", given_value=500, received_value=200, ago=timedelta(days=1)),
+            _player_trade(
+                "t1", "Zezima", given_value=1_000, received_value=1_500, ago=timedelta(days=2)
+            ),
+            _player_trade(
+                "t2", "Zezima", given_value=500, received_value=200, ago=timedelta(days=1)
+            ),
         ]
     )
 
@@ -60,7 +72,9 @@ def test_different_counterparties_are_kept_separate(signed_in: TestClient, setti
     repository = JournalRepository(settings.journal_path("111"))
     repository.add_synced_trades(
         [
-            _player_trade("t1", "Alice", given_value=100, received_value=200, ago=timedelta(days=1)),
+            _player_trade(
+                "t1", "Alice", given_value=100, received_value=200, ago=timedelta(days=1)
+            ),
             _player_trade("t2", "Bob", given_value=300, received_value=100, ago=timedelta(days=1)),
         ]
     )

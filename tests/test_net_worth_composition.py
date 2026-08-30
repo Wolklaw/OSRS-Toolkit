@@ -23,11 +23,17 @@ def test_the_dashboard_shows_composition_from_a_snapshot(signed_in: TestClient, 
             account_name="Wolklaw",
             captured_at=datetime.now(UTC).isoformat(),
             equipment=(
-                LoadoutItem(item_id=4151, item_name="Abyssal whip", quantity=1, unit_value=1_500_000),
+                LoadoutItem(
+                    item_id=4151, item_name="Abyssal whip", quantity=1, unit_value=1_500_000
+                ),
             ),
-            inventory=(LoadoutItem(item_id=995, item_name="Coins", quantity=2_000_000, unit_value=1),),
+            inventory=(
+                LoadoutItem(item_id=995, item_name="Coins", quantity=2_000_000, unit_value=1),
+            ),
             bank=(
-                LoadoutItem(item_id=11802, item_name="Armadyl godsword", quantity=1, unit_value=40_000_000),
+                LoadoutItem(
+                    item_id=11802, item_name="Armadyl godsword", quantity=1, unit_value=40_000_000
+                ),
             ),
             skills={},
         )
