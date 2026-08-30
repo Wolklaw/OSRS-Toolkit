@@ -191,7 +191,10 @@ class RuneLiteSyncImporter:
         if not detected or not isinstance(payload, dict):
             # Detected but no payload: the source exists but didn't answer (site down, token
             # revoked). Plugin may be fine.
-            return RuneLiteConnectionStatus(detected=detected, source_reachable=not detected)
+            last_error = getattr(self.source, "last_error", None) if detected else None
+            return RuneLiteConnectionStatus(
+                detected=detected, source_reachable=not detected, last_error=last_error
+            )
         if payload.get("schema_version") not in (None, SCHEMA_VERSION):
             return RuneLiteConnectionStatus(detected=True)
         account_name = payload.get("account_name")

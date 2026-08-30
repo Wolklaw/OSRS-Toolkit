@@ -569,6 +569,22 @@ def test_connection_status_exposes_active_runelite_character(tmp_path: Path) -> 
     assert status.player_trade_tracking is True
 
 
+def test_an_unreachable_sources_error_reaches_the_connection_status() -> None:
+    """The reason a source failed is only worth carrying if a caller actually asks for it --
+    this is that ask, for a source that can say why (unlike the local folder, which can't)."""
+
+    class _UnreachableSource:
+        last_error = "timed out"
+
+        def status_payload(self):
+            return (True, None, False)
+
+    status = RuneLiteSyncImporter(source=_UnreachableSource()).connection_status()
+
+    assert status.source_reachable is False
+    assert status.last_error == "timed out"
+
+
 def test_stale_connection_status_keeps_character_but_reports_offline(tmp_path: Path) -> None:
     root = tmp_path / "sync"
     root.mkdir()

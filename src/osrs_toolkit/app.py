@@ -195,6 +195,7 @@ from osrs_toolkit.updater import (
 from osrs_toolkit.web_source import (
     DEFAULT_BASE_URL,
     INTERACTIVE_TIMEOUT_SECONDS,
+    POLL_TIMEOUT_SECONDS,
     ToolkitWebClient,
     ToolkitWebError,
     WebAppSource,
@@ -229,8 +230,12 @@ def build_sync_importer() -> RuneLiteSyncImporter:
     that's the same-machine plugin arrangement the Plugin Hub rejected. An unconfigured
     client just answers "nothing yet"; ``RuneLiteConnectionDialog`` prompts for the
     missing token instead.
+
+    Given the short poll timeout rather than the 20s default: this source is read from the
+    GUI thread on a 3-second timer, so that default is how long the window could sit frozen
+    on one stalled request.
     """
-    return RuneLiteSyncImporter(source=WebAppSource(configured_web_client()))
+    return RuneLiteSyncImporter(source=WebAppSource(configured_web_client(POLL_TIMEOUT_SECONDS)))
 
 
 class MarketWorker(QObject):
@@ -4604,9 +4609,10 @@ class MainWindow(QMainWindow):
         elif connection.detected and not connection.source_reachable:
             # Not the plugin's fault -- it's the website (where we read from) unreachable.
             button_text = "Website unreachable"
+            reason = f" ({connection.last_error})" if connection.last_error else ""
             status_text = (
-                "Cannot reach the website • your journal is safe on this PC and will "
-                "catch up on its own"
+                f"Cannot reach the website{reason} • your journal is safe on this PC and "
+                "will catch up on its own"
             )
         elif connection.detected:
             button_text = "RuneLite offline"

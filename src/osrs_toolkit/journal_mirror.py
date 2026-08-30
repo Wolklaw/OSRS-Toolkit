@@ -12,6 +12,13 @@ from dataclasses import dataclass
 from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.web_source import ToolkitWebClient
 
+# The version probe runs on the GUI thread on a timer, and in the common case -- neither
+# journal changed -- it is the only request a pass makes. The client's own timeout is sized
+# for the pull/push that follow a real change, which can carry a whole journal; spending it
+# on this one small query is how a stalled server becomes a frozen window. A probe that
+# times out costs one skipped pass, and the next is a minute away.
+VERSION_PROBE_TIMEOUT_SECONDS = 5.0
+
 
 @dataclass(frozen=True, slots=True)
 class MirrorResult:
@@ -70,7 +77,7 @@ class JournalMirror:
         if not self.client.configured:
             return MirrorResult(reached=False)
 
-        remote = self.client.get("/api/journal/version")
+        remote = self.client.get("/api/journal/version", timeout=VERSION_PROBE_TIMEOUT_SECONDS)
         if not isinstance(remote, dict):
             return MirrorResult(reached=False)
         remote_version = str(remote.get("version") or "")
@@ -123,5 +130,5 @@ class JournalMirror:
         return (True, int(answer.get("inserted", 0)) + int(answer.get("updated", 0)))
 
     def _remote_version(self) -> str | None:
-        remote = self.client.get("/api/journal/version")
+        remote = self.client.get("/api/journal/version", timeout=VERSION_PROBE_TIMEOUT_SECONDS)
         return str(remote.get("version") or "") if isinstance(remote, dict) else None

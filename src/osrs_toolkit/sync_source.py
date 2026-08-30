@@ -47,6 +47,10 @@ class RuneLiteConnectionStatus:
     # Whether the source itself answered. False means unreachable (site down, etc), not
     # "plugin offline" — different message to show. Always true for the local folder.
     source_reachable: bool = True
+    # What broke, for a source that can say (the website; a local folder never fails this
+    # way). Only meaningful when source_reachable is False. Shown in the status text so a
+    # recurring "unreachable" is something to report with a cause, not just a symptom.
+    last_error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

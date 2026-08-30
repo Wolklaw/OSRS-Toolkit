@@ -112,6 +112,51 @@ def test_a_reply_that_is_not_an_object_is_treated_as_unreachable():
         assert _source().status_payload() == (True, None, False)
 
 
+# -- what a failure actually was ----------------------------------------------------------
+
+
+def test_the_client_remembers_why_the_last_call_failed():
+    client = ToolkitWebClient("https://runescope.app", "test-token")
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+        client.get("/api/me")
+    assert client.last_error == "offline"
+
+
+def test_an_http_error_is_described_by_its_status_code():
+    client = ToolkitWebClient("https://runescope.app", "test-token")
+    with patch(
+        "urllib.request.urlopen",
+        side_effect=urllib.error.HTTPError("u", 503, "Service Unavailable", {}, None),
+    ):
+        client.get("/api/me")
+    assert client.last_error == "HTTP 503"
+
+
+def test_a_timeout_is_described_as_a_timeout():
+    client = ToolkitWebClient("https://runescope.app", "test-token")
+    with patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
+        client.get("/api/me")
+    assert client.last_error == "timed out"
+
+
+def test_a_success_clears_the_remembered_error():
+    client = ToolkitWebClient("https://runescope.app", "test-token")
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+        client.get("/api/me")
+    assert client.last_error is not None
+
+    with patch("urllib.request.urlopen", return_value=_response({"username": "Wolklaw"})):
+        client.get("/api/me")
+    assert client.last_error is None
+
+
+def test_the_source_exposes_the_clients_last_error():
+    source = _source()
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
+        source.status_payload()
+    assert source.last_error == "offline"
+
+
 def test_a_stale_status_is_reported_as_not_fresh():
     payload = {"status": {"account_name": "Wolklaw"}, "status_fresh": False}
     with patch("urllib.request.urlopen", return_value=_response(payload)):
@@ -133,6 +178,30 @@ def test_one_dropped_poll_reuses_the_last_good_state(monkeypatch):
 
     assert first == (True, payload["status"], True)
     assert second == first
+
+
+def test_one_blip_is_absorbed_by_the_status_and_the_slots_alike(monkeypatch):
+    """A tick asks twice -- once about the status, once about the character's slots. Counting
+    failures in one shared total made the first call spend the blip allowance and the second
+    exceed it, so the same blip kept the status line but emptied the Grand Exchange panel."""
+    payload = {
+        "status": {"account_name": "Wolklaw", "active": True},
+        "status_fresh": True,
+        "offers": {"3": {"itemId": 4151}},
+    }
+    clock = iter([0.0, 0.0, 10.0, 10.0])
+    monkeypatch.setattr("osrs_toolkit.web_source.time.monotonic", lambda: next(clock))
+    source = _source()
+    with patch("urllib.request.urlopen", return_value=_response(payload)):
+        source.status_payload()
+        source.offer_state_payload("abc123")
+
+    with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("blip")):
+        _detected, status, _fresh = source.status_payload()
+        offers = source.offer_state_payload("abc123")
+
+    assert status == payload["status"]
+    assert offers == payload["offers"]
 
 
 def test_two_dropped_polls_in_a_row_do_report_unreachable(monkeypatch):
@@ -202,6 +271,21 @@ def test_one_refresh_asks_the_website_once():
         source.offer_screen_payload("abc123")
 
     assert urlopen.call_count == 1
+
+
+def test_alternating_between_the_status_and_a_character_still_costs_two_requests():
+    """One tick asks about "" (status) and the character (slots) several times each, in
+    alternation. A cache holding only the most recent key made every one of those a miss --
+    seven blocking round trips per tick on the GUI thread, which is what made the window
+    slow to respond. Two is the real cost: one question per distinct key."""
+    payload = {"status": {}, "status_fresh": True, "offers": {}, "screen": None}
+    with patch("urllib.request.urlopen", return_value=_response(payload)) as urlopen:
+        source = _source()
+        for _ in range(4):
+            source.status_payload()
+            source.offer_state_payload("abc123")
+
+    assert urlopen.call_count == 2
 
 
 def test_a_different_character_is_a_different_question():

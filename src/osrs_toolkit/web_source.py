@@ -28,9 +28,34 @@ DEFAULT_BASE_URL = "https://runescope.app"
 # watching, so a bad address needs to answer quickly, not freeze the app.
 INTERACTIVE_TIMEOUT_SECONDS = 6.0
 
+# Timeout for the live-state poll, which runs on the GUI thread every few seconds. The 20s
+# default belongs to a one-off request nobody is waiting on; here it is how long the window
+# can sit frozen on a single stalled request, so it is kept just under the poll interval.
+# A poll that times out costs one skipped tick, and the next one is 3 seconds away.
+POLL_TIMEOUT_SECONDS = 2.5
+
 # Collapses one refresh's status/slots/offer-box calls into a single request instead of
 # three round trips.
 STATE_CACHE_SECONDS = 2.0
+
+
+def _describe_failure(error: Exception) -> str:
+    """A short, human string for whatever ``urlopen`` raised.
+
+    Every failure the caller sees looks the same ("nothing to draw, try next tick") — this is
+    the one place that still knows which it actually was, so a recurring "Website unreachable"
+    can be reported with a cause (DNS, timeout, a specific HTTP status) instead of just the
+    symptom.
+    """
+    if isinstance(error, urllib.error.HTTPError):
+        return f"HTTP {error.code}"
+    if isinstance(error, TimeoutError):
+        return "timed out"
+    if isinstance(error, urllib.error.URLError):
+        return str(error.reason) or "connection failed"
+    if isinstance(error, (json.JSONDecodeError, ValueError)):
+        return "reply wasn't valid JSON"
+    return str(error) or type(error).__name__
 
 
 class ToolkitWebError(Exception):
@@ -51,13 +76,16 @@ class ToolkitWebClient:
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.token = token or ""
         self.timeout = timeout or HTTP_TIMEOUT_SECONDS
+        # What the last failed call died of, so "Website unreachable" is something to report
+        # with a cause rather than just a symptom. None after a call that succeeded.
+        self.last_error: str | None = None
 
     @property
     def configured(self) -> bool:
         return bool(self.base_url and self.token)
 
-    def get(self, path: str, **params: str) -> object | None:
-        return self._call("GET", path, params=params)
+    def get(self, path: str, timeout: float | None = None, **params: str) -> object | None:
+        return self._call("GET", path, params=params, timeout=timeout)
 
     def post(self, path: str, body: object) -> object | None:
         return self._call("POST", path, body=body)
@@ -69,12 +97,16 @@ class ToolkitWebClient:
         *,
         body: object | None = None,
         params: dict[str, str] | None = None,
+        timeout: float | None = None,
     ) -> object | None:
         """The response as JSON, or ``None`` for anything that did not clearly succeed.
 
         Every failure answers the same way on purpose — a dashboard refresh treats "site
         down", "token revoked", and "reply wasn't JSON" identically: nothing to draw, try next
         tick. ``ToolkitWebError`` is raised only where a caller asks to be told — see ``check``.
+
+        ``timeout`` overrides the client's own for this one call, for a small request made on
+        a timer where the client's timeout is sized for a large one.
         """
         if not self.configured:
             return None
@@ -89,10 +121,19 @@ class ToolkitWebClient:
         if data is not None:
             request.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return json.loads(response.read() or b"null")
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+            with urllib.request.urlopen(request, timeout=timeout or self.timeout) as response:
+                result = json.loads(response.read() or b"null")
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            ValueError,
+            OSError,
+        ) as error:
+            self.last_error = _describe_failure(error)
             return None
+        self.last_error = None
+        return result
 
     def check(self) -> str:
         """Confirm the credential works and return the account name it belongs to.
@@ -121,9 +162,16 @@ class WebAppSource:
 
     def __init__(self, client: ToolkitWebClient) -> None:
         self.client = client
-        self._cached: tuple[float, str, dict] | None = None
-        self._last_good: tuple[str, dict] | None = None
-        self._consecutive_failures = 0
+        # Keyed by account hash, because one refresh asks about two of them: the status
+        # questions pass "" and the Grand Exchange ones pass the character. A single slot
+        # held only the most recent, so those two alternating keys evicted each other and
+        # every call missed -- seven blocking round trips per tick instead of two.
+        self._cached: dict[str, tuple[float, dict]] = {}
+        self._last_good: dict[str, dict] = {}
+        # Counted per key for the same reason the cache is: one tick asks twice, so a single
+        # global counter reached two on one blip -- tolerating it for the status question and
+        # then refusing it for the Grand Exchange one, in the same tick.
+        self._consecutive_failures: dict[str, int] = {}
 
     @property
     def configured(self) -> bool:
@@ -134,29 +182,31 @@ class WebAppSource:
         """
         return self.client.configured
 
+    @property
+    def last_error(self) -> str | None:
+        """What the most recent failed poll died of, for the "Website unreachable" status."""
+        return self.client.last_error
+
     def _state(self, account_hash: str = "") -> dict:
         now = time.monotonic()
-        if self._cached is not None:
-            cached_at, cached_hash, payload = self._cached
-            if cached_hash == account_hash and now - cached_at < STATE_CACHE_SECONDS:
-                return payload
+        cached = self._cached.get(account_hash)
+        if cached is not None and now - cached[0] < STATE_CACHE_SECONDS:
+            return cached[1]
         fetched = self.client.get("/api/sync-state", account_hash=account_hash)
         if isinstance(fetched, dict):
-            self._consecutive_failures = 0
-            self._last_good = (account_hash, fetched)
+            self._consecutive_failures[account_hash] = 0
+            self._last_good[account_hash] = fetched
             payload = fetched
         else:
-            self._consecutive_failures += 1
+            failures = self._consecutive_failures.get(account_hash, 0) + 1
+            self._consecutive_failures[account_hash] = failures
             # One failed poll over a home internet connection is a dropped packet, not an
             # outage -- reusing the last good state for it is what stops "Website unreachable"
             # flapping on and off every few seconds. A second failure in a row still reports
-            # it: this tolerates a blip, not a real interruption.
-            if self._consecutive_failures <= 1 and self._last_good is not None:
-                last_hash, last_payload = self._last_good
-                payload = last_payload if last_hash == account_hash else {}
-            else:
-                payload = {}
-        self._cached = (now, account_hash, payload)
+            # it: this tolerates a blip, not a real interruption. Kept per character, so a
+            # blip during a character switch never answers with the other one's slots.
+            payload = self._last_good.get(account_hash, {}) if failures <= 1 else {}
+        self._cached[account_hash] = (now, payload)
         return payload
 
     def status_payload(self) -> tuple[bool, dict | None, bool]:

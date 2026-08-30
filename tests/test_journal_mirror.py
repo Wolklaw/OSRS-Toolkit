@@ -228,3 +228,25 @@ def test_resetting_forgets_what_was_synced(tmp_path):
 
     assert mirror.remote_version is None
     assert mirror.local_version is None
+
+
+# -- the probe must not be able to freeze the window ----------------------------------------
+
+
+def test_the_version_probe_is_bounded_well_under_the_clients_own_timeout(tmp_path):
+    """This pass runs on the GUI thread on a timer, and in the common case the probe is the
+    only request it makes. Left on the client's own timeout -- sized for a pull or push that
+    can carry a whole journal -- one stalled server would freeze the window for that long."""
+    from unittest.mock import patch
+
+    from osrs_toolkit.journal_mirror import VERSION_PROBE_TIMEOUT_SECONDS
+
+    local = JournalRepository(tmp_path / "desktop.db")
+    client = ToolkitWebClient("https://runescope.app", "a-desktop-token", timeout=600.0)
+    mirror = JournalMirror(local, client)
+
+    with patch("urllib.request.urlopen", side_effect=TimeoutError("stalled")) as urlopen:
+        assert mirror.sync().reached is False
+
+    assert urlopen.call_args.kwargs["timeout"] == VERSION_PROBE_TIMEOUT_SECONDS
+    assert VERSION_PROBE_TIMEOUT_SECONDS < client.timeout

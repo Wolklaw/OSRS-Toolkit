@@ -265,6 +265,20 @@ def test_an_unreachable_website_is_not_reported_as_the_plugin_being_offline(wind
     assert window.runelite_button.text() == "Website unreachable"
 
 
+def test_the_unreachable_reason_is_shown_when_known(window):
+    """ "Website unreachable" alone is a symptom; the reason is what makes a recurring one
+    something to actually diagnose rather than guess at again."""
+    from osrs_toolkit.sync_source import RuneLiteConnectionStatus
+
+    window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
+        detected=True, active=False, source_reachable=False, last_error="timed out"
+    )
+
+    window._update_runelite_status()
+
+    assert "(timed out)" in window.runelite_status.text()
+
+
 def test_the_local_folder_is_never_called_unreachable(window):
     """A directory that exists has already answered, so this path must keep its old wording."""
     from osrs_toolkit.sync_source import RuneLiteConnectionStatus
