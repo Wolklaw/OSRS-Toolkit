@@ -4,6 +4,34 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-08-30
+
+### Highlights
+
+- **The journal can change a batch of trades at once.** Select several rows with Ctrl or
+  Shift and the update button becomes a batch editor: set the status, the strategy, or the
+  character on all of them in one go. Built for the shopping trip that lands twenty positions
+  you meant to file as Supplies. Anything left on "Leave unchanged" is not touched, and the
+  batch editor deliberately cannot reach a price, a fill or a quantity — those differ per
+  position, and one wrong click should not be able to overwrite a day's real numbers. Delete
+  works across a selection now too.
+- **The window is much quicker to respond.** Clicking between tabs had become sluggish. The
+  live-state poll was making seven blocking requests to the website every three seconds
+  instead of two, because the cache meant to collapse them held one entry while each refresh
+  asked about two things in turn, so every single call missed. Measured against the live
+  site, that was the window sitting frozen 35% of the time; it is now under 10%.
+
+### Fixed
+
+- A stalled request could freeze the window for up to 20 seconds. The live-state poll and the
+  journal mirror's version check both ran on a timer with a timeout meant for a one-off
+  request nobody is waiting on. Both are bounded well under their own intervals now.
+- A single dropped poll kept the connection line but emptied the Grand Exchange panel, which
+  is the same blip disagreeing with itself. Both sides now ride out one failure and report
+  the second.
+- **Website unreachable** now says what actually went wrong — a status code, a timeout, a DNS
+  failure — instead of only that something did.
+
 ## [1.3.2] - 2026-08-26
 
 ### Fixed

@@ -127,6 +127,7 @@ from osrs_toolkit.formatting import (
 )
 from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import (
+    UNCHANGED,
     JournalRepository,
     TrackedTrade,
 )
@@ -1151,6 +1152,125 @@ class SavingsGoalDialog(QDialog):
     def _accept_if_valid(self) -> None:
         if not self.goal_label.text().strip():
             QMessageBox.warning(self, "Missing label", "Enter what you're saving for.")
+            return
+        self.accept()
+
+
+class RetagTradesDialog(QDialog):
+    """Refile several positions at once: what they are, not what they hold.
+
+    Every field starts on "Leave unchanged" and means it, so this only ever writes what was
+    deliberately picked. Nothing here can touch a price, a fill or a quantity — those differ
+    per position, and a batch editor that could overwrite them across a selection is a way to
+    lose a day's real numbers to one wrong click.
+    """
+
+    UNCHANGED_LABEL = "Leave unchanged"
+    #: Only meaningful for a batch. Marking a whole shopping trip as Supplies is the case
+    #: this dialog exists for, so it leads.
+    STATUSES: ClassVar[list[str]] = [
+        "Supplies",
+        "Pending buy",
+        "Bought",
+        "Listed for sale",
+        "Partially sold",
+        "Completed",
+        "Cancelled",
+    ]
+
+    def __init__(
+        self,
+        count: int,
+        strategies: list[str],
+        characters: list[tuple[str | None, str]],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Update {count} trades")
+        self.setMinimumWidth(460)
+        layout = QVBoxLayout(self)
+
+        heading = QLabel(
+            f"Changing <b>{count}</b> selected {'trade' if count == 1 else 'trades'}. "
+            "Anything left on “Leave unchanged” is not touched.",
+            objectName="muted",
+        )
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+
+        form = QFormLayout()
+        self.status = QComboBox()
+        self.status.addItem(self.UNCHANGED_LABEL)
+        self.status.addItems(self.STATUSES)
+        form.addRow("Status", self.status)
+
+        self.strategy = QComboBox()
+        self.strategy.addItem(self.UNCHANGED_LABEL)
+        self.strategy.addItems(strategies)
+        form.addRow("Strategy", self.strategy)
+
+        self.character = QComboBox()
+        self.character.addItem(self.UNCHANGED_LABEL)
+        for account_hash, name in characters:
+            self.character.addItem(name, account_hash)
+        form.addRow("Character", self.character)
+        layout.addLayout(form)
+
+        self.warning = QLabel(objectName="muted")
+        self.warning.setWordWrap(True)
+        layout.addWidget(self.warning)
+        self.status.currentTextChanged.connect(self._status_changed)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _status_changed(self, status: str) -> None:
+        # Said before the click rather than reported after it: "Completed" is the one status
+        # a position can fail to qualify for, and finding that out from a summary afterwards
+        # reads like the app ignored you.
+        self.warning.setText(
+            "Only positions whose buy and sell fills already cover their full quantity can "
+            "become Completed. Any that don't are left as they are."
+            if status == "Completed"
+            else ""
+        )
+
+    def chosen_status(self) -> str | None:
+        text = self.status.currentText()
+        return None if text == self.UNCHANGED_LABEL else text
+
+    def chosen_strategy(self) -> str | None:
+        text = self.strategy.currentText()
+        return None if text == self.UNCHANGED_LABEL else text
+
+    def chosen_character(self) -> str | None | object:
+        """The account hash to file these under, or ``UNCHANGED``.
+
+        ``None`` is a real answer here — "belongs to no character in particular" — so it
+        cannot double as "leave alone", which is why the sentinel exists.
+        """
+        if self.character.currentText() == self.UNCHANGED_LABEL:
+            return UNCHANGED
+        return self.character.currentData()
+
+    def changes_anything(self) -> bool:
+        return (
+            self.chosen_status() is not None
+            or self.chosen_strategy() is not None
+            or self.chosen_character() is not UNCHANGED
+        )
+
+    def _accept_if_valid(self) -> None:
+        if not self.changes_anything():
+            QMessageBox.information(
+                self,
+                "Nothing to change",
+                "Pick a status, a strategy or a character to apply, or press Cancel.",
+            )
             return
         self.accept()
 
@@ -2238,11 +2358,24 @@ class MainWindow(QMainWindow):
         selected = bool(self.journal_table.selectionModel().hasSelection())
         for button in self._journal_row_buttons:
             button.setEnabled(selected)
+        # The button says which editor it opens, because they are different dialogs: one row
+        # gets the full editor with its fills, several get the batch one.
+        count = len(self._selected_journal_rows())
+        self.journal_update_button.setText(
+            f"Update {count} selected trades" if count > 1 else "Update selected trade"
+        )
 
     def _build_journal_row_menu(self, menu: QMenu, row: int) -> None:
         """The row menu for a journal entry: the two buttons above it, on the row itself."""
-        menu.addAction("Update trade…", self._update_selected_trade)
-        menu.addAction("Delete trade…", self._delete_selected_trade)
+        count = len(self._selected_journal_rows())
+        menu.addAction(
+            f"Update {count} trades…" if count > 1 else "Update trade…",
+            self._update_selected_trade,
+        )
+        menu.addAction(
+            f"Delete {count} trades…" if count > 1 else "Delete trade…",
+            self._delete_selected_trade,
+        )
         menu.addSeparator()
         self._add_copy_action(menu, self.journal_table, row, 2)
 
@@ -2534,7 +2667,12 @@ class MainWindow(QMainWindow):
         actions = QHBoxLayout()
         add_button = QPushButton("Add completed trade")
         add_button.clicked.connect(self._add_trade)
-        update_button = QPushButton("Update selected trade", objectName="secondary")
+        self.journal_update_button = QPushButton("Update selected trade", objectName="secondary")
+        self.journal_update_button.setToolTip(
+            "Select several rows with Ctrl or Shift to change their status, strategy or "
+            "character in one go."
+        )
+        update_button = self.journal_update_button
         update_button.clicked.connect(self._update_selected_trade)
         delete_button = QPushButton("Delete selected", objectName="secondary")
         delete_button.clicked.connect(self._delete_selected_trade)
@@ -2597,6 +2735,7 @@ class MainWindow(QMainWindow):
             ],
             minimum_widths={0: 105, 1: 155, 2: 230, 8: 130},
             text_columns={1, 2},
+            multi_select=True,
         )
         self._open_rows_with(
             self.journal_table, lambda _row, _column: self._update_selected_trade()
@@ -3214,12 +3353,17 @@ class MainWindow(QMainWindow):
         minimum_widths: dict[int, int] | None = None,
         maximum_widths: dict[int, int] | None = None,
         text_columns: set[int] | None = None,
+        multi_select: bool = False,
     ) -> QTableWidget:
         """A table sized from its content, within per-column bounds.
 
         ``maximum_widths`` overrides ``DEFAULT_MAXIMUM_COLUMN_WIDTH``; a column's minimum
         always wins over its maximum. Columns are right-aligned by default (for figures);
         ``text_columns`` marks the ones holding prose instead, which are left-aligned.
+
+        ``multi_select`` allows the usual ctrl/shift range selection, for a table whose row
+        actions can act on a batch. Off elsewhere, since a table whose actions only ever
+        apply to one row should not let somebody select five and wonder why.
         """
         table = ResponsiveTableWidget(len(headers))
         table.setHorizontalHeaderLabels(headers)
@@ -3238,7 +3382,11 @@ class MainWindow(QMainWindow):
         table.setProperty("maximumColumnWidths", maximum_widths or {})
         table.setProperty("textColumns", text_columns or set())
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+            if multi_select
+            else QAbstractItemView.SelectionMode.SingleSelection
+        )
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setTextElideMode(Qt.TextElideMode.ElideRight)
         table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
@@ -4772,27 +4920,43 @@ class MainWindow(QMainWindow):
         self._flash_journal_rows([position_id])
 
     def _delete_selected_trade(self) -> None:
-        row = self.journal_table.currentRow()
-        if row < 0:
+        rows = self._selected_journal_rows()
+        if not rows:
             QMessageBox.information(self, "No trade selected", "Select a journal row first.")
             return
-        record_id = self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        status = self.journal_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
-        if not isinstance(record_id, int):
+        # Read every row's identity before deleting any of them: each delete re-renders the
+        # table, so row numbers collected up front stop meaning what they meant.
+        doomed = [
+            (
+                self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole),
+                self.journal_table.item(row, 1).data(Qt.ItemDataRole.UserRole),
+            )
+            for row in rows
+        ]
+        doomed = [(record_id, status) for record_id, status in doomed if isinstance(record_id, int)]
+        if not doomed:
             return
+        question = (
+            "Remove this trade from your journal?"
+            if len(doomed) == 1
+            else f"Remove these {len(doomed)} trades from your journal?"
+        )
         answer = QMessageBox.question(
             self,
-            "Delete trade",
-            "Remove this trade from your journal?",
+            "Delete trade" if len(doomed) == 1 else "Delete trades",
+            question,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
-        if answer == QMessageBox.StandardButton.Yes:
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        for record_id, status in doomed:
             if status in UpdateTrackedTradeDialog.STATUSES:
                 self._journal.delete_tracked(record_id)
             else:
                 self._journal.delete(record_id)
-            self._render_journal()
+        self._render_journal()
+        self._render_performance()
 
     def _export_journal_csv(self) -> None:
         today = datetime.now().astimezone().strftime("%Y-%m-%d")
@@ -4888,7 +5052,83 @@ class MainWindow(QMainWindow):
             f"Imported {len(parsed.trades)} trade(s).{skipped_note}",
         )
 
+    def _selected_journal_rows(self) -> list[int]:
+        """The selected rows, top to bottom, however they were selected.
+
+        ``selectedIndexes`` returns one index per cell, so a row selection arrives nine times
+        over; the set collapses that back to rows.
+        """
+        rows = {index.row() for index in self.journal_table.selectedIndexes()}
+        return sorted(rows)
+
+    def _selected_tracked_positions(self, rows: list[int]) -> tuple[list[int], int]:
+        """(position ids that can be refiled, how many selected rows could not be).
+
+        A manually completed entry is not a tracked position and has no status to change, so
+        it is counted rather than silently treated as one.
+        """
+        position_ids: list[int] = []
+        ineligible = 0
+        for row in rows:
+            record_id = self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+            status = self.journal_table.item(row, 1).data(Qt.ItemDataRole.UserRole)
+            if isinstance(record_id, int) and status in UpdateTrackedTradeDialog.STATUSES:
+                position_ids.append(record_id)
+            else:
+                ineligible += 1
+        return position_ids, ineligible
+
+    def _retag_selected_trades(self, rows: list[int]) -> None:
+        """Refile several positions at once, for the shopping-trip case."""
+        position_ids, ineligible = self._selected_tracked_positions(rows)
+        if not position_ids:
+            QMessageBox.information(
+                self,
+                "Nothing to update",
+                "None of the selected rows is a tracked position. Manually completed entries "
+                "cannot change status.",
+            )
+            return
+        characters = [
+            (account.get("account_hash"), account.get("account_name") or "Unnamed character")
+            for account in self._sync_importer.known_accounts()
+            if account.get("account_hash")
+        ]
+        characters.append((None, "No character in particular"))
+        dialog = RetagTradesDialog(len(position_ids), list(STRATEGIES), characters, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            result = self._journal.retag_positions(
+                position_ids,
+                status=dialog.chosen_status(),
+                strategy=dialog.chosen_strategy(),
+                account_hash=dialog.chosen_character(),
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Could not update trades", str(exc))
+            return
+        self._render_journal()
+        self._render_performance()
+        notes = []
+        if result.skipped:
+            notes.append(
+                f"{len(result.skipped)} left as they were: their fills do not cover the full "
+                "quantity, so they cannot be Completed."
+            )
+        if ineligible:
+            notes.append(f"{ineligible} selected row(s) were not tracked positions.")
+        QMessageBox.information(
+            self,
+            "Trades updated",
+            f"Updated {result.updated} trade(s)." + ("\n\n" + "\n".join(notes) if notes else ""),
+        )
+
     def _update_selected_trade(self) -> None:
+        rows = self._selected_journal_rows()
+        if len(rows) > 1:
+            self._retag_selected_trades(rows)
+            return
         row = self.journal_table.currentRow()
         if row < 0:
             QMessageBox.information(self, "No trade selected", "Select a tracked trade first.")

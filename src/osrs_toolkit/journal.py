@@ -6,7 +6,7 @@ import shutil
 import sqlite3
 import sys
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -415,8 +415,46 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+class _Unchanged:
+    """Sentinel for "leave this field alone", where ``None`` is itself a real value.
+
+    ``account_hash`` is the case that needs it: None means "belongs to no character in
+    particular", which is a thing a caller may well want to set on purpose.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "UNCHANGED"
+
+
+UNCHANGED = _Unchanged()
+
+
+@dataclass(frozen=True, slots=True)
+class RetagResult:
+    """What ``retag_positions`` did: how many it filed, and what it would not."""
+
+    updated: int
+    #: Positions left alone because the requested status has an invariant they fail.
+    skipped: tuple[int, ...] = ()
+
+
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
+    #: Every status a tracked position can be filed under, so a bulk retag can refuse a
+    #: typo rather than writing a status nothing else in the app knows how to read.
+    _ALL_STATUSES = frozenset(
+        {
+            "Pending buy",
+            "Bought",
+            "Listed for sale",
+            "Partially sold",
+            "Completed",
+            "Cancelled",
+            "Supplies",
+        }
+    )
 
     # What a row needs before it can be recognised on another machine. ``trades`` and
     # ``tracked_trades`` are the only tables without a global identity of their own —
@@ -1713,6 +1751,81 @@ class JournalRepository:
             quantity=candidate.bought_quantity,
         )
         return candidate.position_id
+
+    def retag_positions(
+        self,
+        position_ids: Sequence[int],
+        *,
+        status: str | None = None,
+        strategy: str | None = None,
+        account_hash: str | None | _Unchanged = UNCHANGED,
+    ) -> RetagResult:
+        """Change how a batch of positions is filed, without touching what they hold.
+
+        For the case a one-at-a-time editor makes miserable: a long shopping trip lands
+        twenty positions and every one of them is filed wrong. Each argument left out is left
+        alone, so this sets only what was actually asked for.
+
+        Deliberately not routed through ``update_tracked``. That one recomputes
+        ``actual_buy``/``actual_sell`` from the fills it is handed and writes the result
+        unconditionally, so calling it with no fills — which is exactly what a "just change
+        the status" caller has — blanks both averages. Nothing here reads or writes a fill,
+        an average or a quantity at all.
+
+        ``Completed`` is the one status with an invariant behind it (a finished position has
+        to account for its full quantity on both sides), so positions that cannot satisfy it
+        are skipped and counted rather than written into a state the single-row editor would
+        have refused.
+        """
+        if status is not None and status not in self._ALL_STATUSES:
+            raise ValueError(f"Unknown status: {status}")
+        wanted = list(dict.fromkeys(position_ids))
+        if not wanted or (status is None and strategy is None and account_hash is UNCHANGED):
+            return RetagResult(updated=0, skipped=())
+
+        by_id = {trade.position_id: trade for trade in self.list_tracked()}
+        skipped: list[int] = []
+        changed: list[int] = []
+        for position_id in wanted:
+            trade = by_id.get(position_id)
+            if trade is None:
+                continue
+            if status == "Completed" and not self._can_complete(trade):
+                skipped.append(position_id)
+                continue
+            changed.append(position_id)
+
+        with self._connect() as connection:
+            for position_id in changed:
+                trade = by_id[position_id]
+                assignments = ["updated_at = ?"]
+                values: list[object] = [_now()]
+                if status is not None:
+                    assignments.append("status = ?")
+                    values.append(status)
+                    assignments.append("completed_at = ?")
+                    values.append(self._completion_time(status, trade.status, trade.completed_at))
+                if strategy is not None:
+                    assignments.append("strategy = ?")
+                    values.append(strategy)
+                if account_hash is not UNCHANGED:
+                    assignments.append("account_hash = ?")
+                    values.append(account_hash)
+                values.append(position_id)
+                connection.execute(
+                    f"UPDATE tracked_trades SET {', '.join(assignments)} WHERE position_id = ?",
+                    values,
+                )
+        return RetagResult(updated=len(changed), skipped=tuple(skipped))
+
+    @staticmethod
+    def _can_complete(trade: TrackedTrade) -> bool:
+        """Whether this position already accounts for its full quantity on both sides.
+
+        The same bar ``update_tracked`` holds a single position to when it is saved as
+        Completed, asked here without rewriting anything.
+        """
+        return trade.bought_quantity == trade.quantity and trade.sold_quantity == trade.quantity
 
     def delete_tracked(self, position_id: int) -> None:
         """Tombstoned, not removed — see ``delete``. Its sale fills are left alone: they are
