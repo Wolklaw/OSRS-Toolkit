@@ -216,8 +216,12 @@ def _net_worth_composition(snapshot: object, total_invested: int) -> list[dict]:
     cash = equipment_value = inventory_value = bank_value = 0
     if snapshot is not None:
         cash = snapshot.quantity_owned(995)
-        equipment_value = sum(item.total_value for item in snapshot.equipment if item.item_id != 995)
-        inventory_value = sum(item.total_value for item in snapshot.inventory if item.item_id != 995)
+        equipment_value = sum(
+            item.total_value for item in snapshot.equipment if item.item_id != 995
+        )
+        inventory_value = sum(
+            item.total_value for item in snapshot.inventory if item.item_id != 995
+        )
         bank_value = sum(item.total_value for item in snapshot.bank if item.item_id != 995)
     buckets = [
         ("Cash", cash, "--good"),
@@ -537,9 +541,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except MarketDataError:
             pass
         history = market.timeseries(item_id)
-        watched = (
-            account is not None
-            and item_id in accounts.list_watchlist_item_ids(account.discord_user_id)
+        watched = account is not None and item_id in accounts.list_watchlist_item_ids(
+            account.discord_user_id
         )
         history_stats, volume_by_weekday = _history_stats(history)
         return templates.TemplateResponse(
@@ -898,9 +901,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 else repository.get_latest_loadout_snapshot()
             )
             synced = switcher["synced_characters"]
-            live_hash = filter_hash or (
-                synced[0]["account_hash"] if len(synced) == 1 else None
-            )
+            live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
             if cash_stack is None:
                 if snapshot is not None:
                     cash_stack = snapshot.quantity_owned(995)
@@ -1534,7 +1535,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     @app.put("/api/pairing-token")
-    def set_pairing_token(payload: dict, account: Account = CurrentAccount) -> dict:
+    def set_pairing_token(payload: dict, account: Account = BrowserAccount) -> dict:
         token = payload.get("token")
         if not isinstance(token, str) or not token.strip():
             raise HTTPException(status_code=422, detail="token is required")
@@ -1549,7 +1550,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True, "verified": valid is True}
 
     @app.delete("/api/pairing-token")
-    def clear_pairing_token(account: Account = CurrentAccount) -> dict:
+    def clear_pairing_token(account: Account = BrowserAccount) -> dict:
         accounts.set_pairing_token(account.discord_user_id, None)
         return {"ok": True}
 
@@ -1574,7 +1575,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.post("/api/pairing-token/generate")
-    def generate_pairing_token(account: Account = CurrentAccount) -> dict:
+    def generate_pairing_token(account: Account = BrowserAccount) -> dict:
         """A fresh token this account can paste straight into the plugin.
 
         Nothing else in the system ever mints one for a person — the plugin only accepts a
@@ -1582,6 +1583,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         to the public. This is the one caller trusted to hold that invite code, so signing in
         here is what stands in for it: an account that reached this page already proved it,
         the same way it already proved enough to read its own journal.
+
+        Browser-only, like the other three pairing routes and for the same reason as
+        ``delete_account``: this hands back the plugin's *write* credential to the sync
+        service, which is a strictly wider power than the journal access a desktop token
+        already has. The desktop window never calls it — it only reads ``/api/sync-state``,
+        ``/api/me`` and the three journal routes.
         """
         previous = account.pairing_token
         if previous:

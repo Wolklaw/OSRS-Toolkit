@@ -190,5 +190,40 @@ def badge_text(page: str) -> str:
     "Sending now" appears in the markup of an idle page too. The rendered text is the thing
     these tests are really about.
     """
-    match = re.search(r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page)
+    match = re.search(
+        r"<span class=\"badge[^\"]*\"[^>]*data-plugin-badge[^>]*>([^<]*)</span>", page
+    )
     return match.group(1).strip() if match else ""
+
+
+# -- a desktop token must not reach the plugin's credential ---------------------------------
+
+
+def test_a_desktop_token_cannot_touch_the_pairing_token(signed_in: TestClient) -> None:
+    """The same line drawn around account deletion and desktop credentials themselves.
+
+    A pairing token is the plugin's *write* credential to the sync service, which is strictly
+    more than the journal access a desktop token already carries -- so minting one, pointing
+    the account at a different one, or disconnecting the plugin are all browser-only. Before
+    this, a leaked desktop token could mint itself a pairing token, or silently repoint the
+    account at an attacker's queue so fabricated trades landed in this journal.
+    """
+    token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
+    bare = TestClient(signed_in.app, base_url="https://testserver")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert bare.post("/api/pairing-token/generate", headers=headers).status_code == 401
+    assert bare.put("/api/pairing-token", json={"token": "x"}, headers=headers).status_code == 401
+    assert bare.delete("/api/pairing-token", headers=headers).status_code == 401
+
+
+def test_a_desktop_token_still_reaches_what_the_desktop_app_actually_uses(
+    signed_in: TestClient,
+) -> None:
+    """The guard above must not have cost the desktop window the routes it does call."""
+    token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
+    bare = TestClient(signed_in.app, base_url="https://testserver")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    for path in ("/api/me", "/api/sync-state", "/api/journal/version"):
+        assert bare.get(path, headers=headers).status_code == 200, path
