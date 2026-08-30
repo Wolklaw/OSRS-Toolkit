@@ -63,6 +63,20 @@ def test_saving_a_real_discord_webhook_url_works(signed_in: TestClient):
     assert _VALID_WEBHOOK in signed_in.get("/profile").text
 
 
+def test_a_desktop_token_cannot_repoint_the_webhook(signed_in: TestClient):
+    """A desktop token can already read this journal, so this is not a widening of what it
+    can see -- but it is a way to make the account narrate what its owner is watching, and at
+    what price, into somebody else's Discord. Set from the profile page, so browser-only."""
+    token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
+    bare = TestClient(signed_in.app, base_url="https://testserver")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert (
+        bare.put("/api/discord-webhook", json={"url": _VALID_WEBHOOK}, headers=headers)
+    ).status_code == 401
+    assert bare.delete("/api/discord-webhook", headers=headers).status_code == 401
+
+
 def test_clearing_the_webhook_removes_it(signed_in: TestClient):
     signed_in.put("/api/discord-webhook", json={"url": _VALID_WEBHOOK})
 

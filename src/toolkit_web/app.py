@@ -1555,7 +1555,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.put("/api/discord-webhook")
-    def set_discord_webhook(payload: dict, account: Account = CurrentAccount) -> dict:
+    def set_discord_webhook(payload: dict, account: Account = BrowserAccount) -> dict:
+        """Where price alerts get posted. Browser-only, like the other outward-facing settings.
+
+        A desktop token can already read this journal, so pointing the alerts somewhere else
+        is not a widening of what it can see -- but it is a way to make this account send
+        somebody else's Discord a running commentary on what the owner is watching and at
+        what price, which is a different thing from reading it quietly. Set from the profile
+        page, which is the only place that offers it.
+        """
         url = payload.get("url")
         if not isinstance(url, str) or not url.strip():
             raise HTTPException(status_code=422, detail="url is required")
@@ -1570,7 +1578,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.delete("/api/discord-webhook")
-    def clear_discord_webhook(account: Account = CurrentAccount) -> dict:
+    def clear_discord_webhook(account: Account = BrowserAccount) -> dict:
         accounts.set_discord_webhook(account.discord_user_id, None)
         return {"ok": True}
 
