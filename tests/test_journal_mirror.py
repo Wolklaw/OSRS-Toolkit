@@ -2,11 +2,13 @@
 
 The merge itself is tested in the toolkit's own suite, against two real journals. These cover
 what this app adds on top: that the routes are reachable with a desktop credential, that the
-cheap one really is cheap, and that a trade's character attribution survives the move to
-identities that mean the same thing on both machines.
+version poll is what drains the plugin's queue, and that a trade's character attribution
+survives the move to identities that mean the same thing on both machines.
 """
 
 from __future__ import annotations
+
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -50,17 +52,40 @@ def test_version_is_steady_when_nothing_happens(signed_in: TestClient) -> None:
     )
 
 
-def test_version_does_not_call_the_sync_service(signed_in: TestClient) -> None:
-    """The whole point of the cheap poll: a page render imports from the sync service first,
-    and doing that on a timer would make the cheapest question here the most expensive.
+def test_version_still_answers_when_the_sync_service_is_unreachable(
+    signed_in: TestClient,
+) -> None:
+    """It imports first now, so it has to survive the import failing.
 
-    The fixture points sync_base_url at an address that does not resolve, so a route that
-    reached for it would be visibly slow or fail; this one answers straight from disk.
+    The fixture points sync_base_url at an address that does not resolve. An unreachable
+    service must mean "no events this pass", not a mirror that stops working: the desktop's
+    own journal is on disk and is still the right answer.
     """
-    signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
+    with patch("toolkit_web.app.probe_token", return_value=True):
+        signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
+
     response = signed_in.get("/api/journal/version")
+
     assert response.status_code == 200
     assert "counts" in response.json()
+
+
+def test_the_desktops_own_poll_drains_the_plugins_queue(signed_in: TestClient) -> None:
+    """The data flow the whole product rests on: plugin -> sync service -> website -> desktop.
+
+    Every route the desktop calls used to read straight off disk, so somebody using only the
+    desktop window never ran an import and the plugin's events piled up in the sync service
+    until they happened to open the website in a browser. A pull cannot rescue it either -- a
+    pull only follows a version that moved, and with nothing importing, the version never
+    moves. So the version poll is the thing that has to drain the queue.
+    """
+    with patch("toolkit_web.app.probe_token", return_value=True):
+        signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
+
+    with patch("toolkit_web.importing.RuneLiteSyncImporter") as importer:
+        signed_in.get("/api/journal/version")
+
+    importer.return_value.import_pending.assert_called_once()
 
 
 # -- pull and push -------------------------------------------------------------------------

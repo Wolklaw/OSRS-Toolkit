@@ -37,10 +37,14 @@ def journal_for(settings: Settings, account: Account) -> JournalRepository:
 def stored_journal(settings: Settings, account: Account) -> JournalRepository:
     """This account's journal exactly as it is on disk, with no sync import first.
 
-    ``journal_for`` calls the sync service before handing the journal back, which is right for
-    a page render and wrong for anything on a timer: the desktop polls for a version number
-    every minute, and making that reach out to another service -- on the same small machine
-    hosting this one -- would turn the cheapest question here into the most expensive.
+    For the routes that are already downstream of an import, not for avoiding one: ``pull``
+    only ever follows a ``version`` that moved, and ``version`` imports; ``push`` is the
+    desktop handing rows up, which has no reason to fetch first.
+
+    It covered ``version`` too until 2026-08-30, to keep the desktop's once-a-minute poll
+    cheap. That left every route the desktop calls importing nothing, so a desktop-only
+    user's events accumulated in the sync service indefinitely -- see ``journal_version``.
+    Don't put ``version`` back on this without giving the queue another way to drain.
     """
     return JournalRepository(settings.journal_path(account.discord_user_id))
 

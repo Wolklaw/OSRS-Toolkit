@@ -1649,11 +1649,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def journal_version(account: Account = CurrentAccount) -> dict:
         """Has anything changed? Two indexed scalars per table and nothing serialized.
 
-        The desktop polls this on a timer and pulls only when the answer moves, so this route
-        is the one that has to stay cheap -- it reads the journal straight off disk rather
-        than importing from the sync service the way a page render does.
+        The desktop polls this on a timer and pulls only when the answer moves.
+
+        It imports from the sync service first, which this route deliberately did not do
+        until 2026-08-30, on the reasoning that it had to stay the cheapest question here.
+        That was wrong, and it broke the one data flow the whole product rests on: nothing
+        else the desktop calls imports either, so a person using only the desktop window
+        never ran an import at all. The plugin's events sat in the sync service until
+        somebody happened to open the website in a browser -- 270 of them over three days,
+        on the only real account, while the window sat there saying "RuneLite connected".
+        A pull cannot fix it either: a pull only follows a version that moved, and without
+        an import the version never moves.
+
+        The cost that was being protected is one loopback call to a service on this same
+        machine, once a minute per running desktop, and nothing to serialize when the queue
+        is empty. An unreachable sync service yields no events rather than raising, so this
+        still answers from the local journal when the service is down.
         """
-        return stored_journal(settings, account).sync_version()
+        return journal_for(settings, account).sync_version()
 
     @app.get("/api/journal/pull")
     def journal_pull(account: Account = CurrentAccount, since: str | None = None) -> dict:
