@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% set page_title = "Desktop app" %}
-{% set page_sub = "OSRS Toolkit for Windows: the same tools in their own window, sharing one journal with this site." %}
+{% set page_title = "Get the app" %}
+{% set page_sub = "Install RuneScope as an app on this device, or run it as a separate window on Windows." %}
 {% set main_class = "narrow" %}
 
 {% block content %}
@@ -8,10 +8,49 @@
 <div class="panel">
   <div class="panel-head">
     <div class="grow">
-      <h2>OSRS Toolkit for Windows</h2>
+      <h2>Install RuneScope</h2>
+      <p class="hint tight">Works on Windows, Mac, Linux, Android and iOS. No installer, no
+        "unknown publisher" warning, updates itself the moment this site does.</p>
+    </div>
+  </div>
+
+  <div class="install-cta" data-install-cta hidden style="margin-top:0.9rem">
+    <button type="button" class="button" data-install-button hidden
+            onclick="promptInstall()">Install RuneScope</button>
+    <p class="hint" data-install-note hidden>
+      On an iPhone or iPad: open this page in Safari, tap Share, then
+      <strong>Add to Home Screen</strong>.
+    </p>
+  </div>
+  <p class="hint" id="install-fallback-hint" style="display:none">
+    This browser doesn't offer a one-tap install. Most desktop browsers still let you add it
+    from the address bar's page menu (look for "Install" or "Add to Home screen"), or you can
+    just keep it as a regular tab — everything here works the same either way.
+  </p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>What "installed" gets you</h2>
+    <p class="hint tight">Its own window and taskbar/dock icon, no browser chrome around it,
+      and it opens straight to your dashboard.</p>
+  </div>
+  <div class="panel">
+    <h2>Do I need to install it?</h2>
+    <p class="hint tight">No. Everything on this site works in a plain browser tab, on any
+      device, with nothing installed. Installing just makes it feel like its own app.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Prefer a separate window on Windows?</h2>
       <p class="hint tight">
-        {% if release %}Version {{ release.version }}{% if release.published_on %} · released {{ release.published_on }}{% endif %}
-        {% else %}Windows 10 and 11, 64-bit.{% endif %}
+        {% if release %}OSRS Toolkit, version {{ release.version }}{% if release.published_on %} · released {{ release.published_on }}{% endif %}
+        {% else %}OSRS Toolkit for Windows 10 and 11, 64-bit.{% endif %}
+        Shares one journal with this site, and does the same maths -- the two run the same
+        underlying code.
       </p>
     </div>
     {% if release %}<span class="badge accent">Free</span>{% endif %}
@@ -19,13 +58,13 @@
 
   <div class="row" style="margin-top:0.9rem">
     {% if release and release.installer %}
-    <a class="button" href="{{ release.installer.url }}">Download installer{% if release.installer.size_mb %} · {{ release.installer.size_mb }} MB{% endif %}</a>
+    <a class="button secondary" href="{{ release.installer.url }}">Download installer{% if release.installer.size_mb %} · {{ release.installer.size_mb }} MB{% endif %}</a>
     {% endif %}
     {% if release and release.portable %}
     <a class="button secondary" href="{{ release.portable.url }}">Portable zip{% if release.portable.size_mb %} · {{ release.portable.size_mb }} MB{% endif %}</a>
     {% endif %}
     {% if not release or not release.installer %}
-    <a class="button" href="{{ releases_url }}" target="_blank" rel="noopener">Downloads on GitHub</a>
+    <a class="button secondary" href="{{ releases_url }}" target="_blank" rel="noopener">Downloads on GitHub</a>
     {% endif %}
   </div>
 
@@ -34,27 +73,14 @@
     <a href="{{ releases_url }}" target="_blank" rel="noopener">All versions and release notes</a>.
   </p>
   <p class="hint">Windows will show a "don't run this" prompt, since it hasn't seen this app
-    before. Just choose More info, then Run anyway. The build isn't signed yet.</p>
-</div>
-
-<div class="grid-2">
-  <div class="panel">
-    <h2>Do I need it?</h2>
-    <p class="hint tight">No. Everything on this site works in the browser, on any device, with
-      nothing installed. The desktop app is for people who'd rather have a window sitting
-      beside the game than a browser tab.</p>
-  </div>
-  <div class="panel">
-    <h2>One journal, both places</h2>
-    <p class="hint tight">Paste a desktop token from your <a href="/profile">profile</a> and the
-      two stay level with each other: a trade recorded in either one shows up in the other
-      within a minute. <a href="/help">How to connect it</a>.</p>
-  </div>
+    before. Just choose More info, then Run anyway. The build isn't signed yet -- new
+    companion features land here first, so most people are better served by installing the
+    site above instead.</p>
 </div>
 
 <div class="panel">
   <div class="prose">
-    <h2 style="margin-top:0">Set it up</h2>
+    <h2 style="margin-top:0">Set up the Windows app</h2>
     <ol class="steps">
       <li><strong>Install it</strong> and open it. It works fine on its own from here, with a
         local journal on your PC and nothing connected yet.</li>
@@ -75,17 +101,33 @@
 
 <div class="panel">
   <div class="prose">
-    <h2 style="margin-top:0">What it does differently</h2>
+    <h2 style="margin-top:0">What the Windows app does differently</h2>
     <ul>
-      <li>Runs in its own window, so it sits beside the game instead of behind a browser tab.</li>
+      <li>Runs in its own window even when this site is installed, so it sits beside the game
+        instead of behind a browser tab.</li>
       <li>Keeps its journal in a file on your PC, mirrored here while it's connected.</li>
-      <li>Works offline with whatever prices it last fetched.</li>
-      <li>Runs the same calculations as this site, since the two share the code that does the
-        maths.</li>
+      <li>Works fully offline with whatever prices it last fetched, where installing this site
+        currently only caches its own shell.</li>
     </ul>
     <p>Open source, GPLv3:
       <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">github.com/Wolklaw/OSRS-Toolkit</a>.</p>
   </div>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // The shared install-cta script only ever shows a real button or the iOS note -- neither
+    // fires for a desktop browser with no beforeinstallprompt support (Firefox, Safari) and
+    // no standalone-install API, and that's exactly when this page still owes an answer.
+    setTimeout(() => {
+      const cta = document.querySelector('[data-install-cta]');
+      if (cta && cta.hidden) {
+        document.getElementById('install-fallback-hint').style.display = 'block';
+      }
+    }, 400);
+  });
+</script>
 {% endblock %}

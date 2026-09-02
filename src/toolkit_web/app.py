@@ -332,6 +332,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers={"Cache-Control": "no-cache"},
         )
 
+    @app.get("/offline", response_class=HTMLResponse)
+    def offline_page(request: Request) -> HTMLResponse:
+        """What the service worker shows for a navigation the network couldn't answer.
+
+        Cached once, at install, and never carries account data -- there is no session to
+        read when this is what's rendering, and every signed-in page is already marked
+        no-store, so nothing about this one page could safely be personalised anyway.
+        """
+        return templates.TemplateResponse(
+            request,
+            "offline.html",
+            {"account": None, "synced_characters": [], "active_character": None},
+        )
+
     @app.middleware("http")
     async def no_store_when_signed_in(request: Request, call_next):
         """Mark every response carrying account data as uncacheable.
@@ -495,6 +509,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else repository.get_latest_loadout_snapshot()
         )
         net_worth_composition = _net_worth_composition(snapshot, total_invested)
+        session_summary = repository.session_summary(live_hash) if live_hash else None
         return templates.TemplateResponse(
             request,
             "dashboard.html",
@@ -511,6 +526,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
                 "net_worth_chart": net_worth_chart,
                 "net_worth_composition": net_worth_composition,
+                "session_summary": serialize(session_summary) if session_summary else None,
                 "live_character_selected": live_hash is not None,
                 "plugin_state": plugin_activity(settings, account),
                 "desktop_state": desktop_state,
@@ -1273,6 +1289,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "bank_rows": bank_rows,
                 "bank_total_value": bank_total_value,
                 "bank_item_count": len(snapshot.bank) if snapshot is not None else 0,
+                **switcher,
+            },
+        )
+
+    @app.get("/session", response_class=HTMLResponse)
+    def session_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        # A session is one character's activity -- mixing two characters' events into one
+        # timeline would misdate both. With nothing chosen, only fall back on its own when
+        # there is exactly one character to fall back to; otherwise the switcher in the header
+        # is how the page asks which one, same as the dashboard's live GE panel.
+        synced = switcher["synced_characters"]
+        live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        repository = journal_for(settings, account)
+        summary = repository.session_summary(live_hash) if live_hash else None
+        return templates.TemplateResponse(
+            request,
+            "session.html",
+            {
+                "account": account,
+                "character_selected": live_hash is not None,
+                "summary": serialize(summary) if summary is not None else None,
                 **switcher,
             },
         )

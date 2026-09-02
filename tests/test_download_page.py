@@ -101,3 +101,10 @@ def test_a_release_with_no_assets_still_parses():
     assert release.version == "1.0.0"
     assert release.installer is None
     assert release.portable is None
+
+
+def test_installing_this_site_is_offered_before_the_windows_installer(client: TestClient):
+    with patch("toolkit_web.releases.fetch_latest", return_value=LATEST):
+        page = client.get("/download").text
+
+    assert page.index("data-install-cta") < page.index(LATEST.installer.url)

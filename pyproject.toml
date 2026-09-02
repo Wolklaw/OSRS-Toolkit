@@ -19,7 +19,7 @@ requires-python = ">=3.12"
 # Working on both repos at once? Install the sibling editable afterwards and it takes precedence:
 #   .venv/bin/pip install -e "../OSRS Toolkit"
 dependencies = [
-    "osrs-toolkit @ git+https://github.com/Wolklaw/OSRS-Toolkit@98945f7588f4c3250835e9d9bcb0c264d916f7ab",
+    "osrs-toolkit @ git+https://github.com/Wolklaw/OSRS-Toolkit@18f5796886fe6f43446893f7d43a233d930507f2",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "itsdangerous>=2.2",

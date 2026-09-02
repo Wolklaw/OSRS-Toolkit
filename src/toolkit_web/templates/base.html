@@ -186,6 +186,11 @@
       font-size: 0.76rem; color: var(--muted);
     }
     .sidebar-foot a { color: var(--muted); }
+    .install-cta { margin-bottom: 0.7rem; }
+    .install-cta .button { width: 100%; }
+    .install-cta p { margin: 0.4rem 0; }
+    .link-quiet { color: var(--muted); font-size: 0.78rem; background: none; border: none; padding: 0; cursor: pointer; }
+    .link-quiet:hover { color: var(--text); }
 
     .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .topbar {
@@ -547,6 +552,7 @@
 {%- elif name == "loot" -%}<path d="M6 9l6-6 6 6"/><path d="M6 9l6 12 6-12"/><path d="M6 9h12"/>
 {%- elif name == "death" -%}<path d="M7 21V11a5 5 0 0 1 10 0v10"/><path d="M7 21h10"/><path d="M10 21v-3"/><path d="M14 21v-3"/>
 {%- elif name == "loadout" -%}<path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M6 8h12l-1 12H7z"/><path d="M9 12h6"/>
+{%- elif name == "session" -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
 {%- elif name == "goal" -%}<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>
 {%- elif name == "profile" -%}<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>
 {%- elif name == "download" -%}<path d="M12 3v11"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4 20h16"/>
@@ -576,6 +582,7 @@
     ("/performance", "Performance", "performance"),
   ]),
   ("Companion", [
+    ("/session", "This Session", "session"),
     ("/loot-log", "Loot Log", "loot"),
     ("/death-log", "Death Log", "death"),
     ("/loadout", "Skills & Bank", "loadout"),
@@ -612,6 +619,14 @@
       {% endfor %}
     </nav>
     <div class="sidebar-foot">
+      <div class="install-cta" data-install-cta hidden>
+        <button type="button" class="button ghost small" data-install-button hidden
+                onclick="promptInstall()">Install RuneScope</button>
+        <p class="hint tight" data-install-note hidden>
+          Tap Share, then "Add to Home Screen" to install this as an app.
+        </p>
+        <button type="button" class="link-quiet" onclick="dismissInstallPrompt()">Not now</button>
+      </div>
       Unofficial fan project.<br><a href="/about">Not affiliated with Jagex.</a>
     </div>
   </aside>
@@ -841,6 +856,61 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
   }
+
+  // A browser that supports installing this as an app fires beforeinstallprompt once, and
+  // only if the manifest/worker checks already passed -- so its absence (Firefox, or Chrome
+  // before the criteria are met) is what "hidden" defaults to below, not a bug to work around.
+  // iOS Safari never fires it at all and has no programmatic install API, so it gets static
+  // instructions instead of a button that would silently do nothing when tapped.
+  (function () {
+    const DISMISS_KEY = 'installPromptDismissed';
+    let deferredPrompt = null;
+
+    function isStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    }
+    function isIOS() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    }
+    function dismissed() {
+      try { return localStorage.getItem(DISMISS_KEY) === '1'; } catch (e) { return false; }
+    }
+
+    function render() {
+      const targets = document.querySelectorAll('[data-install-cta]');
+      const show = !isStandalone() && !dismissed() && (deferredPrompt || isIOS());
+      targets.forEach((el) => {
+        el.hidden = !show;
+        if (!show) { return; }
+        const button = el.querySelector('[data-install-button]');
+        const note = el.querySelector('[data-install-note]');
+        if (button) { button.hidden = !deferredPrompt; }
+        if (note) { note.hidden = !!deferredPrompt; }
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      deferredPrompt = event;
+      render();
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      render();
+    });
+    window.promptInstall = async function () {
+      if (!deferredPrompt) { return; }
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      render();
+    };
+    window.dismissInstallPrompt = function () {
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) { /* private browsing, etc. */ }
+      render();
+    };
+    document.addEventListener('DOMContentLoaded', render);
+  })();
 </script>
 {% block scripts %}{% endblock %}
 </body>

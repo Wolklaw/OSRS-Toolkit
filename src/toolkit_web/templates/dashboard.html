@@ -248,6 +248,24 @@
   {% endif %}
 </div>
 
+{% if session_summary %}
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Last session <span class="badge info" style="font-size:0.65rem; vertical-align:middle">Beta</span></h2>
+      {% set hours = session_summary.duration_minutes // 60 %}
+      {% set minutes = session_summary.duration_minutes % 60 %}
+      <p class="hint tight">
+        {{ (hours ~ "h " if hours else "") ~ minutes ~ "m" }} &middot;
+        {{ "{:,}".format(session_summary.loot_value) }} gp looted &middot;
+        {{ session_summary.death_count }} death{{ '' if session_summary.death_count == 1 else 's' }}
+      </p>
+    </div>
+    <a class="button ghost small" href="/session">Full breakdown</a>
+  </div>
+</div>
+{% endif %}
+
 {% if net_worth_composition %}
 <div class="panel">
   <h2>Net worth composition</h2>
