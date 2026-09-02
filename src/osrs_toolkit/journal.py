@@ -6,7 +6,7 @@ import shutil
 import sqlite3
 import sys
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -345,10 +345,12 @@ class SkillsPoint:
         return sum(self.skills.values())
 
 
-# The longest gap between two companion events that still counts as one session. Tunable --
-# nothing else depends on this exact number, it's just a guess at how long someone can step
-# away without it reading as a new trip out.
-SESSION_GAP_MINUTES = 20
+# The longest gap between two companion touchpoints that still counts as one session. Tunable
+# -- nothing else depends on this exact number. Wider than a pure combat guess would need,
+# since a bank-only touchpoint (a loadout snapshot, see _changed_snapshot_moments) is the only
+# signal a skilling session gets between its first bank visit and its last, and those are
+# naturally further apart than two kills.
+SESSION_GAP_MINUTES = 30
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,9 +366,12 @@ class LootByNpc:
 class SessionSummary:
     """The player's most recent unbroken run of companion activity.
 
-    "Session" is inferred, not reported by the plugin: the most recent stretch of loot,
-    deaths and player trades with no gap between consecutive events wider than
-    ``SESSION_GAP_MINUTES``. Grand Exchange flips are deliberately left out -- a fill only
+    "Session" is inferred, not reported by the plugin: the most recent stretch of touchpoints
+    with no gap between consecutive ones wider than ``SESSION_GAP_MINUTES``. A touchpoint is
+    either a moment in its own right -- loot, a death, a player trade -- or, for pure skilling,
+    a pair of bank-visit snapshots that read differently from each other (see
+    ``_changed_snapshot_moments``); a snapshot that matches the one before it says nothing
+    happened and isn't one. Grand Exchange flips are deliberately left out -- a fill only
     carries its position's timestamp, not its own, so folding flips in would either ignore
     most of a session's trading or misdate all of it to whenever the position closed.
     """
@@ -455,6 +460,28 @@ def _as_moment(stamp: object) -> datetime:
     except ValueError:
         return datetime.min.replace(tzinfo=UTC)
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+
+
+def _changed_snapshot_moments[T](
+    history: list[T], differs: Callable[[T, T], bool]
+) -> list[datetime]:
+    """Timestamps worth treating as session touchpoints from a history where consecutive
+    readings sometimes repeat and sometimes don't.
+
+    ``history`` sorts ascending by ``captured_at``, same as every ``list_*_history`` method
+    returns it. Only a pair that actually differs contributes anything, and it contributes
+    *both* its moments -- the earlier one is what a caller diffs "since" against, the later
+    one is when that became visible, and a caller holding only the later moment has no earlier
+    anchor to diff against at all.
+    """
+    moments: list[datetime] = []
+    previous: T | None = None
+    for point in history:
+        if previous is not None and differs(previous, point):
+            moments.append(_as_moment(previous.captured_at))  # type: ignore[attr-defined]
+            moments.append(_as_moment(point.captured_at))  # type: ignore[attr-defined]
+        previous = point
+    return moments
 
 
 def _now() -> str:
@@ -2471,8 +2498,28 @@ class JournalRepository:
         loot = self.list_npc_loot_events(account_hash=account_hash)
         deaths = self.list_player_death_events(account_hash=account_hash)
         trades = self.list_synced_trades(event_type="player_trade", account_hash=account_hash)
+        skills_history = self.list_skills_history(account_hash)  # ascending by captured_at
+        net_worth_history = self.list_net_worth_history(account_hash)  # ascending
 
-        moments = sorted(_as_moment(event.occurred_at) for event in (*loot, *deaths, *trades))
+        # Loot, deaths and trades are moments in their own right. A snapshot is not -- it is
+        # only evidence something happened if it reads differently than the one before it, and
+        # what marks the session is the *pair*: the earlier reading anchors where "since" means,
+        # the later one is when that became visible. Without both ends, pure skilling -- which
+        # touches a bank only now and then, never a kill or a trade -- left every session dated
+        # to whatever combat or trading last happened, sometimes days earlier.
+        skill_moments = _changed_snapshot_moments(
+            skills_history,
+            lambda before, after: before.skills != after.skills or before.xp != after.xp,
+        )
+        net_worth_moments = _changed_snapshot_moments(
+            net_worth_history, lambda before, after: before.total_value != after.total_value
+        )
+
+        moments = sorted(
+            [_as_moment(event.occurred_at) for event in (*loot, *deaths, *trades)]
+            + skill_moments
+            + net_worth_moments
+        )
         if not moments:
             return None
 
@@ -2497,6 +2544,17 @@ class JournalRepository:
             (event.account_name for event in (*session_loot, *session_deaths, *session_trades)),
             "",
         )
+        if not account_name:
+            # A purely skilling session has none of the three above to name it from -- the
+            # newest snapshot in the window is the next best thing.
+            account_name = next(
+                (
+                    point.account_name
+                    for point in reversed(skills_history)
+                    if start_instant <= _as_moment(point.captured_at) <= end_instant
+                ),
+                "",
+            )
 
         by_npc: dict[str, LootByNpc] = {}
         for event in session_loot:
@@ -2508,8 +2566,8 @@ class JournalRepository:
             )
         loot_by_npc = tuple(sorted(by_npc.values(), key=lambda entry: entry.value, reverse=True))
 
-        xp_gained, levels_gained = self._session_skill_deltas(account_hash, start_instant)
-        net_worth_change = self._session_net_worth_change(account_hash, start_instant)
+        xp_gained, levels_gained = self._session_skill_deltas(skills_history, start_instant)
+        net_worth_change = self._session_net_worth_change(net_worth_history, start_instant)
 
         return SessionSummary(
             account_hash=account_hash,
@@ -2529,10 +2587,9 @@ class JournalRepository:
         )
 
     def _session_skill_deltas(
-        self, account_hash: str, start_instant: datetime
+        self, skills_history: list[SkillsPoint], start_instant: datetime
     ) -> tuple[dict[str, int], dict[str, int]]:
-        history = self.list_skills_history(account_hash)  # ascending by captured_at
-        baseline, endpoint = self._bracket(history, start_instant)
+        baseline, endpoint = self._bracket(skills_history, start_instant)
         return (
             self._positive_deltas(baseline.xp if baseline else {}, endpoint.xp if endpoint else {}),
             self._positive_deltas(
@@ -2540,9 +2597,10 @@ class JournalRepository:
             ),
         )
 
-    def _session_net_worth_change(self, account_hash: str, start_instant: datetime) -> int | None:
-        history = self.list_net_worth_history(account_hash)  # ascending by captured_at
-        baseline, endpoint = self._bracket(history, start_instant)
+    def _session_net_worth_change(
+        self, net_worth_history: list[NetWorthPoint], start_instant: datetime
+    ) -> int | None:
+        baseline, endpoint = self._bracket(net_worth_history, start_instant)
         if baseline is None or endpoint is None:
             return None
         return endpoint.total_value - baseline.total_value

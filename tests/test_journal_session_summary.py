@@ -208,3 +208,90 @@ def test_no_snapshot_history_at_all_leaves_the_progress_fields_empty(tmp_path: P
     assert summary.xp_gained == {}
     assert summary.levels_gained == {}
     assert summary.net_worth_change is None
+
+
+def test_a_pure_skilling_session_with_no_loot_death_or_trade_is_still_a_session(
+    tmp_path: Path,
+) -> None:
+    """The bug this guards: woodcutting (or any pure skilling) produces none of loot, deaths
+    or player trades -- only bank-visit snapshots -- and used to be entirely invisible to
+    session detection, no matter how recently it happened."""
+    repository = _repository(tmp_path)
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:25:00Z", {"Woodcutting": 71}, {"Woodcutting": 845_200})
+    )
+
+    summary = repository.session_summary(ACCOUNT_HASH)
+
+    assert summary is not None
+    assert summary.started_at == "2026-08-25T18:00:00+00:00"
+    assert summary.ended_at == "2026-08-25T18:25:00+00:00"
+    assert summary.xp_gained == {"Woodcutting": 845_200 - 831_979}
+    assert summary.loot_value == 0
+    assert summary.death_count == 0
+
+
+def test_a_skilling_session_is_not_shadowed_by_an_old_combat_session(tmp_path: Path) -> None:
+    """Exactly the reported scenario: a kill from a week ago must not make today's tree run
+    invisible just because loot happened to be the only thing session detection looked at."""
+    repository = _repository(tmp_path)
+    repository.add_npc_loot_event(_loot("old", "2026-08-25T10:00:00Z", "Zulrah", 500_000))
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T10:00:05Z", {"Woodcutting": 71}, {"Woodcutting": 800_000})
+    )
+
+    repository.save_loadout_snapshot(
+        _snapshot("2026-09-02T04:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-09-02T04:20:00Z", {"Woodcutting": 71}, {"Woodcutting": 845_200})
+    )
+
+    summary = repository.session_summary(ACCOUNT_HASH)
+
+    assert summary is not None
+    assert summary.started_at == "2026-09-02T04:00:00+00:00"
+    assert summary.ended_at == "2026-09-02T04:20:00+00:00"
+    assert summary.xp_gained == {"Woodcutting": 845_200 - 831_979}
+    assert summary.loot_value == 0
+
+
+def test_two_identical_snapshots_in_a_row_are_not_a_touchpoint(tmp_path: Path) -> None:
+    """A snapshot that matches the one before it is evidence nothing happened, not evidence
+    of activity -- it must not, on its own, create or extend a session."""
+    repository = _repository(tmp_path)
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:25:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
+    )
+
+    assert repository.session_summary(ACCOUNT_HASH) is None
+
+
+def test_a_wide_skilling_gap_still_reads_as_two_separate_sessions(tmp_path: Path) -> None:
+    """Widening the threshold for skilling must not stretch so far that a session from days
+    ago reads as still going, once the newest touchpoint has actually moved on from it."""
+    repository = _repository(tmp_path)
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 800_000})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-08-25T18:25:00Z", {"Woodcutting": 71}, {"Woodcutting": 810_000})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-09-02T04:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
+    )
+    repository.save_loadout_snapshot(
+        _snapshot("2026-09-02T04:20:00Z", {"Woodcutting": 71}, {"Woodcutting": 845_200})
+    )
+
+    summary = repository.session_summary(ACCOUNT_HASH)
+
+    assert summary is not None
+    assert summary.started_at == "2026-09-02T04:00:00+00:00"
+    assert summary.xp_gained == {"Woodcutting": 845_200 - 831_979}
