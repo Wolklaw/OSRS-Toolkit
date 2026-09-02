@@ -23,9 +23,10 @@
     </p>
   </div>
   <p class="hint" id="install-fallback-hint" style="display:none">
-    This browser doesn't offer a one-tap install. Most desktop browsers still let you add it
-    from the address bar's page menu (look for "Install" or "Add to Home screen"), or you can
-    just keep it as a regular tab — everything here works the same either way.
+    This browser doesn't offer a one-tap install here -- Chrome, Edge and most
+    Chromium-based browsers do; Firefox's desktop browser doesn't offer it at all. Either
+    way, keeping this as a regular tab works exactly the same. Nothing on this site needs
+    it installed.
   </p>
 </div>
 
@@ -43,7 +44,7 @@
 </div>
 
 <div class="panel">
-  <div class="panel-head">
+  <div class="panel-head" style="align-items:flex-start">
     <div class="grow">
       <h2>Prefer a separate window on Windows?</h2>
       <p class="hint tight">
@@ -53,7 +54,7 @@
         underlying code.
       </p>
     </div>
-    {% if release %}<span class="badge accent">Free</span>{% endif %}
+    {% if release %}<span class="badge accent" style="margin-top:0.15rem">Free</span>{% endif %}
   </div>
 
   <div class="row" style="margin-top:0.9rem">
