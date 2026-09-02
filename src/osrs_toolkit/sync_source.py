@@ -9,6 +9,7 @@ import json
 import shutil
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Iterator
@@ -229,7 +230,15 @@ class HttpSyncSource:
             cached_at, cached_hash, payload = cached
             if cached_hash == account_hash and now - cached_at < STATE_CACHE_SECONDS:
                 return payload
-        fetched = self._call("GET", f"/v1/state?account_hash={_safe_hash(account_hash)}")
+        # Not _safe_hash: that coerces "" to "unknown" for a safe *filename*, which is
+        # right for LocalFileSource but wrong here -- an empty account_hash is meaningful to
+        # the sync service ("whichever character this pairing was last seen playing"), and
+        # sending the literal string "unknown" instead asked about the placeholder the plugin
+        # posts before a character resolves, whose last_seen freezes the moment a real one
+        # does. That silently read every live pairing as idle forever after login.
+        fetched = self._call(
+            "GET", f"/v1/state?account_hash={urllib.parse.quote(account_hash, safe='')}"
+        )
         payload = fetched if isinstance(fetched, dict) else None
         self._cached = (now, account_hash, payload)
         return payload

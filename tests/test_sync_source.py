@@ -63,6 +63,20 @@ def test_a_post_carries_a_json_body_and_content_type():
 # -- status_payload -----------------------------------------------------------------------
 
 
+def test_no_account_hash_asks_the_service_to_pick_rather_than_for_literally_unknown():
+    """The bug this guards: an empty account_hash means "whichever character this pairing
+    was last seen playing" to the sync service, but used to reach the URL as the literal
+    string "unknown" -- the placeholder the plugin posts before a character resolves, whose
+    freshness freezes the moment a real one does. That read every live connection as
+    permanently idle after the first few seconds of a session."""
+    with patch("urllib.request.urlopen", return_value=_response({"active": True})) as urlopen:
+        _source().status_payload()
+
+    request = urlopen.call_args[0][0]
+    assert request.full_url.endswith("account_hash=")
+    assert "unknown" not in request.full_url
+
+
 def test_status_payload_without_configuration_is_not_detected():
     assert HttpSyncSource("", "").status_payload() == (False, None, False)
     assert HttpSyncSource("https://sync.runescope.app", "").status_payload() == (
@@ -136,14 +150,18 @@ def test_offer_screen_payload_is_none_when_no_screen_is_open():
         assert _source().offer_screen_payload("abc123") is None
 
 
-def test_account_hash_is_sanitised_before_it_reaches_the_url():
+def test_account_hash_is_url_encoded_before_it_reaches_the_url():
+    """Encoded, not stripped down to hex the way a filename would be -- the server only ever
+    uses this as a parameterised SQL value, so the one thing that matters here is that it
+    can't break out of its own query parameter and be read as something else."""
     with patch("urllib.request.urlopen", return_value=_response({"offers": None})) as urlopen:
         _source().offer_state_payload("abc123; DROP TABLE token--")
 
     request = urlopen.call_args[0][0]
     assert "abc123" in request.full_url
-    assert "DROP" not in request.full_url
     assert ";" not in request.full_url
+    assert " " not in request.full_url
+    assert "&" not in request.full_url
 
 
 # -- one fetch per render ----------------------------------------------------------------
