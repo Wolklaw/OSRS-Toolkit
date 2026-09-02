@@ -4,6 +4,13 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+- The RuneLite sync loadout snapshot now carries skill experience alongside levels
+  (`xp`, additive), so a session can tell "trained but didn't level up" from "did nothing".
+  Requires the RuneLite plugin to send it; older builds keep working exactly as before.
+- A new `session_summary()` on the journal infers the player's most recent session from the
+  gaps between loot, deaths and player trades, for the website's new "This Session" page.
+  GE flips are intentionally left out -- fills don't carry their own timestamp.
+
 ## [1.3.3] - 2026-08-30
 
 ### Highlights

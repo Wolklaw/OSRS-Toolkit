@@ -643,6 +643,15 @@ def _parse_loadout_snapshot(
     skills: dict[str, int] = {}
     for name, level in skills_raw.items():
         skills[_text(name, "skill name", 32)] = _nonnegative_int(level, "skill level")
+    # Optional: a plugin build predating experience tracking sends no "xp" key at all, and
+    # that parses as "nothing to diff" rather than an error.
+    xp_raw = body.get("xp")
+    xp: dict[str, int] = {}
+    if xp_raw is not None:
+        if not isinstance(xp_raw, dict) or len(xp_raw) > MAX_SKILLS:
+            raise SyncEventError("Invalid xp")
+        for name, amount in xp_raw.items():
+            xp[_text(name, "skill name", 32)] = _nonnegative_int(amount, "skill xp")
     return LoadoutSnapshot(
         account_hash=account_hash,
         account_name=account_name,
@@ -651,6 +660,7 @@ def _parse_loadout_snapshot(
         inventory=tuple(inventory),
         bank=tuple(bank),
         skills=skills,
+        xp=xp,
     )
 
 

@@ -1,7 +1,9 @@
 # Contributing
 
-OSRS Toolkit is a Windows desktop app built with Python 3.12 and PySide6. Bug reports and
-focused pull requests are both welcome.
+OSRS Toolkit is a Windows desktop app built with Python 3.12 and PySide6, sharing its domain
+layer with [runescope.app](https://runescope.app) — the primary product now, so new companion
+features (anything beyond the existing pages here) should land there first. Bug reports and
+focused pull requests on this desktop app are both welcome.
 
 ## Setting up
 

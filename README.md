@@ -4,16 +4,22 @@
 
 ### Plan better trades. Remember what actually happened.
 
-A free Windows app that sits next to the game. It works out what to flip with the cash and
-Grand Exchange slots you actually have, keeps a journal of every trade you make, and later tells
-you which of those plans were worth following. It also handles High Alchemy, skilling profit, and
-boss gear checklists.
+The easiest way to use this is **[runescope.app](https://runescope.app)** — nothing to install,
+works on any device, installable as an app from the browser itself. It works out what to flip
+with the cash and Grand Exchange slots you actually have, keeps a journal of every trade you
+make, and later tells you which of those plans were worth following. It also handles High
+Alchemy, skilling profit, and boss gear checklists.
+
+This repository is that same toolkit's **Windows desktop build** — a separate window sharing one
+journal with the site, for anyone who'd rather have it sitting beside the game than in a browser
+tab. New companion features land on the website first; see [Get the app](https://runescope.app/download)
+for how the two compare.
 
 [![Latest release](https://img.shields.io/github/v/release/Wolklaw/OSRS-Toolkit?style=flat-square&label=latest&color=d5ad52)](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 ![Windows](https://img.shields.io/badge/platform-Windows-3572A5?style=flat-square)
 [![GPLv3](https://img.shields.io/github/license/Wolklaw/OSRS-Toolkit?style=flat-square&color=70d6a1)](LICENSE)
 
-### [Download the latest Windows release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
+### [Try it at runescope.app](https://runescope.app) &middot; [Download the Windows build](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest)
 
 **Nothing plays the game for you.**
 
@@ -48,6 +54,10 @@ launch and every five minutes after that. **Refresh market** grabs them immediat
 window locking up, and everything on screen updates together.
 
 ## Download
+
+Most people are better served by installing **[runescope.app](https://runescope.app)** straight
+from the browser — same tools, no "unknown publisher" warning, and it's where new companion
+features show up first. This section is for the separate Windows build.
 
 The [latest release](https://github.com/Wolklaw/OSRS-Toolkit/releases/latest) has two builds:
 

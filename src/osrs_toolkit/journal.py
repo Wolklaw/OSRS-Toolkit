@@ -8,7 +8,7 @@ import sys
 import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -260,6 +260,11 @@ class LoadoutSnapshot:
     inventory: tuple[LoadoutItem, ...]
     bank: tuple[LoadoutItem, ...]
     skills: dict[str, int]
+    # Same skill names as ``skills``, in experience — empty for a snapshot taken before the
+    # plugin sent it, or by a plugin build that still doesn't. Never fall back to deriving
+    # this from ``skills``: level 99 covers a 13M-xp range, so a level alone says nothing
+    # about progress within it.
+    xp: dict[str, int] = field(default_factory=dict)
 
     @property
     def owned_item_ids(self) -> frozenset[int]:
@@ -333,10 +338,57 @@ class SkillsPoint:
     account_name: str
     captured_at: str
     skills: dict[str, int]
+    xp: dict[str, int] = field(default_factory=dict)
 
     @property
     def total_level(self) -> int:
         return sum(self.skills.values())
+
+
+# The longest gap between two companion events that still counts as one session. Tunable --
+# nothing else depends on this exact number, it's just a guess at how long someone can step
+# away without it reading as a new trip out.
+SESSION_GAP_MINUTES = 20
+
+
+@dataclass(frozen=True, slots=True)
+class LootByNpc:
+    """One NPC's contribution to a session's loot, most valuable first."""
+
+    npc_name: str
+    kills: int
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class SessionSummary:
+    """The player's most recent unbroken run of companion activity.
+
+    "Session" is inferred, not reported by the plugin: the most recent stretch of loot,
+    deaths and player trades with no gap between consecutive events wider than
+    ``SESSION_GAP_MINUTES``. Grand Exchange flips are deliberately left out -- a fill only
+    carries its position's timestamp, not its own, so folding flips in would either ignore
+    most of a session's trading or misdate all of it to whenever the position closed.
+    """
+
+    account_hash: str
+    account_name: str
+    started_at: str
+    ended_at: str
+    duration_minutes: int
+    loot_value: int
+    loot_by_npc: tuple[LootByNpc, ...]
+    death_count: int
+    value_lost: int
+    trade_count: int
+    trade_net_value: int
+    # Empty wherever there's nothing to diff -- no history at all, or both endpoints landed
+    # before the plugin sent experience. A skill absent from the baseline snapshot is treated
+    # as unchanged rather than as a full gain from zero; that only happens across a snapshot
+    # format change, not a real skill starting from nothing.
+    xp_gained: dict[str, int]
+    levels_gained: dict[str, int]
+    net_worth_change: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -725,6 +777,16 @@ class JournalRepository:
                 """
             )
 
+    @staticmethod
+    def _add_missing_columns(
+        connection: sqlite3.Connection, table: str, columns: dict[str, str]
+    ) -> None:
+        """Add whichever of ``columns`` (name -> type/default clause) the table doesn't have."""
+        existing = {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
+        for column, definition in columns.items():
+            if column not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     def _migrate_sync_columns(
         self, connection: sqlite3.Connection, table: str, primary_key: str, stamp_from: str
     ) -> None:
@@ -910,6 +972,9 @@ class JournalRepository:
                 )
                 """
             )
+            self._add_missing_columns(
+                connection, "loadout_snapshots", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
+            )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS net_worth_history (
@@ -935,6 +1000,9 @@ class JournalRepository:
                     skills_json TEXT NOT NULL
                 )
                 """
+            )
+            self._add_missing_columns(
+                connection, "skills_history", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
             )
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS skills_history_captured ON skills_history(captured_at)"
@@ -2272,15 +2340,16 @@ class JournalRepository:
                 """
                 INSERT INTO loadout_snapshots (
                     account_hash, account_name, captured_at, equipment_json, inventory_json,
-                    bank_json, skills_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    bank_json, skills_json, xp_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(account_hash) DO UPDATE SET
                     account_name = excluded.account_name,
                     captured_at = excluded.captured_at,
                     equipment_json = excluded.equipment_json,
                     inventory_json = excluded.inventory_json,
                     bank_json = excluded.bank_json,
-                    skills_json = excluded.skills_json
+                    skills_json = excluded.skills_json,
+                    xp_json = excluded.xp_json
                 """,
                 (
                     snapshot.account_hash,
@@ -2290,6 +2359,7 @@ class JournalRepository:
                     dump(snapshot.inventory),
                     dump(snapshot.bank),
                     json.dumps(snapshot.skills, separators=(",", ":")),
+                    json.dumps(snapshot.xp, separators=(",", ":")),
                 ),
             )
             connection.execute(
@@ -2320,14 +2390,15 @@ class JournalRepository:
             connection.execute(
                 """
                 INSERT INTO skills_history (
-                    account_hash, account_name, captured_at, skills_json
-                ) VALUES (?, ?, ?, ?)
+                    account_hash, account_name, captured_at, skills_json, xp_json
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     snapshot.account_hash,
                     snapshot.account_name,
                     snapshot.captured_at,
                     json.dumps(snapshot.skills, separators=(",", ":")),
+                    json.dumps(snapshot.xp, separators=(",", ":")),
                 ),
             )
             connection.execute(
@@ -2389,9 +2460,127 @@ class JournalRepository:
                 account_name=str(row["account_name"]),
                 captured_at=str(row["captured_at"]),
                 skills=json.loads(str(row["skills_json"])),
+                xp={str(k): int(v) for k, v in json.loads(str(row["xp_json"])).items()},
             )
             for row in rows
         ]
+
+    def session_summary(self, account_hash: str) -> SessionSummary | None:
+        """The player's most recent session, or ``None`` if this account has no companion
+        events at all yet. See ``SessionSummary`` for what "session" means here."""
+        loot = self.list_npc_loot_events(account_hash=account_hash)
+        deaths = self.list_player_death_events(account_hash=account_hash)
+        trades = self.list_synced_trades(event_type="player_trade", account_hash=account_hash)
+
+        moments = sorted(_as_moment(event.occurred_at) for event in (*loot, *deaths, *trades))
+        if not moments:
+            return None
+
+        # Walk backward from the newest event, extending the window while each gap stays
+        # under the threshold -- this is the session, everything older is a previous one.
+        threshold = timedelta(minutes=SESSION_GAP_MINUTES)
+        end_instant = start_instant = moments[-1]
+        for moment in reversed(moments[:-1]):
+            if start_instant - moment > threshold:
+                break
+            start_instant = moment
+
+        def in_window(occurred_at: str) -> bool:
+            moment = _as_moment(occurred_at)
+            return start_instant <= moment <= end_instant
+
+        session_loot = [event for event in loot if in_window(event.occurred_at)]
+        session_deaths = [event for event in deaths if in_window(event.occurred_at)]
+        session_trades = [event for event in trades if in_window(event.occurred_at)]
+
+        account_name = next(
+            (event.account_name for event in (*session_loot, *session_deaths, *session_trades)),
+            "",
+        )
+
+        by_npc: dict[str, LootByNpc] = {}
+        for event in session_loot:
+            existing = by_npc.get(event.npc_name)
+            by_npc[event.npc_name] = LootByNpc(
+                npc_name=event.npc_name,
+                kills=(existing.kills if existing else 0) + 1,
+                value=(existing.value if existing else 0) + event.total_value,
+            )
+        loot_by_npc = tuple(sorted(by_npc.values(), key=lambda entry: entry.value, reverse=True))
+
+        xp_gained, levels_gained = self._session_skill_deltas(account_hash, start_instant)
+        net_worth_change = self._session_net_worth_change(account_hash, start_instant)
+
+        return SessionSummary(
+            account_hash=account_hash,
+            account_name=account_name,
+            started_at=start_instant.isoformat(),
+            ended_at=end_instant.isoformat(),
+            duration_minutes=max(0, round((end_instant - start_instant).total_seconds() / 60)),
+            loot_value=sum(event.total_value for event in session_loot),
+            loot_by_npc=loot_by_npc,
+            death_count=len(session_deaths),
+            value_lost=sum(event.total_value for event in session_deaths),
+            trade_count=len(session_trades),
+            trade_net_value=sum(event.estimated_difference for event in session_trades),
+            xp_gained=xp_gained,
+            levels_gained=levels_gained,
+            net_worth_change=net_worth_change,
+        )
+
+    def _session_skill_deltas(
+        self, account_hash: str, start_instant: datetime
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        history = self.list_skills_history(account_hash)  # ascending by captured_at
+        baseline, endpoint = self._bracket(history, start_instant)
+        return (
+            self._positive_deltas(baseline.xp if baseline else {}, endpoint.xp if endpoint else {}),
+            self._positive_deltas(
+                baseline.skills if baseline else {}, endpoint.skills if endpoint else {}
+            ),
+        )
+
+    def _session_net_worth_change(self, account_hash: str, start_instant: datetime) -> int | None:
+        history = self.list_net_worth_history(account_hash)  # ascending by captured_at
+        baseline, endpoint = self._bracket(history, start_instant)
+        if baseline is None or endpoint is None:
+            return None
+        return endpoint.total_value - baseline.total_value
+
+    @staticmethod
+    def _bracket[T](history: list[T], start_instant: datetime) -> tuple[T | None, T | None]:
+        """(state right before the session began, state as of now).
+
+        The endpoint is simply the newest reading there is, with no upper bound of its own —
+        this is always the *most recent* session, so nothing has happened since it that a
+        later reading could wrongly be attributed to. A snapshot commonly lands once the
+        player's done for the day and checks their bank, which is after the session's last
+        event, not before it; bounding the endpoint at the session's own end would miss
+        exactly that snapshot and read every session as showing no progress at all.
+
+        The baseline falls back to the earliest reading of all when nothing precedes the
+        session, so "since tracking began" still diffs against something.
+        """
+        if not history:
+            return None, None
+        baseline = next(
+            (
+                point
+                for point in reversed(history)
+                if _as_moment(point.captured_at) <= start_instant
+            ),
+            history[0],
+        )
+        return baseline, history[-1]
+
+    @staticmethod
+    def _positive_deltas(baseline: dict[str, int], endpoint: dict[str, int]) -> dict[str, int]:
+        result: dict[str, int] = {}
+        for skill, value in endpoint.items():
+            delta = value - baseline.get(skill, value)
+            if delta > 0:
+                result[skill] = delta
+        return result
 
     def get_loadout_snapshot(self, account_hash: str) -> LoadoutSnapshot | None:
         with self._connect() as connection:
@@ -2428,4 +2617,5 @@ class JournalRepository:
             inventory=load(str(row["inventory_json"])),
             bank=load(str(row["bank_json"])),
             skills={str(k): int(v) for k, v in json.loads(str(row["skills_json"])).items()},
+            xp={str(k): int(v) for k, v in json.loads(str(row["xp_json"])).items()},
         )
