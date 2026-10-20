@@ -24,12 +24,20 @@ from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.calculators import ALCH_POLICIES, alch_candidates, skill_results
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
+from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS, trade_needs_attention
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
-from osrs_toolkit.ranking import STRATEGIES, ge_tax, offer_targets, plan_flip_portfolio, rank_flips
+from osrs_toolkit.ranking import (
+    STRATEGIES,
+    ge_tax,
+    is_tax_exempt,
+    offer_targets,
+    plan_flip_portfolio,
+    rank_flips,
+)
 from osrs_toolkit.runelite_sync import ge_offer_status_label
 from osrs_toolkit.savings_goal import (
     SavingsProgress,
@@ -244,6 +252,29 @@ def _net_worth_composition(snapshot: object, total_invested: int) -> list[dict]:
     ]
 
 
+def _buy_limit_room(
+    repository: JournalRepository,
+    mappings: dict[int, ItemMapping],
+    account_hash: str | None,
+    now: datetime,
+) -> dict[int, int]:
+    """How much of each item's 4-hour buy limit this character still has free.
+
+    Only items actually bought inside the window appear, which is exactly the shape
+    ``rank_flips`` wants: an item nobody has touched is absent and stays unconstrained,
+    rather than needing a row saying "all of it".
+    """
+    limits = {item.item_id: item.buy_limit for item in mappings.values() if item.buy_limit}
+    recent_fills = repository.list_synced_trades(
+        event_type="ge_fill",
+        since=now - timedelta(hours=4),
+        account_hash=account_hash,
+    )
+    return {
+        status.item_id: status.remaining for status in buy_limit_status(recent_fills, limits, now)
+    }
+
+
 def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
     """Every number the desktop window's item-details dialog shows, for one item.
 
@@ -252,7 +283,7 @@ def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
     ranking code that uses the same rules, not inside a Jinja expression.
     """
     buy_price, sell_price = offer_targets(point)
-    tax = ge_tax(sell_price)
+    tax = ge_tax(sell_price, exempt=is_tax_exempt(item.item_id, item.name))
     profit = sell_price - buy_price - tax
     return {
         "buy_price": buy_price,
@@ -952,8 +983,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return templates.TemplateResponse(
                 request, "flips.html", {**context, "market_unavailable": True}
             )
+        # What the Grand Exchange will actually let this character buy right now. Without
+        # it the planner happily sizes a position the game would refuse to fill, because
+        # earlier buying in the same 4-hour window already used the limit up.
+        limit_room = _buy_limit_room(repository, mappings, filter_hash, datetime.now(UTC))
         candidates = rank_flips(
-            mappings, points, cash_stack=cash_stack, strategy=strategy, slot_count=slots
+            mappings,
+            points,
+            cash_stack=cash_stack,
+            strategy=strategy,
+            slot_count=slots,
+            remaining_limits=limit_room,
         )
         portfolio = plan_flip_portfolio(candidates, cash_stack, slot_count=slots)
         return templates.TemplateResponse(
@@ -962,6 +1002,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 **context,
                 "market_unavailable": False,
+                "limit_room": limit_room,
+                # Which of these the Grand Exchange never taxes, as opposed to the ones
+                # whose 2% merely rounds down to nothing at today's price — a bond is
+                # untaxed at any price, a 35gp pile of bones only at this one.
+                "exempt_ids": {
+                    candidate.item_id
+                    for candidate in candidates
+                    if is_tax_exempt(candidate.item_id, candidate.name)
+                },
                 "portfolio": [serialize(candidate) for candidate in portfolio],
                 # Capped for the page rather than for the ranking itself — the portfolio above
                 # already picked the offers actually worth using this cash stack on, and a
@@ -997,7 +1046,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # right now, but the watch itself is untouched and reappears once it prices.
                 continue
             buy_price, sell_price = offer_targets(point)
-            profit = sell_price - buy_price - ge_tax(sell_price)
+            profit = (
+                sell_price
+                - buy_price
+                - ge_tax(sell_price, exempt=is_tax_exempt(item_id, item.name))
+            )
             rows.append(
                 {
                     "item_id": item_id,

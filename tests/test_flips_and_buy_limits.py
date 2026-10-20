@@ -325,3 +325,36 @@ def test_the_flips_page_marks_an_item_already_watched(signed_in: TestClient):
         response = signed_in.get("/flips")
 
     assert "Watching" in response.text
+
+
+# -- the planner respects the limit the Grand Exchange will actually enforce ------------------
+
+
+def test_a_flip_is_dropped_once_its_buy_limit_is_spent(signed_in: TestClient, settings: Settings):
+    """Buying the whole 70-whip limit inside the window leaves nothing to suggest.
+
+    Before the planner was told about the 4-hour window it kept recommending the item at
+    full size, which the game would simply refuse to fill.
+    """
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.add_synced_trade(_ge_fill(quantity=70))
+
+    with _patched_market():
+        response = signed_in.get("/flips")
+
+    assert response.status_code == 200
+    assert "Abyssal whip" not in response.text
+    assert "Nothing clears this strategy's bar" in response.text
+
+
+def test_a_partly_spent_buy_limit_still_leaves_the_flip_on_the_table(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.add_synced_trade(_ge_fill(quantity=5))
+
+    with _patched_market():
+        response = signed_in.get("/flips")
+
+    assert response.status_code == 200
+    assert "Abyssal whip" in response.text
