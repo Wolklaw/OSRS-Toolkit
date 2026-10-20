@@ -30,7 +30,7 @@ and none of which need PySide6 installed to run headless on a server.
 | `/pvm` `/savings-goal` | Boss checklists against your synced loadout; one savings target. |
 | `/item/{id}` | One item's full market breakdown and price history. |
 | `/profile` | Account, pairing token, desktop access tokens, characters, data export, theme. |
-| `/plugin` | Installing the RuneLite plugin, including building it yourself while the Plugin Hub submission is in review. **Renders signed out.** |
+| `/plugin` | Installing the RuneLite plugin from the Plugin Hub, and a link to its source. **Renders signed out.** |
 | `/download` | The Windows desktop app: current version and both builds, read from the GitHub release, plus how to connect it. **Renders signed out** — whether to use the site or the app is a question asked before signing up. |
 | `/about` `/help` | What this is and what it holds; setup, FAQ, and how to get in touch. **Both render signed out** — they answer the questions asked before signing in. |
 
