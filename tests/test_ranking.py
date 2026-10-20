@@ -1,5 +1,11 @@
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
-from osrs_toolkit.ranking import ge_tax, offer_targets, plan_flip_portfolio, rank_flips
+from osrs_toolkit.ranking import (
+    ge_tax,
+    is_tax_exempt,
+    offer_targets,
+    plan_flip_portfolio,
+    rank_flips,
+)
 
 
 def test_ge_tax_uses_current_rate_floor_and_cap() -> None:
@@ -248,3 +254,79 @@ def test_portfolio_leaves_cash_unallocated_when_all_safe_caps_are_reached() -> N
 
     assert by_item == {1: 2, 2: 3}
     assert sum(position.capital_required for position in portfolio) == 800
+
+
+def test_tax_exempt_items_are_recognised_by_id_or_name() -> None:
+    assert is_tax_exempt(13190) is True
+    assert is_tax_exempt(item_name="Old school bond") is True
+    # Journal rows are filed under whatever case the user typed.
+    assert is_tax_exempt(item_name="  old school BOND  ") is True
+    assert is_tax_exempt(1434, "Dragon mace") is False
+    assert is_tax_exempt() is False
+
+
+def test_ge_tax_skips_exempt_items_at_any_price() -> None:
+    assert ge_tax(10_300_000) == 206_000
+    assert ge_tax(10_300_000, exempt=True) == 0
+
+
+def _bond_point(now: int, item_id: int) -> MarketPoint:
+    return MarketPoint(
+        item_id,
+        10_300_000,
+        10_000_000,
+        now,
+        now,
+        80,
+        1_000,
+        average_high_5m=10_300_000,
+        average_low_5m=10_000_000,
+        average_high_1h=10_300_000,
+        average_low_1h=10_000_000,
+        high_volume_5m=40,
+        low_volume_5m=40,
+        high_volume_1h=500,
+        low_volume_1h=500,
+    )
+
+
+def test_ranker_charges_no_tax_on_an_exempt_item() -> None:
+    now = 2_000_000
+    bond = {13190: ItemMapping(13190, "Old school bond", True, 100, None)}
+    taxed = {1434: ItemMapping(1434, "Dragon mace", True, 100, None)}
+
+    exempt = rank_flips(bond, [_bond_point(now, 13190)], cash_stack=50_000_000, now=now)
+    normal = rank_flips(taxed, [_bond_point(now, 1434)], cash_stack=50_000_000, now=now)
+
+    assert exempt[0].tax == 0
+    assert exempt[0].profit_each == 300_000
+    # The same spread on a taxed item keeps 2% of the sale price back.
+    assert normal[0].tax == 206_000
+    assert normal[0].profit_each == 94_000
+
+
+def test_ranker_caps_quantity_at_the_buy_limit_room_left() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Test item", True, 100, None)}
+    point = MarketPoint(1, 1_200, 1_000, now - 60, now - 90, 50, 600, 1_090, 1_080)
+
+    unconstrained = rank_flips(mappings, [point], cash_stack=100_000, now=now)
+    constrained = rank_flips(
+        mappings, [point], cash_stack=100_000, remaining_limits={1: 10}, now=now
+    )
+
+    assert unconstrained[0].suggested_quantity == 25
+    assert constrained[0].suggested_quantity == 10
+    assert constrained[0].capital_required == 10_000
+    assert constrained[0].potential_profit == 1_760
+
+
+def test_ranker_drops_an_item_whose_buy_limit_is_already_spent() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Test item", True, 100, None)}
+    point = MarketPoint(1, 1_200, 1_000, now - 60, now - 90, 50, 600, 1_090, 1_080)
+
+    assert rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={1: 0}, now=now) == []
+    # An item nobody has bought lately simply isn't in the mapping, and stays unconstrained.
+    untouched = rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={}, now=now)
+    assert untouched[0].suggested_quantity == 25

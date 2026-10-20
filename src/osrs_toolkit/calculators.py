@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 
 from osrs_toolkit.models import ItemMapping, MarketPoint
-from osrs_toolkit.ranking import ge_tax
+from osrs_toolkit.ranking import ge_tax, is_tax_exempt
 
 
 @dataclass(frozen=True, slots=True)
@@ -911,8 +911,14 @@ def skill_results(
         gross_output = sum(
             conservative_sell_price(point) * item.quantity for item, point in resolved_outputs
         )
+        # Cooking's outputs are most of the tax-exempt food list, so charging them tax
+        # would rank every cooking method below where the game actually puts it.
         output_tax = sum(
-            ge_tax(conservative_sell_price(point)) * item.quantity
+            ge_tax(
+                conservative_sell_price(point),
+                exempt=is_tax_exempt(item.item_id, item.name),
+            )
+            * item.quantity
             for item, point in resolved_outputs
         )
         net_output = gross_output - output_tax

@@ -167,3 +167,26 @@ def test_skilling_recipe_supports_multiple_inputs_and_output_tax() -> None:
     assert recoil.output_value == 628
     assert recoil.profit_action == 128
     assert recoil.eligible is True
+
+
+def test_skilling_exempts_food_the_grand_exchange_does_not_tax() -> None:
+    """Lobster is on the exemption list; shark is not."""
+    rows = skill_results(
+        {},
+        [
+            _point(377, 180, 170),
+            _point(379, 210, 200),
+            _point(383, 900, 890),
+            _point(385, 1_010, 1_000),
+        ],
+        {"Cooking": 99},
+        now=NOW,
+    )
+    lobster = next(row for row in rows if row.name == "Cook lobster")
+    shark = next(row for row in rows if row.name == "Cook shark")
+
+    assert lobster.output_value == 200
+    assert lobster.profit_action == 20
+    # 2% of the 1,000gp sale, rounded down, still comes off a shark.
+    assert shark.output_value == 980
+    assert shark.profit_action == 80

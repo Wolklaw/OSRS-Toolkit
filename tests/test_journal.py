@@ -1566,3 +1566,30 @@ def test_a_sell_offer_for_an_untracked_item_still_matches_nothing(tmp_path: Path
         )
         is None
     )
+
+
+def test_exempt_items_keep_their_whole_margin_in_the_journal(tmp_path: Path) -> None:
+    """A bond pays no Grand Exchange tax, so neither side of the journal charges it."""
+    repository = JournalRepository(tmp_path / "journal.db")
+    repository.add("Old school bond", 2, 10_000_000, 10_300_000)
+    position_id = repository.track(13190, "Old school bond", 2, 10_000_000, 10_300_000)
+    repository.update_tracked(
+        position_id, "Completed", None, None, [(2, 10_300_000)], [(2, 10_000_000)]
+    )
+
+    manual = repository.list_all()[0]
+    tracked = repository.list_tracked()[0]
+
+    assert manual.tax_each == 0
+    assert manual.profit == 600_000
+    assert tracked.tax_exempt is True
+    assert tracked.realized_profit == 600_000
+
+
+def test_a_taxed_item_still_pays_its_two_percent(tmp_path: Path) -> None:
+    repository = JournalRepository(tmp_path / "journal.db")
+    repository.add("Dragon mace", 2, 10_000_000, 10_300_000)
+
+    manual = repository.list_all()[0]
+    assert manual.tax_each == ge_tax(10_300_000) == 206_000
+    assert manual.profit == 188_000

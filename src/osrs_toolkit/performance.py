@@ -276,7 +276,13 @@ def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list
         realized = trade.realized_profit
         if realized is not None and trade.sold_quantity > 0:
             # What the original targets promised, for the quantity that actually sold.
-            per_unit = trade.target_sell - trade.target_buy - ge_tax(trade.target_sell)
+            # Taxed on the same terms as the realized side, or an exempt item's plan would
+            # be graded against a tax it never paid.
+            per_unit = (
+                trade.target_sell
+                - trade.target_buy
+                - ge_tax(trade.target_sell, exempt=trade.tax_exempt)
+            )
             planned_profit += per_unit * trade.sold_quantity
             actual_profit += realized
             profit_positions += 1

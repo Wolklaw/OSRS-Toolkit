@@ -2,12 +2,92 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Mapping
 from dataclasses import replace
 
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 
 GE_TAX_RATE = 0.02
 GE_TAX_CAP = 5_000_000
+
+# Items the Grand Exchange charges no tax on. Jagex exempted the starter tools and bonds
+# when the tax launched in December 2021, then added low-level food, teleport tablets and
+# low-tier ammunition when the rate rose to 2% in May 2025.
+#
+# Both the id and the name are stored because the two sides of the app know different
+# things: the ranker works from market snapshots keyed by item id, while a journal row
+# typed in by hand only ever has a name. One table feeds both lookups so they cannot drift
+# apart. Ids were resolved against the live wiki item mapping rather than written from
+# memory — exempting the wrong item invents profit that the game will not pay.
+#
+# Poisoned and part-dose variants are deliberately absent: Jagex named the base items, and
+# under-exempting only costs 2% of accuracy on an unusual flip, while over-exempting
+# fabricates a margin.
+TAX_EXEMPT_ITEMS: tuple[tuple[int, str], ...] = (
+    (13190, "Old school bond"),
+    # Low-level food.
+    (365, "Bass"),
+    (2309, "Bread"),
+    (1891, "Cake"),
+    (2140, "Cooked chicken"),
+    (2142, "Cooked meat"),
+    (347, "Herring"),
+    (379, "Lobster"),
+    (355, "Mackerel"),
+    (2327, "Meat pie"),
+    (351, "Pike"),
+    (329, "Salmon"),
+    (315, "Shrimps"),
+    (361, "Tuna"),
+    # Low-tier ammunition and runes.
+    (882, "Bronze arrow"),
+    (806, "Bronze dart"),
+    (884, "Iron arrow"),
+    (807, "Iron dart"),
+    (558, "Mind rune"),
+    (886, "Steel arrow"),
+    (808, "Steel dart"),
+    # Teleports.
+    (8011, "Ardougne teleport (tablet)"),
+    (8010, "Camelot teleport (tablet)"),
+    (28824, "Civitas illa fortis teleport"),
+    (8009, "Falador teleport (tablet)"),
+    (3853, "Games necklace(8)"),
+    (28790, "Kourend castle teleport (tablet)"),
+    (8008, "Lumbridge teleport (tablet)"),
+    (2552, "Ring of dueling(8)"),
+    (8013, "Teleport to house (tablet)"),
+    (8007, "Varrock teleport (tablet)"),
+    # Starter tools.
+    (1755, "Chisel"),
+    (5325, "Gardening trowel"),
+    (1785, "Glassblowing pipe"),
+    (2347, "Hammer"),
+    (1733, "Needle"),
+    (233, "Pestle and mortar"),
+    (5341, "Rake"),
+    (8794, "Saw"),
+    (5329, "Secateurs"),
+    (5343, "Seed dibber"),
+    (1735, "Shears"),
+    (952, "Spade"),
+    (5331, "Watering can"),
+)
+
+TAX_EXEMPT_ITEM_IDS = frozenset(item_id for item_id, _name in TAX_EXEMPT_ITEMS)
+_TAX_EXEMPT_ITEM_NAMES = frozenset(name.casefold() for _item_id, name in TAX_EXEMPT_ITEMS)
+
+
+def is_tax_exempt(item_id: int | None = None, item_name: str | None = None) -> bool:
+    """Whether the Grand Exchange takes no cut when this item sells.
+
+    Either key identifies an item on its own, so a caller passes whichever it has. The id
+    is authoritative; the name only has to carry rows that never recorded one.
+    """
+    if item_id is not None and item_id in TAX_EXEMPT_ITEM_IDS:
+        return True
+    return item_name is not None and item_name.strip().casefold() in _TAX_EXEMPT_ITEM_NAMES
+
 
 STRATEGIES = {
     "Quick (up to 1h)": {
@@ -57,8 +137,15 @@ def confidence_standing(confidence: int, floor: int) -> float:
     return max(0.0, min(1.0, (confidence - floor) / span))
 
 
-def ge_tax(sell_price: int) -> int:
-    """Return per-item GE tax: 2%, rounded down, capped at 5m."""
+def ge_tax(sell_price: int, *, exempt: bool = False) -> int:
+    """Return per-item GE tax: 2%, rounded down, capped at 5m.
+
+    Rounding down is what spares cheap items: below 50gp the 2% is under a coin, so the
+    game charges nothing without needing a separate rule. ``exempt`` covers the items it
+    never taxes at any price — see ``is_tax_exempt``.
+    """
+    if exempt:
+        return 0
     return min(math.floor(max(0, sell_price) * GE_TAX_RATE), GE_TAX_CAP)
 
 
@@ -80,9 +167,17 @@ def rank_flips(
     max_age_seconds: int = 1_800,
     strategy: str = "Balanced (1–4h)",
     slot_count: int = 8,
+    remaining_limits: Mapping[int, int] | None = None,
     now: int | None = None,
 ) -> list[FlipCandidate]:
-    """Rank actionable flips without pretending that an observed margin is guaranteed."""
+    """Rank actionable flips without pretending that an observed margin is guaranteed.
+
+    ``remaining_limits`` is how much of each item's 4-hour buy limit is still free, from
+    ``buy_limits.buy_limit_status``. An item listed with no room left drops out entirely
+    rather than being suggested at a quantity the Grand Exchange would refuse. Items absent
+    from the mapping are unconstrained, so a caller that knows nothing about recent buying
+    passes nothing and gets the full limit as before.
+    """
     settings = STRATEGIES.get(strategy, STRATEGIES["Balanced (1–4h)"])
     required_roi = float(settings["min_roi"] if min_roi is None else min_roi)
     current_time = now or int(time.time())
@@ -98,7 +193,7 @@ def rank_flips(
         ):
             continue
         age = current_time - min(point.high_time, point.low_time)
-        tax = ge_tax(sell_price)
+        tax = ge_tax(sell_price, exempt=is_tax_exempt(point.item_id, item.name))
         profit = sell_price - buy_price - tax
         roi = profit / buy_price * 100
         if profit <= 0 or roi < required_roi or age < 0 or age > max_age_seconds:
@@ -123,6 +218,10 @@ def rank_flips(
         position_budget = max(buy_price, int(cash_stack * capital_fraction))
         affordable = min(cash_stack // buy_price, position_budget // buy_price)
         limit = item.buy_limit or affordable
+        if remaining_limits is not None:
+            room = remaining_limits.get(point.item_id)
+            if room is not None:
+                limit = min(limit, room)
         projected_volume = round(point.volume_1h * int(settings["hours"]))
         volume_fraction = min(
             float(settings["hours"]),

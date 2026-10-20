@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
 
-from osrs_toolkit.ranking import ge_tax
+from osrs_toolkit.ranking import ge_tax, is_tax_exempt
 
 # Bounded per account so a long-lived sync history can't grow this table without limit.
 MAX_NET_WORTH_HISTORY_PER_ACCOUNT = 2_000
@@ -41,7 +41,9 @@ class TradeRecord:
 
     @property
     def tax_each(self) -> int:
-        return ge_tax(self.sell_price)
+        # A manual entry has no item id, so the exemption is decided on the name it was
+        # filed under.
+        return ge_tax(self.sell_price, exempt=is_tax_exempt(item_name=self.item_name))
 
     @property
     def invested(self) -> int:
@@ -98,10 +100,16 @@ class TrackedTrade:
     account_hash: str | None = None
 
     @property
+    def tax_exempt(self) -> bool:
+        """Whether the Grand Exchange takes no cut when this position sells."""
+        return is_tax_exempt(self.item_id, self.item_name)
+
+    @property
     def estimated_profit(self) -> int:
         buy_price = self.actual_buy or self.buy_suggestion
         sell_price = self.sell_suggestion
-        return (sell_price - buy_price - ge_tax(sell_price)) * self.unsold_stock
+        tax = ge_tax(sell_price, exempt=self.tax_exempt)
+        return (sell_price - buy_price - tax) * self.unsold_stock
 
     @property
     def buy_suggestion(self) -> int:
@@ -131,8 +139,10 @@ class TrackedTrade:
     def realized_profit(self) -> int | None:
         if self.actual_buy is None or not self.sale_fills:
             return None
+        exempt = self.tax_exempt
         return sum(
-            (fill.sell_price - self.actual_buy - ge_tax(fill.sell_price)) * fill.quantity
+            (fill.sell_price - self.actual_buy - ge_tax(fill.sell_price, exempt=exempt))
+            * fill.quantity
             for fill in self.sale_fills
         )
 
