@@ -60,10 +60,16 @@
         {% for row in rows %}
         <tr>
           <td class="name"><a href="/item/{{ row.item_id }}">{{ row.name }}</a></td>
-          <td class="num">{{ "{:,}".format(row.buy_price) }}</td>
-          <td class="num">{{ "{:,}".format(row.sell_price) }}</td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(row.buy_price) }}</td>
+          <td class="num" style="color:var(--sell)">{{ "{:,}".format(row.sell_price) }}</td>
           <td class="num {{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
-          <td class="num {{ 'positive' if row.roi >= 0 else 'negative' }}">{{ "%.2f"|format(row.roi) }}%</td>
+          {# Same 12% ceiling the ranker scores against, so a bar here means what it means there. #}
+          <td class="num cell-meter {{ 'positive' if row.roi >= 0 else 'negative' }}">
+            {{ "%.2f"|format(row.roi) }}%
+            {% if row.roi > 0 %}
+            <div class="meter"><span style="--fill: {{ [row.roi / 12 * 100, 100] | min }}%"></span></div>
+            {% endif %}
+          </td>
           <td class="num">{{ "{:,}".format(row.volume_1h) }}</td>
           <td class="num">{{ row.age_minutes }} min</td>
           <td>

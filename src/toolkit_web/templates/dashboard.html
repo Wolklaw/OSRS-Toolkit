@@ -13,7 +13,13 @@
   configured. "A token is saved" and "something is arriving" are different facts, and the old
   panel showed the first while claiming the second -- so a dashboard read "Plugin connected"
   with the game shut. `plugin_state` and `desktop_state` are the honest versions.
+
+  Drawn as a macro because where it belongs depends on what it says. With something still to
+  set up it is the first thing on the page, because that is the thing standing between this
+  visitor and a dashboard worth reading. Once both are running it is reference, not work, and
+  goes to the bottom under the money it was only ever there to collect.
 #}
+{% macro connections() %}
 <div class="panel">
   <div class="panel-head">
     <div class="grow"><h2>Connections</h2></div>
@@ -85,38 +91,60 @@
     </div>
   </div>
 </div>
+{% endmacro %}
 
+{% set setup_pending = plugin_state == "none" or desktop_state in ("none", "waiting") %}
+{% if setup_pending %}{{ connections() }}{% endif %}
+
+{#
+  The money, first. Net worth and what this trading has done to it are the two numbers worth
+  reading from across the room; the rest are the working detail behind them.
+#}
 <div class="stats">
+  {% if net_worth %}
+  <div class="stat hero">
+    <div class="label">Net worth</div>
+    <div class="value">{{ "{:,}".format(net_worth.total_value) }}<span class="unit">gp</span></div>
+    <div class="foot">Last bank and gear snapshot</div>
+  </div>
+  {% endif %}
+  <div class="stat hero {{ 'good' if total_estimated_profit >= 0 else 'bad' }}">
+    <div class="label">Estimated profit</div>
+    <div class="value {{ 'positive' if total_estimated_profit >= 0 else 'negative' }}">
+      {{ "{:+,}".format(total_estimated_profit) }}<span class="unit">gp</span>
+    </div>
+    <div class="foot">If unsold stock sells at target</div>
+  </div>
+  <div class="stat">
+    <div class="label">Capital committed</div>
+    <div class="value">{{ "{:,}".format(total_invested) }}<span class="unit">gp</span></div>
+    {% if net_worth and net_worth.total_value > 0 %}
+    {% set committed_share = (total_invested / net_worth.total_value * 100) | round(1) %}
+    <div class="foot">{{ committed_share }}% of net worth, in play</div>
+    <div class="meter"><span style="--fill: {{ [committed_share, 100] | min }}%"></span></div>
+    {% else %}
+    <div class="foot">Spent on positions still working</div>
+    {% endif %}
+  </div>
   <div class="stat">
     <div class="label">Open positions</div>
     <div class="value">{{ open_count }}</div>
     <div class="foot">{{ positions | length }} tracked in total</div>
   </div>
-  <div class="stat">
-    <div class="label">Capital committed</div>
-    <div class="value">{{ "{:,}".format(total_invested) }} gp</div>
-    <div class="foot">Spent on positions still working</div>
-  </div>
-  <div class="stat">
-    <div class="label">Estimated profit</div>
-    <div class="value {{ 'positive' if total_estimated_profit >= 0 else 'negative' }}">
-      {{ "{:+,}".format(total_estimated_profit) }} gp
-    </div>
-    <div class="foot">If unsold stock sells at target</div>
-  </div>
-  <div class="stat">
+  <div class="stat {{ 'bad' if attention_count else '' }}">
     <div class="label">Needs attention</div>
-    <div class="value {{ 'negative' if attention_count else '' }}">{{ attention_count }}</div>
+    <div class="value {{ 'negative' if attention_count else 'flat' }}">{{ attention_count }}</div>
     <div class="foot">Asks the market has moved past</div>
   </div>
-  {% if net_worth %}
-  <div class="stat">
-    <div class="label">Net worth</div>
-    <div class="value">{{ "{:,}".format(net_worth.total_value) }} gp</div>
-    <div class="foot">Last bank and gear snapshot</div>
-  </div>
-  {% endif %}
 </div>
+
+{% if attention_count %}
+<div class="callout bad" style="margin-bottom:1.1rem">
+  <strong>{{ attention_count }} ask{{ '' if attention_count == 1 else 's' }} the market has moved past.</strong>
+  <p>Each is listed at least 2% above what the Grand Exchange now suggests, so it is unlikely
+    to fill where it stands. They are flagged <em>Stale ask</em> in the table below.</p>
+</div>
+{% endif %}
 
 {% if account.paired %}
 <div class="panel">
@@ -144,37 +172,40 @@
       Setting up {{ offer_screen.side or 'an' }} offer on <strong>{{ offer_screen.item_name }}</strong>.
     </div>
     {% endif %}
-    {% if offer_rows %}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Slot</th>
-            <th>Item</th>
-            <th>Side</th>
-            <th class="num">Price</th>
-            <th class="num">Filled</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for slot in offer_rows %}
-          <tr>
-            <td>{{ slot.slot + 1 }}</td>
-            <td class="name">{{ slot.item_name }}</td>
-            <td>{{ slot.side or "—" }}</td>
-            <td class="num">{{ "{:,}".format(slot.offer_price) }}</td>
-            <td class="num">{{ "{:,}".format(slot.quantity_filled) }} / {{ "{:,}".format(slot.total_quantity) }}
-              <span class="table-note">({{ "%.0f"|format(slot.percent_filled) }}%)</span></td>
-            <td>{{ slot.status_label }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {#
+      Eight cards, always: the game gives you eight slots whether or not they hold anything,
+      and drawing the empty ones is how "two free" is answered without counting rows.
+    #}
+    <div class="slot-grid">
+      {% for index in range(8) %}
+      {% set slot = offer_rows | selectattr("slot", "equalto", index) | first %}
+      {% if slot %}
+      <div class="slot">
+        <div class="slot-top">
+          <span class="slot-index">Slot {{ index + 1 }}</span>
+          <span class="grow"></span>
+          <span class="badge {{ 'buy' if slot.side == 'buy' else ('sell' if slot.side == 'sell' else '') }}">{{ slot.side or "—" }}</span>
+        </div>
+        <div class="slot-name">{{ slot.item_name }}</div>
+        <div class="slot-grid-kv">
+          <div><span>Price</span><strong>{{ "{:,}".format(slot.offer_price) }}</strong></div>
+          <div><span>Status</span><strong>{{ slot.status_label }}</strong></div>
+        </div>
+        <div>
+          <div class="table-note" style="margin-bottom:0.3rem">
+            {{ "{:,}".format(slot.quantity_filled) }} / {{ "{:,}".format(slot.total_quantity) }}
+            &middot; {{ "%.0f"|format(slot.percent_filled) }}% filled
+          </div>
+          <div class="meter {{ 'buy' if slot.side == 'buy' else 'sell' }}">
+            <span style="--fill: {{ slot.percent_filled }}%"></span>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="slot empty-slot">Slot {{ index + 1 }} free</div>
+      {% endif %}
+      {% endfor %}
     </div>
-    {% else %}
-    <div class="empty">No Grand Exchange offers open right now.</div>
-    {% endif %}
   {% endif %}
 </div>
 {% endif %}
@@ -198,8 +229,8 @@
       <thead>
         <tr>
           <th>Item</th>
-          <th class="num">Qty</th>
           <th>Status</th>
+          <th class="num">Sold</th>
           <th class="num">Buy</th>
           <th class="num">Sell target</th>
           <th class="num">Est. profit</th>
@@ -217,12 +248,21 @@
             {% endif %}
             <div class="table-note">{{ position.strategy }}</div>
           </td>
-          <td class="num">{{ "{:,}".format(position.quantity) }}</td>
           <td>
             <span class="badge {{ 'ok' if position.status == 'Completed' else ('bad' if position.status == 'Cancelled' else 'accent') }}">{{ position.status }}</span>
             {% if position.needs_attention %}
             <span class="badge bad" title="Your ask is at least 2% above what the market now suggests. Relist nearer the suggestion to clear this.">Stale ask</span>
             {% endif %}
+          </td>
+          {#
+            How far through the position is, as a number and as a shape. The quantity alone
+            never said whether a row was finished or had not started.
+          #}
+          <td class="num cell-meter">
+            {{ "{:,}".format(position.sold_quantity) }} / {{ "{:,}".format(position.quantity) }}
+            <div class="meter good">
+              <span style="--fill: {{ (position.sold_quantity / position.quantity * 100) if position.quantity else 0 }}%"></span>
+            </div>
           </td>
           <td class="num">{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>
           <td class="num">{{ "{:,}".format(position.sell_suggestion) }}</td>
@@ -252,7 +292,7 @@
 <div class="panel">
   <div class="panel-head">
     <div class="grow">
-      <h2>Last session <span class="badge info" style="font-size:0.65rem; vertical-align:middle">Beta</span></h2>
+      <h2>Last session <span class="badge info">Beta</span></h2>
       {% set hours = session_summary.duration_minutes // 60 %}
       {% set minutes = session_summary.duration_minutes % 60 %}
       <p class="hint tight">
@@ -266,34 +306,40 @@
 </div>
 {% endif %}
 
-{% if net_worth_composition %}
-<div class="panel">
-  <h2>Net worth composition</h2>
-  <p class="hint tight">What your latest snapshot and open positions are made of.</p>
-  <div style="display:flex; height:1.6rem; border-radius:6px; overflow:hidden; margin-top:0.8rem; border:1px solid var(--border)">
-    {% for bucket in net_worth_composition %}
-    <div style="width:{{ bucket.percent }}%; background:var({{ bucket.color }})"
-         title="{{ bucket.label }}: {{ '{:,}'.format(bucket.value) }} gp ({{ '%.1f'|format(bucket.percent) }}%)"></div>
-    {% endfor %}
-  </div>
-  <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-top:0.6rem">
-    {% for bucket in net_worth_composition %}
-    <div style="display:flex; align-items:center; gap:0.4rem">
-      <span style="width:0.7rem; height:0.7rem; border-radius:2px; background:var({{ bucket.color }}); display:inline-block"></span>
-      <span class="hint tight">{{ bucket.label }}: {{ "{:,}".format(bucket.value) }} gp ({{ "%.1f"|format(bucket.percent) }}%)</span>
+{% if net_worth_composition or net_worth_chart %}
+<div class="grid-2" style="margin-bottom:1.1rem">
+  {% if net_worth_composition %}
+  <div class="panel">
+    <h2>Net worth composition</h2>
+    <p class="hint tight">What your latest snapshot and open positions are made of.</p>
+    <div class="composition-bar">
+      {% for bucket in net_worth_composition %}
+      <div style="width:{{ bucket.percent }}%; background:var({{ bucket.color }})"
+           title="{{ bucket.label }}: {{ '{:,}'.format(bucket.value) }} gp ({{ '%.1f'|format(bucket.percent) }}%)"></div>
+      {% endfor %}
     </div>
-    {% endfor %}
+    <div class="legend">
+      {% for bucket in net_worth_composition %}
+      <div class="legend-item">
+        <span class="swatch" style="background:var({{ bucket.color }})"></span>
+        <span>{{ bucket.label }}</span>
+        <strong>{{ "%.1f"|format(bucket.percent) }}%</strong>
+      </div>
+      {% endfor %}
+    </div>
   </div>
+  {% endif %}
+  {% if net_worth_chart %}
+  <div class="panel">
+    <h2>Net worth over time</h2>
+    <p class="hint tight">Every bank and gear snapshot the plugin has sent.</p>
+    <div style="overflow-x:auto; margin-top:0.8rem">{{ net_worth_chart | safe }}</div>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
-{% if net_worth_chart %}
-<div class="panel">
-  <h2>Net worth over time</h2>
-  <p class="hint tight">Every bank and gear snapshot the plugin has sent.</p>
-  <div style="overflow-x:auto; margin-top:0.8rem">{{ net_worth_chart | safe }}</div>
-</div>
-{% endif %}
+{% if not setup_pending %}{{ connections() }}{% endif %}
 
 {#
   No <form> around any of this on purpose: every control here is driven by its own click

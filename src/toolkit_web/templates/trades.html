@@ -84,8 +84,8 @@
           <td class="name">{{ trade.item_name }}</td>
           <td>{{ trade.character_name or "—" }}</td>
           <td class="num">{{ "{:,}".format(trade.quantity) }}</td>
-          <td class="num">{{ "{:,}".format(trade.buy_price) }}</td>
-          <td class="num">{{ "{:,}".format(trade.sell_price) }}</td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(trade.buy_price) }}</td>
+          <td class="num" style="color:var(--sell)">{{ "{:,}".format(trade.sell_price) }}</td>
           <td class="num {{ 'positive' if trade.profit >= 0 else 'negative' }}">
             {{ "{:+,}".format(trade.profit) }}
           </td>

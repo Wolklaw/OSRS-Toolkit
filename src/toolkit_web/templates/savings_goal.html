@@ -59,17 +59,17 @@
   <div class="stats" style="margin-top:1.1rem; margin-bottom:0">
     <div class="stat">
       <div class="label">Saved</div>
-      <div class="value {{ 'positive' if progress.saved >= 0 else 'negative' }}">{{ "{:,}".format(progress.saved) }} gp</div>
+      <div class="value {{ 'positive' if progress.saved >= 0 else 'negative' }}">{{ "{:,}".format(progress.saved) }}<span class="unit">gp</span></div>
       <div class="foot">Realized since the goal was set</div>
     </div>
     <div class="stat">
       <div class="label">Target</div>
-      <div class="value">{{ "{:,}".format(progress.target) }} gp</div>
+      <div class="value">{{ "{:,}".format(progress.target) }}<span class="unit">gp</span></div>
       <div class="foot">{{ "{:,}".format(progress.remaining) }} gp still to go</div>
     </div>
     <div class="stat">
       <div class="label">Recent daily rate</div>
-      <div class="value {{ 'positive' if daily_rate >= 0 else 'negative' }}">{{ "{:+,}".format(daily_rate) }} gp</div>
+      <div class="value {{ 'positive' if daily_rate >= 0 else 'negative' }}">{{ "{:+,}".format(daily_rate) }}<span class="unit">gp</span></div>
       <div class="foot">What the last stretch has averaged</div>
     </div>
   </div>

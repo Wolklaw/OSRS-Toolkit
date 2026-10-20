@@ -85,8 +85,8 @@ def test_net_worth_shows_the_most_recent_reading_not_an_older_one(
 
     response = signed_in.get("/")
 
-    assert '<div class="value">5,000,000 gp</div>' in response.text
-    assert '<div class="value">1,000,000 gp</div>' not in response.text
+    assert '5,000,000<span class="unit">gp</span>' in response.text
+    assert '1,000,000<span class="unit">gp</span>' not in response.text
 
 
 def test_the_performance_page_renders_with_no_history_yet(signed_in: TestClient):

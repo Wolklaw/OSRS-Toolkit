@@ -29,7 +29,7 @@
   </div>
   <div class="stat">
     <div class="label">ROI</div>
-    <div class="value {{ 'positive' if breakdown.roi >= 0 else 'negative' }}">{{ "%.2f"|format(breakdown.roi) }}%</div>
+    <div class="value {{ 'positive' if breakdown.roi >= 0 else 'negative' }}">{{ "%.2f"|format(breakdown.roi) }}<span class="unit">%</span></div>
     <div class="foot">Margin over capital</div>
   </div>
 </div>

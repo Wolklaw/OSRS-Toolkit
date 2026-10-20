@@ -54,7 +54,7 @@
 <div class="stats">
   <div class="stat">
     <div class="label">Loot</div>
-    <div class="value">{{ "{:,}".format(summary.loot_value) }} gp</div>
+    <div class="value">{{ "{:,}".format(summary.loot_value) }}<span class="unit">gp</span></div>
     <div class="foot">{{ summary.loot_by_npc | length }} monster{{ '' if summary.loot_by_npc | length == 1 else 's' }}</div>
   </div>
   <div class="stat">
@@ -65,14 +65,14 @@
   <div class="stat">
     <div class="label">Player trades</div>
     <div class="value {{ 'positive' if summary.trade_net_value >= 0 else 'negative' }}">
-      {{ "{:+,}".format(summary.trade_net_value) }} gp
+      {{ "{:+,}".format(summary.trade_net_value) }}<span class="unit">gp</span>
     </div>
     <div class="foot">{{ summary.trade_count }} trade{{ '' if summary.trade_count == 1 else 's' }}</div>
   </div>
   <div class="stat">
     <div class="label">Experience</div>
     {% if summary.xp_gained %}
-    <div class="value">{{ "{:,}".format(total_xp) }} xp</div>
+    <div class="value">{{ "{:,}".format(total_xp) }}<span class="unit">xp</span></div>
     <div class="foot">Across {{ summary.xp_gained | length }} skill{{ '' if summary.xp_gained | length == 1 else 's' }}</div>
     {% elif summary.levels_gained %}
     <div class="value">{{ total_levels }} level{{ '' if total_levels == 1 else 's' }}</div>
@@ -86,7 +86,7 @@
   <div class="stat">
     <div class="label">Net worth change</div>
     <div class="value {{ 'positive' if summary.net_worth_change >= 0 else 'negative' }}">
-      {{ "{:+,}".format(summary.net_worth_change) }} gp
+      {{ "{:+,}".format(summary.net_worth_change) }}<span class="unit">gp</span>
     </div>
     <div class="foot">Bank, equipment and inventory, start to now</div>
   </div>

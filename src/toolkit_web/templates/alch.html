@@ -54,8 +54,11 @@
     {% endif %}
   </div>
   {% if candidates %}
+  {# Bars are drawn against the best row on the page, not an absolute ceiling: "how does this
+     compare with the best thing I could be alching" is the question this table answers. #}
+  {% set best_hourly = candidates | map(attribute="hourly_profit") | max %}
   <div class="table-wrap">
-    <table id="alch-table">
+    <table id="alch-table" class="table-dense">
       <thead>
         <tr>
           <th>Item</th>
@@ -74,12 +77,17 @@
         {% for candidate in candidates %}
         <tr>
           <td class="name"><a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a></td>
-          <td class="num">{{ "{:,}".format(candidate.buy_price) }}</td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(candidate.buy_price) }}</td>
           <td class="num">{{ "{:,}".format(candidate.alch_value) }}</td>
           <td class="num {{ 'positive' if candidate.profit >= 0 else 'negative' }}">{{ "{:+,}".format(candidate.profit) }}</td>
           <td class="num">{{ "{:,}".format(candidate.safe_quantity) }}</td>
           <td class="num">{{ "{:,}".format(candidate.capital_required) }}</td>
-          <td class="num positive">{{ "{:+,}".format(candidate.hourly_profit) }}</td>
+          <td class="num cell-meter positive">
+            {{ "{:+,}".format(candidate.hourly_profit) }}
+            <div class="meter good">
+              <span style="--fill: {{ (candidate.hourly_profit / best_hourly * 100) if best_hourly else 0 }}%"></span>
+            </div>
+          </td>
           <td class="num">{{ "%.1f"|format(candidate.roi) }}%</td>
           <td>
             {% if candidate.eligible is none %}<span class="badge">Unknown</span>

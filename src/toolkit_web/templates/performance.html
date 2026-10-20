@@ -16,31 +16,36 @@
 {% block content %}
 
 <div class="stats">
-  <div class="stat">
+  <div class="stat hero {{ 'good' if summary.realized_profit >= 0 else 'bad' }}">
     <div class="label">Realized profit</div>
     <div class="value {{ 'positive' if summary.realized_profit >= 0 else 'negative' }}">
-      {{ "{:+,}".format(summary.realized_profit) }} gp
+      {{ "{:+,}".format(summary.realized_profit) }}<span class="unit">gp</span>
     </div>
     <div class="foot">{{ period }}</div>
   </div>
-  <div class="stat">
-    <div class="label">Capital traded</div>
-    <div class="value">{{ "{:,}".format(summary.capital_traded) }} gp</div>
-    <div class="foot">Total spent buying in</div>
-  </div>
-  <div class="stat">
+  <div class="stat hero">
     <div class="label">Return on capital</div>
     <div class="value">
-      {% if summary.return_on_capital is not none %}{{ "%.1f"|format(summary.return_on_capital) }}%{% else %}—{% endif %}
+      {% if summary.return_on_capital is not none %}{{ "%.1f"|format(summary.return_on_capital) }}<span class="unit">%</span>{% else %}—{% endif %}
     </div>
     <div class="foot">Profit over capital traded</div>
   </div>
   <div class="stat">
+    <div class="label">Capital traded</div>
+    <div class="value">{{ "{:,}".format(summary.capital_traded) }}<span class="unit">gp</span></div>
+    <div class="foot">Total spent buying in</div>
+  </div>
+  <div class="stat">
     <div class="label">Win rate</div>
     <div class="value">
-      {% if summary.win_rate is not none %}{{ "%.0f"|format(summary.win_rate) }}%{% else %}—{% endif %}
+      {% if summary.win_rate is not none %}{{ "%.0f"|format(summary.win_rate) }}<span class="unit">%</span>{% else %}—{% endif %}
     </div>
     <div class="foot">Positions that finished up</div>
+    {% if summary.win_rate is not none %}
+    <div class="meter {{ 'good' if summary.win_rate >= 50 else 'bad' }}">
+      <span style="--fill: {{ summary.win_rate }}%"></span>
+    </div>
+    {% endif %}
   </div>
   <div class="stat">
     <div class="label">Positions</div>
@@ -50,7 +55,7 @@
   <div class="stat">
     <div class="label">Median hold time</div>
     <div class="value">
-      {% if summary.median_hold_hours is not none %}{{ "%.1f"|format(summary.median_hold_hours) }}h{% else %}—{% endif %}
+      {% if summary.median_hold_hours is not none %}{{ "%.1f"|format(summary.median_hold_hours) }}<span class="unit">h</span>{% else %}—{% endif %}
     </div>
     <div class="foot">Offer opened to payout</div>
   </div>
@@ -78,7 +83,12 @@
             {{ "{:+,}".format(row.realized_profit) }}
           </td>
           <td class="num">{% if row.return_on_capital is not none %}{{ "%.1f"|format(row.return_on_capital) }}%{% else %}—{% endif %}</td>
-          <td class="num">{{ "%.0f"|format(row.win_rate) }}%</td>
+          <td class="num cell-meter">
+            {{ "%.0f"|format(row.win_rate) }}%
+            <div class="meter {{ 'good' if row.win_rate >= 50 else 'bad' }}">
+              <span style="--fill: {{ row.win_rate }}%"></span>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -119,7 +129,12 @@
             {{ "{:+,}".format(row.realized_profit) }}
           </td>
           <td class="num">{% if row.return_on_capital is not none %}{{ "%.1f"|format(row.return_on_capital) }}%{% else %}—{% endif %}</td>
-          <td class="num">{{ "%.0f"|format(row.win_rate) }}%</td>
+          <td class="num cell-meter">
+            {{ "%.0f"|format(row.win_rate) }}%
+            <div class="meter {{ 'good' if row.win_rate >= 50 else 'bad' }}">
+              <span style="--fill: {{ row.win_rate }}%"></span>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
