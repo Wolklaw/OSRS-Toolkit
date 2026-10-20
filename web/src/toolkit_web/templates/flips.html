@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% set page_title = "GE Flipper" %}
+{% set page_sub = "Margins from recent trades, weighed against volume and Grand Exchange tax, sized to the cash and slots you have." %}
+
+{% block content %}
+
+<div class="panel">
+  <form method="get" class="form-row">
+    <div class="field w-md">
+      <label for="cash-stack">Cash stack{% if cash_stack_prefilled %} <span class="hint tight">(from your synced coins)</span>{% endif %}</label>
+      <input type="number" id="cash-stack" name="cash_stack" value="{{ cash_stack }}" min="10000" step="100000">
+    </div>
+    {#
+      Three mutually exclusive horizons, all worth seeing at once: how long you are willing
+      to wait is the single biggest thing separating one set of suggestions from another, and
+      a closed <select> hid two thirds of that choice behind a click.
+    #}
+    <div class="field">
+      <label>Strategy</label>
+      <div class="seg" role="radiogroup" aria-label="Strategy">
+        {% for option in strategies %}
+        <label title="{{ option }}">
+          <input type="radio" name="strategy" value="{{ option }}" {% if option == strategy %}checked{% endif %}>
+          <span>{{ option.split(" (")[0] }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field w-sm">
+      <label for="slots">Free slots{% if slots_prefilled %} <span class="hint tight">(from your live GE)</span>{% endif %}</label>
+      <select id="slots" name="slots">
+        {% for count in range(1, 9) %}
+        <option value="{{ count }}" {% if count == slots %}selected{% endif %}>{{ count }} slot{{ 's' if count != 1 else '' }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button" type="submit">Update</button>
+  </form>
+  <p class="hint">Prices are completed transactions, not offers sitting on the book. Anything
+    you have already bought in the last four hours comes off the quantity suggested here, so
+    a plan never asks for more of an item than the Grand Exchange will sell you.</p>
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Try the refresh button in the header again shortly.
+  </div>
+</div>
+{% else %}
+
+{% if portfolio %}
+{% set plan_capital = portfolio | sum(attribute="capital_required") %}
+{% set plan_profit = portfolio | sum(attribute="potential_profit") %}
+<div class="stats">
+  <div class="stat hero">
+    <div class="label">Capital in</div>
+    <div class="value">{{ "{:,}".format(plan_capital) }}<span class="unit">gp</span></div>
+    <div class="foot">
+      {{ "%.0f"|format(plan_capital / cash_stack * 100 if cash_stack else 0) }}% of your stack,
+      across {{ portfolio | length }} slot{{ '' if portfolio | length == 1 else 's' }}
+    </div>
+    <div class="meter"><span style="--fill: {{ [(plan_capital / cash_stack * 100) if cash_stack else 0, 100] | min }}%"></span></div>
+  </div>
+  <div class="stat hero good">
+    <div class="label">If it all fills</div>
+    <div class="value positive">{{ "{:+,}".format(plan_profit) }}<span class="unit">gp</span></div>
+    <div class="foot">After Grand Exchange tax</div>
+  </div>
+  <div class="stat">
+    <div class="label">Return on the plan</div>
+    <div class="value">{{ "%.2f"|format(plan_profit / plan_capital * 100 if plan_capital else 0) }}<span class="unit">%</span></div>
+    <div class="foot">Blended across every slot</div>
+  </div>
+  <div class="stat">
+    <div class="label">Cash left over</div>
+    <div class="value">{{ "{:,}".format(cash_stack - plan_capital) }}<span class="unit">gp</span></div>
+    <div class="foot">Liquidity and buy limits said stop</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>The plan</h2>
+      <p class="hint tight">One spread-out way to spend that cash across the slots you have,
+        sized to stay inside buy limits. Track a slot to put it in your journal.</p>
+    </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
+  </div>
+  {% if portfolio %}
+  {#
+    A plan is a way to spend the eight slots the game gives you, so it is drawn as slots.
+    The free ones are drawn too — "the plan uses five of your six" is a fact about the plan,
+    and counting table rows was the only way to learn it before.
+  #}
+  <div class="slot-grid">
+    {% for candidate in portfolio %}
+    <div class="slot">
+      <div class="slot-top">
+        <span class="slot-index">Slot {{ loop.index }}</span>
+        <span class="grow"></span>
+        {% if candidate.item_id in exempt_ids %}<span class="badge ok" title="The Grand Exchange never taxes this item, whatever it sells for.">Tax-exempt</span>{% endif %}
+        <span class="badge accent">{{ "%.1f"|format(candidate.roi) }}% ROI</span>
+      </div>
+      <div class="slot-name"><a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a></div>
+      <div class="slot-prices">
+        <span class="buy">{{ "{:,}".format(candidate.buy_price) }}</span>
+        <span class="arrow">&rarr;</span>
+        <span class="sell">{{ "{:,}".format(candidate.sell_price) }}</span>
+      </div>
+      <div class="slot-grid-kv">
+        <div><span>Quantity</span><strong>{{ "{:,}".format(candidate.suggested_quantity) }}</strong></div>
+        <div><span>Capital</span><strong>{{ "{:,}".format(candidate.capital_required) }}</strong></div>
+        <div><span>Est. profit</span><strong class="positive">{{ "{:+,}".format(candidate.potential_profit) }}</strong></div>
+        <div><span>Confidence</span><strong>{{ candidate.confidence }}%</strong></div>
+      </div>
+      {% set room = limit_room.get(candidate.item_id) if limit_room else None %}
+      {% if room is not none %}
+      <div class="table-note" title="Buy limits are a rolling 4-hour window. This is what is left of it.">
+        Buy limit: {{ "{:,}".format(room) }} left in this 4-hour window
+      </div>
+      {% endif %}
+      <div class="slot-foot">
+        <div class="meter good grow" title="Confidence: {{ candidate.confidence }}%">
+          <span style="--fill: {{ candidate.confidence }}%"></span>
+        </div>
+        <button class="button secondary small" onclick='trackFlip({{ candidate | tojson }}, this)'>Track</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% for _free in range(slots - (portfolio | length)) %}
+    <div class="slot empty-slot">
+      Slot {{ (portfolio | length) + loop.index }} left free<br>
+      <span class="table-note">Nothing else cleared the bar</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing clears this strategy's bar right now</strong>
+    Try a longer-horizon strategy, or a different cash stack.
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>All ranked candidates</h2>
+      <p class="hint tight">The top {{ candidates | length }} by score. Confidence weighs volume
+        and how recently the item traded.</p>
+    </div>
+    {% if candidates %}
+    <input type="search" class="filter-input" placeholder="Search items…"
+           oninput="filterTable(this, 'candidates-table')" aria-label="Search items">
+    <span class="table-note" id="candidates-table-note"></span>
+    {% endif %}
+  </div>
+  {% if candidates %}
+  <div class="table-wrap">
+    <table id="candidates-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Margin</th>
+          <th class="num">ROI</th>
+          <th class="num">Confidence</th>
+          <th class="num">1h volume</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for candidate in candidates %}
+        <tr>
+          <td class="name">
+            <a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a>
+            {% if candidate.item_id in exempt_ids %}<span class="badge ok" title="The Grand Exchange never taxes this item, whatever it sells for.">Tax-exempt</span>{% endif %}
+          </td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(candidate.buy_price) }}</td>
+          <td class="num" style="color:var(--sell)">{{ "{:,}".format(candidate.sell_price) }}</td>
+          <td class="num {{ 'positive' if candidate.profit_each >= 0 else 'negative' }}">{{ "{:+,}".format(candidate.profit_each) }}</td>
+          {#
+            ROI and confidence are the two columns anyone actually ranks by, so they carry
+            their own size as well as their digits. The ROI bar tops out at 12%, the same
+            ceiling the ranker's own score uses, rather than at whatever today's best row is.
+          #}
+          <td class="num cell-meter">
+            {{ "%.1f"|format(candidate.roi) }}%
+            <div class="meter"><span style="--fill: {{ [candidate.roi / 12 * 100, 100] | min }}%"></span></div>
+          </td>
+          <td class="num cell-meter">
+            {{ candidate.confidence }}%
+            <div class="meter good"><span style="--fill: {{ candidate.confidence }}%"></span></div>
+          </td>
+          <td class="num">{{ "{:,}".format(candidate.hourly_volume) }}</td>
+          <td class="row-actions">
+            <button class="button ghost small"
+                    onclick="toggleWatch({{ candidate.item_id }}, this)">{{ "Watching" if candidate.item_id in watched_ids else "Watch" }}</button>
+            <button class="button ghost small" onclick='trackFlip({{ candidate | tojson }}, this)'>Track</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nothing clears this strategy's bar right now.</div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const flipStrategy = {{ strategy | tojson }};
+
+  /** Opens a planned position from a ranked row, with that row's own numbers as the plan —
+   *  the point of tracking a suggestion is to be graded against what it suggested later. */
+  async function trackFlip(candidate, button) {
+    const quantity = Number(candidate.suggested_quantity) || 1;
+    const result = await api('POST', '/api/positions', {
+      item_id: candidate.item_id,
+      item_name: candidate.name,
+      quantity: quantity,
+      target_buy: candidate.buy_price,
+      target_sell: candidate.sell_price,
+      strategy: flipStrategy,
+    });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = 'Tracked';
+    button.disabled = true;
+    toast(`Tracking ${quantity.toLocaleString()} × ${candidate.name} on your Dashboard.`, 'ok');
+  }
+
+  async function toggleWatch(itemId, button) {
+    const watching = button.textContent.trim() === 'Watching';
+    const result = watching
+      ? await api('DELETE', `/api/watchlist/${itemId}`)
+      : await api('POST', '/api/watchlist', { item_id: itemId });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = watching ? 'Watch' : 'Watching';
+  }
+</script>
+{% endblock %}

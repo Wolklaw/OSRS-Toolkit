@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% set page_title = "Performance" %}
+{% set page_sub = "Grades the plans in your journal against what actually happened. Every figure comes from fills you recorded, never from a projection." %}
+
+{% block page_actions %}
+<form method="get" class="row">
+  <select name="period" onchange="this.form.submit()" aria-label="Period">
+    {% for option in periods %}
+    <option value="{{ option }}" {% if option == period %}selected{% endif %}>{{ option }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="button secondary small" type="submit">Apply</button></noscript>
+</form>
+{% endblock %}
+
+{% block content %}
+
+<div class="stats">
+  <div class="stat hero {{ 'good' if summary.realized_profit >= 0 else 'bad' }}">
+    <div class="label">Realized profit</div>
+    <div class="value {{ 'positive' if summary.realized_profit >= 0 else 'negative' }}">
+      {{ "{:+,}".format(summary.realized_profit) }}<span class="unit">gp</span>
+    </div>
+    <div class="foot">{{ period }}</div>
+  </div>
+  <div class="stat hero">
+    <div class="label">Return on capital</div>
+    <div class="value">
+      {% if summary.return_on_capital is not none %}{{ "%.1f"|format(summary.return_on_capital) }}<span class="unit">%</span>{% else %}—{% endif %}
+    </div>
+    <div class="foot">Profit over capital traded</div>
+  </div>
+  <div class="stat">
+    <div class="label">Capital traded</div>
+    <div class="value">{{ "{:,}".format(summary.capital_traded) }}<span class="unit">gp</span></div>
+    <div class="foot">Total spent buying in</div>
+  </div>
+  <div class="stat">
+    <div class="label">Win rate</div>
+    <div class="value">
+      {% if summary.win_rate is not none %}{{ "%.0f"|format(summary.win_rate) }}<span class="unit">%</span>{% else %}—{% endif %}
+    </div>
+    <div class="foot">Positions that finished up</div>
+    {% if summary.win_rate is not none %}
+    <div class="meter {{ 'good' if summary.win_rate >= 50 else 'bad' }}">
+      <span style="--fill: {{ summary.win_rate }}%"></span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="label">Positions</div>
+    <div class="value">{{ summary.positions }}</div>
+    <div class="foot">Finished in this period</div>
+  </div>
+  <div class="stat">
+    <div class="label">Median hold time</div>
+    <div class="value">
+      {% if summary.median_hold_hours is not none %}{{ "%.1f"|format(summary.median_hold_hours) }}<span class="unit">h</span>{% else %}—{% endif %}
+    </div>
+    <div class="foot">Offer opened to payout</div>
+  </div>
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>By strategy</h2>
+      <p class="hint tight">Which of the flipping strategies is actually paying for itself.</p>
+    </div>
+  </div>
+  {% if by_strategy %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th class="num">Positions</th><th class="num">Profit</th><th class="num">Return</th><th class="num">Win rate</th></tr>
+      </thead>
+      <tbody>
+        {% for row in by_strategy %}
+        <tr>
+          <td class="name">{{ row.label }}</td>
+          <td class="num">{{ row.positions }}</td>
+          <td class="num {{ 'positive' if row.realized_profit >= 0 else 'negative' }}">
+            {{ "{:+,}".format(row.realized_profit) }}
+          </td>
+          <td class="num">{% if row.return_on_capital is not none %}{{ "%.1f"|format(row.return_on_capital) }}%{% else %}—{% endif %}</td>
+          <td class="num cell-meter">
+            {{ "%.0f"|format(row.win_rate) }}%
+            <div class="meter {{ 'good' if row.win_rate >= 50 else 'bad' }}">
+              <span style="--fill: {{ row.win_rate }}%"></span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing realized in this period yet</strong>
+    Mark a position Completed on the Dashboard and it starts counting here.
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>By item</h2>
+      <p class="hint tight">Items you have finished more than once.</p>
+    </div>
+    {% if by_item %}
+    <input type="search" class="filter-input" placeholder="Filter items…"
+           oninput="filterTable(this, 'by-item-table')" aria-label="Filter items">
+    <span class="table-note" id="by-item-table-note"></span>
+    {% endif %}
+  </div>
+  {% if by_item %}
+  <div class="table-wrap">
+    <table id="by-item-table">
+      <thead>
+        <tr><th>Item</th><th class="num">Positions</th><th class="num">Profit</th><th class="num">Return</th><th class="num">Win rate</th></tr>
+      </thead>
+      <tbody>
+        {% for row in by_item %}
+        <tr>
+          <td class="name">{{ row.label }}</td>
+          <td class="num">{{ row.positions }}</td>
+          <td class="num {{ 'positive' if row.realized_profit >= 0 else 'negative' }}">
+            {{ "{:+,}".format(row.realized_profit) }}
+          </td>
+          <td class="num">{% if row.return_on_capital is not none %}{{ "%.1f"|format(row.return_on_capital) }}%{% else %}—{% endif %}</td>
+          <td class="num cell-meter">
+            {{ "%.0f"|format(row.win_rate) }}%
+            <div class="meter {{ 'good' if row.win_rate >= 50 else 'bad' }}">
+              <span style="--fill: {{ row.win_rate }}%"></span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No item has enough finished positions in this period to show yet.</div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Plan vs. actual</h2>
+      <p class="hint tight">Where the plan and the outcome parted company. Hover a row for the detail.</p>
+    </div>
+  </div>
+  {% if calibration %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Measure</th><th class="num">Planned</th><th class="num">Actual</th><th class="num">Drift</th><th class="num">Positions</th></tr>
+      </thead>
+      <tbody>
+        {% for row in calibration %}
+        <tr title="{{ row.detail }}">
+          <td>
+            <span class="name">{{ row.label }}</span>
+            <div class="table-note">{{ row.note }}</div>
+          </td>
+          <td class="num">{{ "{:+,}".format(row.planned) if row.signed else "{:,}".format(row.planned) }}</td>
+          <td class="num">{{ "{:+,}".format(row.actual) if row.signed else "{:,}".format(row.actual) }}</td>
+          <td class="num {{ 'positive' if row.tone == 'positive' else ('negative' if row.tone == 'negative' else '') }}">
+            {% if row.drift is not none %}{{ "%+.1f"|format(row.drift) }}%{% else %}—{% endif %}
+          </td>
+          <td class="num">{{ row.positions }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nothing with a plan to grade in this period yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

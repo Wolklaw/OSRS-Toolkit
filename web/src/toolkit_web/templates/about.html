@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set page_title = "About RuneScope" %}
+{% set page_sub = "What this is, who runs it, and what it does with your data." %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="prose">
+    <p><strong>RuneScope is an independent, fan-made market companion for Old School
+      RuneScape.</strong> Grand Exchange research, profit calculators, and a trade journal that
+      remembers what you actually did, so that later it can tell you which of your plans were
+      worth following.</p>
+    <p>It shares its calculations with <a href="/download">OSRS Toolkit for Windows</a>, the
+      desktop app it grew out of. Run either, or both: connect the desktop app to your account
+      here and a trade recorded in one shows up in the other.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2>Game interaction</h2>
+    <p>RuneScope does not play the game. It sends no input, changes no network traffic, and
+      modifies no game client. The optional RuneLite plugin reports trades after they have
+      happened; it never acts.</p>
+    <p>It never asks for a Jagex password, bank PIN, or authenticator code.</p>
+
+    <h2>Your data</h2>
+    <p><strong>Your journal lives on the server that runs RuneScope</strong>, which is what
+      lets you reach it from any device. Connect the desktop app and it mirrors the same
+      journal both ways. Leave it disconnected and it keeps everything on your PC.</p>
+    <ul>
+      <li><strong>What is stored:</strong> your trade journal, tracked positions, imported
+        RuneLite events, watchlist, savings goal, and your character names. One database file
+        per account. Tokens are kept as hashes, never as the token itself.</li>
+      <li><strong>Sign-in:</strong> a Discord user id, username and avatar. Or, without
+        Discord, just the hash of a recovery code. No passwords, no email addresses.</li>
+      <li><strong>Prices</strong> come from the OSRS Wiki real-time price API. Character
+        lookup reads the public hiscores. Neither knows who asked.</li>
+      <li><strong>Taking it with you:</strong> the CSV export on your
+        <a href="/profile">profile</a> is your whole journal, any time.</li>
+    </ul>
+
+    <p>Here's what the plugin sends, if you run it:</p>
+    <ul>
+      <li>Grand Exchange offers, cancels, and fills, and where you're standing at the Exchange</li>
+      <li>Trades with other players</li>
+      <li>A look at your bank and gear when you open the bank</li>
+      <li>Monster drops</li>
+      <li>What you had on when you died</li>
+    </ul>
+    <p>Only the first one is on by default. The rest you switch on yourself, if you want them.
+      All of it goes toward the same thing: filling in your trade journal and stats
+      automatically, so you're not typing every trade in by hand.</p>
+    <p>Connecting the plugin also means our sync server briefly sees your IP address, the same
+      as any site you visit does. It's not saved in a database anywhere. It only shows up in a
+      server log, and that gets wiped after a week.</p>
+    <p>Nothing sits around forever either. Anything waiting to be picked up expires after 30
+      days if nothing comes to get it, and if the plugin goes quiet for six months the whole
+      pairing disappears along with whatever's still under it. Once something's landed in your
+      journal it just stays there as long as your account does.</p>
+    <p>Want it gone sooner? There's a delete button on your <a href="/profile">Profile</a> page.
+      It wipes the journal, watchlist, characters, tokens, the account itself. No waiting
+      period, no undo, so grab the CSV export first if there's anything worth keeping.</p>
+
+    <h2>Where the numbers come from</h2>
+    <p>Prices are completed transactions, so an item can fail to fill at a price it traded at
+      minutes ago. Margins, GP/hour and boss requirements are estimates built from market data
+      and community sources.</p>
+
+    <h2>Unofficial fan project</h2>
+    <p>RuneScope is not affiliated with, sponsored by, or endorsed by Jagex. Jagex, RuneScape,
+      and Old School RuneScape are trademarks of Jagex Limited. All game-related intellectual
+      property belongs to Jagex and its licensors.</p>
+    <p><strong>Created using intellectual property belonging to Jagex Limited under the terms
+      of Jagex's Fan Content Policy. This content is not endorsed by or affiliated with
+      Jagex.</strong></p>
+    <p>
+      <a href="https://legal.jagex.com/docs/policies/fan-content-policy" target="_blank" rel="noopener">Fan Content Policy</a> ·
+      <a href="https://legal.jagex.com/docs/rules/rules-of-old-school-runescape" target="_blank" rel="noopener">Rules of Old School RuneScape</a> ·
+      <a href="https://legal.jagex.com/docs/terms/terms-and-conditions/current" target="_blank" rel="noopener">Terms</a>
+    </p>
+
+    <h2>Credits</h2>
+    <p>Built by Wolklaw. Prices by the <a href="https://prices.runescape.wiki/" target="_blank" rel="noopener">OSRS
+      Wiki real-time prices</a> project. Boss and skilling references from the
+      <a href="https://oldschool.runescape.wiki/" target="_blank" rel="noopener">OSRS Wiki</a>.
+      Source under the GPLv3 on
+      <a href="https://github.com/Wolklaw/OSRS-Toolkit" target="_blank" rel="noopener">GitHub</a>.</p>
+    <p>Something wrong or missing? <a href="/help">Here is how to reach me</a>.</p>
+  </div>
+</div>
+
+{% endblock %}

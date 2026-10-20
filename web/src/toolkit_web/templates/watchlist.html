@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% set page_title = "Watchlist" %}
+{% set page_sub = "Items you are keeping an eye on, whether or not they clear the GE Flipper's bar. Margin is after tax; age is how long since the item last traded." %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="form-row">
+    <div class="field" style="min-width:14rem">
+      <label for="watchlist-item-name">Add an item</label>
+      <input type="text" id="watchlist-item-name" placeholder="Exact item name" autocomplete="off"
+             onkeydown="if (event.key === 'Enter') { addWatchlistItem(); }">
+    </div>
+    <button class="button" onclick="addWatchlistItem()">Add</button>
+  </div>
+  <div class="status-msg" id="watchlist-status"></div>
+  <p class="hint">Spell it as the game does, "Rune platebody", not "plate". You can also add
+    items straight from the <a href="/flips">GE Flipper</a>.</p>
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Your watchlist is safe, only the prices are missing. Try again shortly.
+  </div>
+</div>
+{% else %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Watched items</h2>
+      <p class="hint tight">{{ rows | length }} item{{ '' if rows | length == 1 else 's' }}, priced from the current snapshot.</p>
+    </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
+    {% if rows %}
+    <input type="search" class="filter-input" placeholder="Filter…"
+           oninput="filterTable(this, 'watchlist-table')" aria-label="Filter watchlist">
+    <span class="table-note" id="watchlist-table-note"></span>
+    {% endif %}
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table id="watchlist-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Margin</th>
+          <th class="num">ROI</th>
+          <th class="num">1h volume</th>
+          <th class="num">Age</th>
+          <th>Alert</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name"><a href="/item/{{ row.item_id }}">{{ row.name }}</a></td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(row.buy_price) }}</td>
+          <td class="num" style="color:var(--sell)">{{ "{:,}".format(row.sell_price) }}</td>
+          <td class="num {{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
+          {# Same 12% ceiling the ranker scores against, so a bar here means what it means there. #}
+          <td class="num cell-meter {{ 'positive' if row.roi >= 0 else 'negative' }}">
+            {{ "%.2f"|format(row.roi) }}%
+            {% if row.roi > 0 %}
+            <div class="meter"><span style="--fill: {{ [row.roi / 12 * 100, 100] | min }}%"></span></div>
+            {% endif %}
+          </td>
+          <td class="num">{{ "{:,}".format(row.volume_1h) }}</td>
+          <td class="num">{{ row.age_minutes }} min</td>
+          <td>
+            {% if webhook_configured %}
+            <div class="form-row" style="gap:0.4rem; flex-wrap:nowrap">
+              <input type="number" class="alert-target" data-item-id="{{ row.item_id }}"
+                     placeholder="Target gp" value="{{ row.target_price or '' }}" min="1"
+                     style="width:7rem">
+              <select class="alert-direction" data-item-id="{{ row.item_id }}" style="width:6rem">
+                <option value="above" {% if row.direction == "above" %}selected{% endif %}>Above</option>
+                <option value="below" {% if row.direction == "below" %}selected{% endif %}>Below</option>
+              </select>
+              <button class="button secondary small" onclick="setWatchlistAlert({{ row.item_id }})">Set</button>
+              {% if row.target_price %}
+              <button class="button secondary small" onclick="clearWatchlistAlert({{ row.item_id }})">Clear</button>
+              {% endif %}
+            </div>
+            {% else %}
+            <span class="hint tight"><a href="/profile">Add a webhook</a> to enable alerts.</span>
+            {% endif %}
+          </td>
+          <td class="row-actions">
+            <a href="#" class="link-danger" onclick="removeWatchlistItem({{ row.item_id }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing on your watchlist yet</strong>
+    Add an item above, or watch one from the <a href="/flips">GE Flipper</a>.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function addWatchlistItem() {
+    const input = document.getElementById('watchlist-item-name');
+    const name = input.value.trim();
+    if (!name) { return; }
+    const result = await api('POST', '/api/watchlist', { name });
+    if (!result.ok) {
+      setStatus('watchlist-status', result.error, 'error');
+      return;
+    }
+    input.value = '';
+    location.reload();
+  }
+
+  async function removeWatchlistItem(itemId) {
+    await api('DELETE', `/api/watchlist/${itemId}`);
+    location.reload();
+  }
+
+  async function setWatchlistAlert(itemId) {
+    const target = document.querySelector(`.alert-target[data-item-id="${itemId}"]`).value;
+    const direction = document.querySelector(`.alert-direction[data-item-id="${itemId}"]`).value;
+    if (!target) { return; }
+    const result = await api('PUT', `/api/watchlist/${itemId}/alert`, {
+      target_price: parseInt(target, 10),
+      direction,
+    });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function clearWatchlistAlert(itemId) {
+    await api('DELETE', `/api/watchlist/${itemId}/alert`);
+    location.reload();
+  }
+</script>
+{% endblock %}

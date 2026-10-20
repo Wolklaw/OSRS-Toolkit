@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="hero">
+  <h1>Rune<em>Scope</em></h1>
+  <p class="lede">Plan better trades. Remember what actually happened. Your Old School
+    RuneScape trade journal and Grand Exchange research, in a browser tab next to the game.</p>
+  <div class="row">
+    <a class="button" href="/auth/discord/login">Sign in with Discord</a>
+    <a class="button secondary" href="#no-discord" id="no-discord-link">Sign in without Discord</a>
+  </div>
+  <p class="hint">Free. No password, no email address.</p>
+  <div class="install-cta" data-install-cta hidden style="margin-top:0.9rem">
+    <button type="button" class="button ghost small" data-install-button hidden
+            onclick="promptInstall()">Install RuneScope on this device</button>
+    <p class="hint tight" data-install-note hidden>
+      On an iPhone or iPad: tap Share, then "Add to Home Screen" to install this as an app.
+    </p>
+  </div>
+</div>
+
+<div class="feature-grid">
+  <div class="feature">
+    <h3>GE Flipper</h3>
+    <p>What to buy right now with the cash and free slots you have, sized to stay inside buy
+      limits, with tax already taken out.</p>
+  </div>
+  <div class="feature">
+    <h3>Trade Journal</h3>
+    <p>Every position from offer to payout, partial fills included, with profit that counts
+      Grand Exchange tax the way the game does.</p>
+  </div>
+  <div class="feature">
+    <h3>Performance</h3>
+    <p>Grades which strategies and items actually made you money, from the fills you recorded.</p>
+  </div>
+  <div class="feature">
+    <h3>RuneLite sync</h3>
+    <p>The companion plugin sends your real fills, live offer slots, bank and gear, so there
+      is nothing to type out by hand. Install it straight from the
+      <a href="/plugin">RuneLite Plugin Hub</a>.</p>
+  </div>
+  <div class="feature">
+    <h3>Alch &amp; Skilling</h3>
+    <p>What is worth high-alching today after nature runes, and 83 skilling methods priced
+      off the live market.</p>
+  </div>
+  <div class="feature">
+    <h3>PvM Readiness</h3>
+    <p>Your gear, bank and levels against boss checklists: what you can do now, and exactly
+      what you are missing.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head" style="margin-bottom:0">
+    <div class="grow">
+      <h2>Prefer a window beside the game?</h2>
+      <p class="hint tight">OSRS Toolkit for Windows does the same job in its own app, and
+        shares one journal with this site.</p>
+    </div>
+    <a class="button secondary" href="/download">Download for Windows</a>
+  </div>
+</div>
+
+<div class="divider-text" id="no-discord" style="scroll-margin-top:5.5rem">or, without a Discord account</div>
+
+<div class="grid-2">
+  <div class="panel" id="create-panel">
+    <h2>New here?</h2>
+    <p class="hint">You get a recovery code instead of a password. Save it somewhere, it's
+      the only way back into the account.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="display-name" placeholder="Display name (optional)" autocomplete="off" style="max-width:190px">
+      {% if not turnstile_site_key %}
+      <button class="button secondary" onclick="createAccount()">Create account</button>
+      {% endif %}
+    </div>
+    {% if turnstile_site_key %}
+    {#
+      Cloudflare Turnstile, drawn only where a site key is configured. Local and test setups
+      have neither key, so the plain button above is the whole form there — the server demands
+      the check exactly when it has a secret to check against, so the two cannot disagree.
+    #}
+    <div class="cf-turnstile" id="turnstile-widget"
+         data-sitekey="{{ turnstile_site_key }}"
+         data-callback="onTurnstileSolved"
+         data-expired-callback="onTurnstileExpired"
+         data-error-callback="onTurnstileExpired"
+         style="margin-top:0.8rem"></div>
+    <div class="row" style="margin-top:0.7rem">
+      <button class="button secondary" onclick="createAccount()">Create account</button>
+    </div>
+    {% endif %}
+    <div class="status-msg" id="create-status"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Already have a code?</h2>
+    <p class="hint">Paste it back in to pick up where you left off, on any device.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="recovery-code" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="max-width:220px"
+             onkeydown="if (event.key === 'Enter') { signInWithCode(); }">
+      <button class="button secondary" onclick="signInWithCode()">Sign in</button>
+    </div>
+    <div class="status-msg" id="recovery-login-status"></div>
+  </div>
+</div>
+
+<div class="panel" id="code-reveal-panel" style="display:none">
+  <h2>Your recovery code, save it now</h2>
+  <p class="hint">This is the only time it's shown, and it's all anyone needs to sign in as you.</p>
+  <div class="code-box">
+    <code id="revealed-code" style="font-size:1.1rem; letter-spacing:0.05em;"></code>
+    <button class="button secondary small" onclick="copyValue('revealed-code', this)">Copy</button>
+  </div>
+  <div class="row" style="margin-top:0.9rem">
+    <button class="button" onclick="location.href='/'">I&#39;ve saved it, continue</button>
+  </div>
+</div>
+
+<p class="hint" style="text-align:center; margin-top:2rem">
+  New to this? <a href="/help">Read how it works</a> · <a href="/about">What RuneScope is</a>
+</p>
+
+{% endblock %}
+
+{% block scripts %}
+{% if turnstile_site_key %}
+<script>
+  // Matched to the theme in force rather than to the operating system: `auto` would follow
+  // prefers-color-scheme, which is the wrong answer for anyone who has overridden it here.
+  // Set before api.js loads, since it reads the attribute when it renders the widget.
+  (function () {
+    var chosen = document.documentElement.getAttribute('data-theme');
+    document.getElementById('turnstile-widget').setAttribute('data-theme', chosen || 'auto');
+  })();
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
+<script>
+  document.getElementById('no-discord-link').addEventListener('click', () => {
+    // The scroll alone is easy to miss -- an instant jump with nothing to draw the eye to
+    // it can look exactly like the click did nothing. Landing focus in the field the person
+    // is about to type into is what makes it unmistakable that something happened.
+    setTimeout(() => document.getElementById('display-name').focus(), 350);
+  });
+
+  function onTurnstileSolved() { setStatus('create-status', ''); }
+  function onTurnstileExpired() {
+    setStatus('create-status', "That check expired, tick the box again.", 'error');
+  }
+
+  /** The widget's token, or '' when it is present and unsolved. Undefined when there is no
+   *  widget at all, which is how a setup with no Turnstile keys skips the check entirely. */
+  function turnstileToken() {
+    if (!document.getElementById('turnstile-widget')) { return undefined; }
+    return (window.turnstile && window.turnstile.getResponse()) || '';
+  }
+
+  async function signInWithCode() {
+    const code = document.getElementById('recovery-code').value.trim();
+    if (!code) { return; }
+    const result = await api('POST', '/auth/recovery/login', { code });
+    if (!result.ok) {
+      setStatus('recovery-login-status', result.error, 'error');
+      return;
+    }
+    location.href = '/';
+  }
+
+  async function createAccount() {
+    const token = turnstileToken();
+    if (token === '') {
+      setStatus('create-status', 'Tick the box first.', 'error');
+      return;
+    }
+    const displayName = document.getElementById('display-name').value.trim();
+    setStatus('create-status', 'Creating…');
+    const result = await api('POST', '/auth/recovery/create', {
+      display_name: displayName,
+      turnstile_token: token,
+    });
+    if (!result.ok) {
+      setStatus('create-status', result.error, 'error');
+      // A token is single-use: whatever went wrong, the one just spent cannot be sent again,
+      // so the widget has to be reset or the next attempt fails for a second, wrong reason.
+      if (window.turnstile) { window.turnstile.reset(); }
+      return;
+    }
+    document.getElementById('revealed-code').textContent = result.data.code;
+    document.getElementById('create-panel').style.display = 'none';
+    document.getElementById('code-reveal-panel').style.display = 'block';
+    document.getElementById('code-reveal-panel').scrollIntoView({ behavior: 'smooth' });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osrs-toolkit-web"
+version = "0.1.0"
+description = "Web front end for OSRS Toolkit — the companion to the OSRS Toolkit RuneLite plugin."
+readme = "README.md"
+requires-python = ">=3.12"
+# osrs-toolkit supplies journal.py, ranking.py and the rest of the domain layer. It is not on
+# PyPI, so it is pinned to a commit in its own repository — that way a fresh clone of this repo
+# installs into something that actually runs, rather than importing a package nobody declared.
+# It is pinned to a commit rather than to a release tag on purpose: the desktop releases version
+# the Windows installer, and the domain layer this app needs regularly runs ahead of the newest
+# one. Bumping this line is how the domain layer moves, and it shows up in review as a diff.
+# No "gui" extra here keeps PySide6 out of this environment entirely.
+#
+# Working on both repos at once? Install the sibling editable afterwards and it takes precedence:
+#   .venv/bin/pip install -e "../OSRS Toolkit"
+dependencies = [
+    "osrs-toolkit @ git+https://github.com/Wolklaw/OSRS-Toolkit@b4d730884f67e02b3176d782203160c840b614e3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "itsdangerous>=2.2",
+    "jinja2>=3.1",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+# ruff is pinned rather than floating: it is both the linter and the formatter, so a new
+# release changes what `ruff format --check .` considers correct and turns a clean checkout
+# red without a line of this project having changed. Raise it deliberately.
+dev = ["pytest>=8.3", "ruff==0.16.3", "httpx>=0.27"]
+
+[project.scripts]
+osrs-toolkit-web = "toolkit_web.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

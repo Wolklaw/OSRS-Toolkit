@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set page_title = "Buy Limits" %}
+{% set page_sub = "How much of each item you can still buy in the current rolling four-hour window, counted from Grand Exchange fills the plugin has synced." %}
+
+{% block content %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Last four hours</h2>
+      <p class="hint tight">Only items you have bought appear; anything untouched is at its
+        full limit.</p>
+    </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
+    {% if statuses %}
+    <input type="search" class="filter-input" placeholder="Filter items…"
+           oninput="filterTable(this, 'limits-table')" aria-label="Filter items">
+    <span class="table-note" id="limits-table-note"></span>
+    {% endif %}
+  </div>
+
+  {% if market_unavailable %}
+  <div class="empty">
+    <strong>Live buy limits couldn't be reached just now</strong>
+    Limits come from the same market snapshot as prices, try again shortly.
+  </div>
+  {% elif statuses %}
+  <div class="table-wrap">
+    <table id="limits-table">
+      <thead>
+        <tr><th>Item</th><th class="num">Bought</th><th class="num">Limit</th><th class="num">Room left</th><th>Resets at</th></tr>
+      </thead>
+      <tbody>
+        {% for status in statuses %}
+        <tr>
+          <td class="name">
+            {{ status.item_name }}
+            {% if status.remaining == 0 %}<span class="badge bad">Spent</span>{% endif %}
+          </td>
+          <td class="num">{{ "{:,}".format(status.bought_recently) }}</td>
+          <td class="num">{{ "{:,}".format(status.limit) }}</td>
+          {#
+            This page exists to answer "can I still buy this", which is a proportion, not a
+            count. The bar says it at a glance; the number is there for when the answer is
+            "yes, but how many".
+          #}
+          <td class="num cell-meter">
+            <span class="{{ 'negative' if status.remaining == 0 else '' }}">{{ "{:,}".format(status.remaining) }}</span>
+            <div class="meter {{ 'bad' if status.remaining == 0 else 'good' }}">
+              <span style="--fill: {{ (status.remaining / status.limit * 100) if status.limit else 0 }}%"></span>
+            </div>
+          </td>
+          <td>{{ status.resets_at[:16].replace("T", " ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing bought in the last 4 hours</strong>
+    {% if account.paired %}
+    Every item is at its full limit.
+    {% else %}
+    <a href="/profile">Connect the RuneLite plugin</a> so your fills are counted here.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

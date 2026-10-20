@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% set page_title = "This Session" %}
+{% set page_sub = "What the plugin saw since your last real break -- loot, deaths, trades, and the skills that moved." %}
+
+{% block content %}
+
+<div class="panel" style="border-color:var(--info)">
+  <div class="panel-head" style="margin-bottom:0">
+    <div class="grow">
+      <h2 style="display:flex; align-items:center; gap:0.5rem">
+        Under testing <span class="badge info">Beta</span>
+      </h2>
+      <p class="hint tight">Please don't use this page yet.</p>
+    </div>
+  </div>
+</div>
+
+{% if not character_selected %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>Pick a character</strong>
+    A session belongs to one character at a time. Choose one from the switcher at the top of
+    the page.
+  </div>
+</div>
+{% elif not summary %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>Nothing tracked yet</strong>
+    Kill something, trade someone, or take a death with the plugin's tracking on and this page
+    fills in the next time it loads. <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% else %}
+
+{% set hours = summary.duration_minutes // 60 %}
+{% set minutes = summary.duration_minutes % 60 %}
+{% set total_xp = summary.xp_gained.values() | sum %}
+{% set total_levels = summary.levels_gained.values() | sum %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>{{ summary.account_name }}</h2>
+      <p class="hint tight">
+        {{ summary.started_at[:16].replace("T", " ") }} to {{ summary.ended_at[:16].replace("T", " ") }}
+        &mdash; {{ (hours ~ "h " if hours else "") ~ minutes ~ "m" }}.
+        A gap of 30 minutes with nothing happening starts a new one.
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Loot</div>
+    <div class="value">{{ "{:,}".format(summary.loot_value) }}<span class="unit">gp</span></div>
+    <div class="foot">{{ summary.loot_by_npc | length }} monster{{ '' if summary.loot_by_npc | length == 1 else 's' }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Deaths</div>
+    <div class="value {{ 'negative' if summary.death_count else '' }}">{{ summary.death_count }}</div>
+    <div class="foot">{{ "{:,}".format(summary.value_lost) }} gp carried at the time</div>
+  </div>
+  <div class="stat">
+    <div class="label">Player trades</div>
+    <div class="value {{ 'positive' if summary.trade_net_value >= 0 else 'negative' }}">
+      {{ "{:+,}".format(summary.trade_net_value) }}<span class="unit">gp</span>
+    </div>
+    <div class="foot">{{ summary.trade_count }} trade{{ '' if summary.trade_count == 1 else 's' }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Experience</div>
+    {% if summary.xp_gained %}
+    <div class="value">{{ "{:,}".format(total_xp) }}<span class="unit">xp</span></div>
+    <div class="foot">Across {{ summary.xp_gained | length }} skill{{ '' if summary.xp_gained | length == 1 else 's' }}</div>
+    {% elif summary.levels_gained %}
+    <div class="value">{{ total_levels }} level{{ '' if total_levels == 1 else 's' }}</div>
+    <div class="foot">No experience recorded before this plugin version</div>
+    {% else %}
+    <div class="value">&mdash;</div>
+    <div class="foot">No bank opened since before this session</div>
+    {% endif %}
+  </div>
+  {% if summary.net_worth_change is not none %}
+  <div class="stat">
+    <div class="label">Net worth change</div>
+    <div class="value {{ 'positive' if summary.net_worth_change >= 0 else 'negative' }}">
+      {{ "{:+,}".format(summary.net_worth_change) }}<span class="unit">gp</span>
+    </div>
+    <div class="foot">Bank, equipment and inventory, start to now</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if summary.loot_by_npc %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Loot by monster</h2>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Monster</th><th class="num">Kills</th><th class="num">Value</th></tr>
+      </thead>
+      <tbody>
+        {% for row in summary.loot_by_npc %}
+        <tr>
+          <td class="name">{{ row.npc_name }}</td>
+          <td class="num">{{ row.kills }}</td>
+          <td class="num">{{ "{:,}".format(row.value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if summary.xp_gained or summary.levels_gained %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Skills</h2>
+      {% if not summary.xp_gained %}
+      <p class="hint tight">Levels only -- these snapshots predate the plugin sending experience.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Skill</th><th class="num">{{ "Experience" if summary.xp_gained else "Levels" }}</th></tr>
+      </thead>
+      <tbody>
+        {% for skill, amount in (summary.xp_gained.items() if summary.xp_gained else summary.levels_gained.items()) %}
+        <tr>
+          <td class="name">{{ skill }}</td>
+          <td class="num">+{{ "{:,}".format(amount) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+{% endblock %}

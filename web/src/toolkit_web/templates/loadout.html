@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% set page_title = "Skills & Bank" %}
+{% set page_sub = "Skill levels and bank contents from your latest snapshot, and total level over time." %}
+
+{% block content %}
+
+{% if not has_snapshot %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No snapshot yet</strong>
+    Turn on "Sync gear and bank for PvM readiness" in the plugin's settings, then open your
+    bank in game. <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% else %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Total level</h2>
+      <p class="hint tight">{{ total_level }} across {{ skills | length }} skills.</p>
+    </div>
+  </div>
+  {% if skills_chart %}
+  <div style="overflow-x:auto; margin-top:0.8rem">{{ skills_chart | safe }}</div>
+  {% else %}
+  <p class="hint">Needs at least two snapshots to draw a line.</p>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Skills</h2>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Skill</th><th class="num">Level</th></tr>
+      </thead>
+      <tbody>
+        {% for skill, level in skills.items() %}
+        <tr>
+          <td class="name">{{ skill }}</td>
+          <td class="num">{{ level }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Bank</h2>
+      <p class="hint tight">{{ bank_item_count }} item{{ '' if bank_item_count == 1 else 's' }}, worth {{ "{:,}".format(bank_total_value) }} gp. Top 15 by value.</p>
+    </div>
+  </div>
+  {% if bank_rows %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Item</th><th class="num">Quantity</th><th class="num">Value</th></tr>
+      </thead>
+      <tbody>
+        {% for item in bank_rows %}
+        <tr>
+          <td class="name">{{ item.item_name }}</td>
+          <td class="num">{{ "{:,}".format(item.quantity) }}</td>
+          <td class="num">{{ "{:,}".format(item.total_value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Bank is empty</strong>
+    Nothing in it, as of the last sync.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+
+{% endblock %}

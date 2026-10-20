@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% set page_title = "Trade Journal" %}
+{% set page_sub = "Flips you completed outside the plugin, or before you connected it. Positions it is tracking live sit on the Dashboard." %}
+
+{% block page_actions %}
+<a class="button secondary small" href="/api/export.csv">Export CSV</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Record a trade</h2>
+      <p class="hint tight">Prices are per item. Profit and ROI are worked out for you, with
+        Grand Exchange tax taken off the sale.</p>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="field" style="min-width:11rem">
+      <label for="item-name">Item</label>
+      <input type="text" id="item-name" placeholder="Abyssal whip" autocomplete="off">
+    </div>
+    <div class="field w-sm">
+      <label for="quantity">Quantity</label>
+      <input type="number" id="quantity" min="1" step="1" placeholder="1">
+    </div>
+    <div class="field w-md">
+      <label for="buy-price">Buy price (each)</label>
+      <input type="number" id="buy-price" min="0" step="1" placeholder="0">
+    </div>
+    <div class="field w-md">
+      <label for="sell-price">Sell price (each)</label>
+      <input type="number" id="sell-price" min="0" step="1" placeholder="0">
+    </div>
+    <div class="field w-md">
+      <label for="trade-character">Character</label>
+      <select id="trade-character">
+        <option value="">No character</option>
+        {% for character in characters %}
+        <option value="{{ character.character_id }}">{{ character.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button" onclick="addTrade()">Add trade</button>
+  </div>
+  <div class="status-msg" id="add-status"></div>
+  <p class="hint">
+    {% if characters %}Naming characters happens on your <a href="/profile">profile</a>.
+    {% else %}<a href="/profile">Name your characters</a> to say which account a trade belongs to.{% endif %}
+  </p>
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Trade log</h2>
+      <p class="hint tight">{{ trades | length }} recorded by hand.</p>
+    </div>
+    {% if trades %}
+    <input type="search" class="filter-input" placeholder="Filter trades…"
+           oninput="filterTable(this, 'trades-table')" aria-label="Filter trades">
+    <span class="table-note" id="trades-table-note"></span>
+    {% endif %}
+  </div>
+  {% if trades %}
+  <div class="table-wrap">
+    <table id="trades-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Character</th>
+          <th class="num">Qty</th>
+          <th class="num">Buy</th>
+          <th class="num">Sell</th>
+          <th class="num">Profit</th>
+          <th class="num">ROI</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for trade in trades %}
+        <tr>
+          <td class="name">{{ trade.item_name }}</td>
+          <td>{{ trade.character_name or "—" }}</td>
+          <td class="num">{{ "{:,}".format(trade.quantity) }}</td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(trade.buy_price) }}</td>
+          <td class="num" style="color:var(--sell)">{{ "{:,}".format(trade.sell_price) }}</td>
+          <td class="num {{ 'positive' if trade.profit >= 0 else 'negative' }}">
+            {{ "{:+,}".format(trade.profit) }}
+          </td>
+          <td class="num {{ 'positive' if trade.roi >= 0 else 'negative' }}">{{ "%.1f"|format(trade.roi) }}%</td>
+          <td class="row-actions">
+            <a href="#" class="link-danger" onclick="deleteTrade({{ trade.trade_id }}); return false;">Remove</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>No manual trades recorded yet</strong>
+    Anything the plugin syncs shows up under <a href="/activity">RuneLite Activity</a> instead.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function addTrade() {
+    const itemName = document.getElementById('item-name').value.trim();
+    const quantity = document.getElementById('quantity').value.trim();
+    const buyPrice = document.getElementById('buy-price').value.trim();
+    const sellPrice = document.getElementById('sell-price').value.trim();
+    const characterId = document.getElementById('trade-character').value;
+    if (!itemName || !quantity || !buyPrice || !sellPrice) {
+      setStatus('add-status', 'Fill in the item, quantity and both prices.', 'error');
+      return;
+    }
+    const result = await api('POST', '/api/trades', {
+      item_name: itemName,
+      quantity: Number(quantity),
+      buy_price: Number(buyPrice),
+      sell_price: Number(sellPrice),
+      character_id: characterId ? Number(characterId) : null,
+    });
+    if (!result.ok) {
+      setStatus('add-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function deleteTrade(tradeId) {
+    if (!confirm('Remove this trade from the log?')) { return; }
+    await fetch(`/api/trades/${tradeId}`, { method: 'DELETE' });
+    location.reload();
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% set page_title = "Skilling Profit" %}
+{% set page_sub = "Processing and gathering methods across ten skills, priced off the live market. Rates are community estimates." %}
+
+{% block content %}
+
+<div class="panel">
+  <form method="get" class="form-row">
+    <div class="field" style="min-width:14rem">
+      <label for="character">Character name</label>
+      <input type="text" id="character" name="character" value="{{ character }}"
+             placeholder="For eligibility, optional" autocomplete="off">
+    </div>
+    <button class="button secondary" type="submit">Look up</button>
+  </form>
+  {% if lookup_error %}
+  <div class="status-msg error">{{ lookup_error }}</div>
+  {% elif has_skills %}
+  <div class="status-msg ok">Levels found. Methods you don't have the level for are marked below.</div>
+  {% else %}
+  <p class="hint">Read from the public OSRS hiscores. Nothing is stored.</p>
+  {% endif %}
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Try the refresh button in the header again shortly.
+  </div>
+</div>
+{% else %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Methods</h2>
+      <p class="hint tight">{{ results | length }} priced right now, best hourly profit first.
+        Method names link to the wiki guide.</p>
+    </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
+    {% if results %}
+    <input type="search" class="filter-input" placeholder="Search methods or skills…"
+           oninput="filterTable(this, 'skilling-table')" aria-label="Search methods">
+    <span class="table-note" id="skilling-table-note"></span>
+    {% endif %}
+  </div>
+  {% if results %}
+  {# Scaled to the best method on the page: the useful comparison here is against the other
+     thing you could be doing with the hour, not against an absolute number. #}
+  {% set best_hourly = results | map(attribute="profit_hour") | max %}
+  <div class="table-wrap">
+    <table id="skilling-table" class="table-dense">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Skill</th>
+          <th class="num">Level</th>
+          <th class="num">Profit/action</th>
+          <th class="num">Actions/hr</th>
+          <th class="num">Profit/hr</th>
+          <th>Eligible</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for result in results %}
+        <tr>
+          <td class="name"><a href="{{ result.guide_url }}" target="_blank" rel="noopener">{{ result.name }}</a></td>
+          <td>{{ result.skill }}</td>
+          <td class="num">{{ result.level }}</td>
+          <td class="num {{ 'positive' if result.profit_action >= 0 else 'negative' }}">{{ "{:+,}".format(result.profit_action) }}</td>
+          <td class="num">{{ "{:,}".format(result.actions_hour) }}</td>
+          <td class="num cell-meter {{ 'positive' if result.profit_hour >= 0 else 'negative' }}">
+            {{ "{:+,}".format(result.profit_hour) }}
+            {% if result.profit_hour > 0 and best_hourly > 0 %}
+            <div class="meter good"><span style="--fill: {{ result.profit_hour / best_hourly * 100 }}%"></span></div>
+            {% endif %}
+          </td>
+          <td>
+            {% if result.eligible is none %}<span class="badge">Unknown</span>
+            {% elif result.eligible %}<span class="badge ok">Yes</span>
+            {% else %}<span class="badge bad">No</span>{% endif %}
+          </td>
+          <td class="wrap table-note">{{ result.notes }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>No method currently prices out</strong>
+    Every input and output needs a recent trade to price against, check back once the market
+    refreshes.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set page_title = "RuneLite plugin" %}
+{% set page_sub = "The companion plugin fills your journal in by itself. Here is how to get it." %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Install it</h2>
+    <p>It's on the RuneLite Plugin Hub, so this is a two-minute job inside RuneLite itself.
+      Nothing to download from here, and nothing to build.</p>
+    <ol class="steps">
+      <li><strong>Open RuneLite</strong> the way you normally play.</li>
+      <li><strong>Click the wrench icon</strong> in the sidebar on the right.</li>
+      <li><strong>Scroll to the bottom and click <em>Plugin Hub</em>.</strong></li>
+      <li><strong>Search for <em>OSRS Toolkit Sync</em></strong> and press
+        <strong>Install</strong>.</li>
+    </ol>
+    <p>RuneLite shows a warning before it installs, saying the plugin submits your
+      <strong>IP address</strong> and may submit account data to a server RuneLite doesn't
+      control. That server is this site, and the warning is accurate.
+      <a href="/about">Here's exactly what gets sent, and how long it's kept</a>.</p>
+    <p class="hint">Just merged, so give the Hub a little while if it doesn't turn up in the
+      list yet. RuneLite refreshes its plugin list on its own schedule, and restarting the
+      client is usually enough to hurry it along.</p>
+    <p class="hint">Updates come down through the Hub from now on. You don't have to come back
+      here for them. <a href="{{ plugin_source_url }}" target="_blank" rel="noopener">The source
+      is on GitHub</a> if you want to read what you're installing.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">Turn it on</h2>
+    <ol class="steps">
+      <li><strong>Get a token.</strong>
+        {% if account %}On your <a href="/profile">profile</a>, press <strong>Get a
+        token</strong> and copy it.{% else %}Sign in here first, then on your profile press
+        <strong>Get a token</strong> and copy it.{% endif %}</li>
+      <li><strong>Open the plugin's panel.</strong> It adds its own icon to RuneLite's
+        sidebar (not the wrench) — click it to open <strong>OSRS Toolkit Sync</strong>.</li>
+      <li><strong>Paste the token</strong> into the field there and press <strong>Connect</strong>
+        (or Enter). The panel answers right there: green if the token was accepted, red with
+        what to do if it wasn't.</li>
+      <li><strong>Switch on "Send to OSRS Toolkit Sync".</strong> That's the master switch, in
+        the plugin's settings (the wrench icon). Nothing gets sent before it's on.</li>
+      <li><strong>Pick what to record.</strong> Under <em>What to record</em> you'll find Grand
+        Exchange fills, player trades, gear and bank for PvM Readiness, valuable loot, and
+        deaths. Leave off whatever you don't want tracked.</li>
+    </ol>
+    <p>Play, and your fills will show up under <a href="/activity">RuneLite Activity</a>, with
+      positions opening on the <a href="/">Dashboard</a>. For PvM Readiness, switch on the gear
+      and bank option, then <strong>open your bank in game once</strong>. That's when the
+      snapshot gets taken.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="prose">
+    <h2 style="margin-top:0">If nothing arrives</h2>
+    <ul>
+      <li>Your Dashboard says <strong>Idle</strong> when the token is saved but nothing's being
+        sent. Either RuneLite's closed, or the master switch is off.</li>
+      <li>The plugin's sidebar panel says whether a pairing token was accepted, right when you
+        paste it in.</li>
+      <li>Events are not lost when the service is unreachable. They queue in
+        <code>.runelite/osrs-toolkit/events</code> and go out when it is back.</li>
+      <li>Still stuck? <a href="/help">How to reach me</a>.</li>
+    </ul>
+  </div>
+</div>
+
+{% endblock %}

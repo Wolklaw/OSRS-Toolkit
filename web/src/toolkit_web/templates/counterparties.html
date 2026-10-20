@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% set page_title = "Trading Partners" %}
+{% set page_sub = "Every player trade, grouped by who it was with. Lifetime, not just the last 90 days." %}
+
+{% block content %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Counterparties</h2>
+      <p class="hint tight">{{ rows | length }} {{ 'person' if rows | length == 1 else 'people' }} you have traded with.</p>
+    </div>
+    {% if rows %}
+    <input type="search" class="filter-input" placeholder="Filter…"
+           oninput="filterTable(this, 'counterparties-table')" aria-label="Filter counterparties">
+    <span class="table-note" id="counterparties-table-note"></span>
+    {% endif %}
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+    <table id="counterparties-table" class="table-dense">
+      <thead>
+        <tr>
+          <th>Player</th>
+          <th class="num">Trades</th>
+          <th class="num">Given</th>
+          <th class="num">Received</th>
+          <th class="num">Net</th>
+          <th>Last traded</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name">{{ row.counterparty }}</td>
+          <td class="num">{{ row.trade_count }}</td>
+          <td class="num">{{ "{:,}".format(row.given_value) }}</td>
+          <td class="num">{{ "{:,}".format(row.received_value) }}</td>
+          <td class="num {{ 'positive' if row.net >= 0 else 'negative' }}">{{ "{:+,}".format(row.net) }}</td>
+          <td style="white-space:nowrap">{{ row.last_traded_at[:16].replace("T", " ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>No player trades recorded yet</strong>
+    {% if account.paired %}
+    Trade with someone in game and it appears here the next time this page loads.
+    {% else %}
+    <a href="/profile">Connect the RuneLite plugin</a> and player trades arrive on their own.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

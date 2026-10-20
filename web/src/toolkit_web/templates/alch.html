@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% set page_title = "Alch Finder" %}
+{% set page_sub = "High Alchemy candidates priced off recent trades, within buy limits and your cash. Profit is after the nature rune." %}
+
+{% block content %}
+
+<div class="panel">
+  <form method="get" class="form-row">
+    <div class="field w-md">
+      <label for="cash-stack">Cash stack</label>
+      <input type="number" id="cash-stack" name="cash_stack" value="{{ cash_stack }}" min="10000" step="100000">
+    </div>
+    <div class="field w-md">
+      <label for="policy">Policy</label>
+      <select id="policy" name="policy">
+        {% for option in policies %}
+        <option value="{{ option }}" {% if option == policy %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field w-sm">
+      <label for="magic-level">Magic level</label>
+      <input type="number" id="magic-level" name="magic_level" min="1" max="99"
+             value="{{ magic_level if magic_level is not none else '' }}" placeholder="Optional">
+    </div>
+    <button class="button" type="submit">Update</button>
+  </form>
+  <p class="hint">High Alchemy needs Magic 55. Give your level and anything you cannot cast
+    yet is marked.</p>
+</div>
+
+{% if market_unavailable %}
+<div class="panel">
+  <div class="empty">
+    <strong>Live prices couldn't be reached just now</strong>
+    Try the refresh button in the header again shortly.
+  </div>
+</div>
+{% else %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Candidates</h2>
+      <p class="hint tight">Ranked by what an hour is worth. Safe quantity is the smallest of
+        1,200 casts, the four-hour buy limit, what your cash buys, and this policy's share of
+        the hour's volume.</p>
+    </div>
+    <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
+    {% if candidates %}
+    <input type="search" class="filter-input" placeholder="Search items…"
+           oninput="filterTable(this, 'alch-table')" aria-label="Search items">
+    <span class="table-note" id="alch-table-note"></span>
+    {% endif %}
+  </div>
+  {% if candidates %}
+  {# Bars are drawn against the best row on the page, not an absolute ceiling: "how does this
+     compare with the best thing I could be alching" is the question this table answers. #}
+  {% set best_hourly = candidates | map(attribute="hourly_profit") | max %}
+  <div class="table-wrap">
+    <table id="alch-table" class="table-dense">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Buy</th>
+          <th class="num">Alch value</th>
+          <th class="num">Profit/cast</th>
+          <th class="num">Safe qty</th>
+          <th class="num">Capital</th>
+          <th class="num">Hourly profit</th>
+          <th class="num">ROI</th>
+          <th>Castable</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for candidate in candidates %}
+        <tr>
+          <td class="name"><a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a></td>
+          <td class="num" style="color:var(--buy)">{{ "{:,}".format(candidate.buy_price) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.alch_value) }}</td>
+          <td class="num {{ 'positive' if candidate.profit >= 0 else 'negative' }}">{{ "{:+,}".format(candidate.profit) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.safe_quantity) }}</td>
+          <td class="num">{{ "{:,}".format(candidate.capital_required) }}</td>
+          <td class="num cell-meter positive">
+            {{ "{:+,}".format(candidate.hourly_profit) }}
+            <div class="meter good">
+              <span style="--fill: {{ (candidate.hourly_profit / best_hourly * 100) if best_hourly else 0 }}%"></span>
+            </div>
+          </td>
+          <td class="num">{{ "%.1f"|format(candidate.roi) }}%</td>
+          <td>
+            {% if candidate.eligible is none %}<span class="badge">Unknown</span>
+            {% elif candidate.eligible %}<span class="badge ok">Yes</span>
+            {% else %}<span class="badge bad">No</span>{% endif %}
+          </td>
+          <td class="row-actions">
+            <button class="button ghost small"
+                    onclick="toggleWatch({{ candidate.item_id }}, this)">{{ "Watching" if candidate.item_id in watched_ids else "Watch" }}</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing clears this policy's bar right now</strong>
+    A looser policy, or a bigger cash stack, will widen the field.
+  </div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function toggleWatch(itemId, button) {
+    const watching = button.textContent.trim() === 'Watching';
+    const result = watching
+      ? await api('DELETE', `/api/watchlist/${itemId}`)
+      : await api('POST', '/api/watchlist', { item_id: itemId });
+    if (!result.ok) {
+      toast(result.error, 'error');
+      return;
+    }
+    button.textContent = watching ? 'Watch' : 'Watching';
+  }
+</script>
+{% endblock %}

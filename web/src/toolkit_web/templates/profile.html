@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% set page_title = "Profile" %}
+{% set page_sub = "Your account, the plugin it reads from, and the data it holds." %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="row" style="gap:0.9rem">
+      {% if account.avatar %}
+      <img src="{{ account.avatar }}" alt="" style="width:52px;height:52px;border-radius:50%;border:1px solid var(--border)">
+      {% else %}
+      <span class="initial" style="width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:1.3rem;font-weight:700">{{ account.username[:1] | upper }}</span>
+      {% endif %}
+      <div>
+        <h2>{{ account.username }}</h2>
+        <p class="hint tight">
+          {% if is_recovery_account %}Signed in with a recovery code{% else %}Signed in with Discord{% endif %}
+          · joined {{ account.created_at[:10] }}
+        </p>
+      </div>
+    </div>
+    <div class="page-actions">
+      <button class="button secondary small" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+
+  {% if is_recovery_account %}
+  <div class="form-row" style="margin-top:0.6rem">
+    <div class="field" style="min-width:14rem">
+      <label for="display-name">Display name</label>
+      <input type="text" id="display-name" value="{{ account.username }}" maxlength="40" autocomplete="off">
+    </div>
+    <button class="button secondary" onclick="saveDisplayName()">Save name</button>
+  </div>
+  <div class="status-msg" id="name-status"></div>
+  <div class="callout" style="margin-top:0.9rem">
+    <strong>Your recovery code is the only way back in.</strong>
+    <p>It was shown once, when this account was created, and only a hash of it is kept here.
+      Lose it and this journal cannot be reached from another device.</p>
+  </div>
+  {% else %}
+  <p class="hint">Your name and avatar come from Discord and refresh on every sign-in. That is
+    all RuneScope asks Discord for.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>RuneLite plugin</h2>
+      <p class="hint tight">The companion plugin sends your fills, live offer slots, bank and
+        gear. Everything works without it; you just type more.</p>
+    </div>
+    {#
+      Three states, not two. "A token is saved" is not "something is arriving", and showing
+      the first as the second is what let the dashboard claim a live plugin with the game shut.
+    #}
+    {% set badge_labels = 'data-plugin-badge data-label-live="Sending now" data-label-idle="Idle, nothing arriving" data-label-unreachable="Sync service not answering"' %}
+    {% if plugin_state == "live" %}<span class="badge ok" {{ badge_labels|safe }}>Sending now</span>
+    {% elif plugin_state == "idle" %}<span class="badge" {{ badge_labels|safe }}>Idle, nothing arriving</span>
+    {% elif plugin_state == "unreachable" %}<span class="badge bad" {{ badge_labels|safe }}>Sync service not answering</span>
+    {% else %}<span class="badge">Not connected</span>{% endif %}
+  </div>
+
+  <div class="row">
+    <button class="button {{ 'secondary' if account.paired else '' }}" onclick="generatePairingToken()">
+      {{ "Replace token" if account.paired else "Get a token" }}
+    </button>
+    {% if account.paired %}
+    <button class="button danger small" onclick="disconnectPlugin()">Disconnect</button>
+    {% endif %}
+  </div>
+  {% if account.paired %}
+  <p class="hint">A new token replaces the old one, so the plugin needs it re-pasted wherever
+    it's currently connected.</p>
+  {% endif %}
+  <div id="generated-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-token', this)">Copy</button>
+    </div>
+  </div>
+  <div class="status-msg" id="generate-status"></div>
+
+  {% if plugin_state == "idle" %}
+  <p class="hint">A token is saved, but nothing is being sent. Either RuneLite is closed, or
+    <strong>Send to OSRS Toolkit Sync</strong> is switched off.</p>
+  {% elif plugin_state == "unreachable" %}
+  <p class="hint">The sync service did not answer just now. Nothing is lost: the plugin holds
+    events until it is back.</p>
+  {% endif %}
+  <p class="hint"><a href="/plugin">How to install and switch on the plugin</a></p>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Price alerts</h2>
+      <p class="hint tight">A webhook URL from a Discord channel's Integrations settings, posted
+        to when a watched item crosses a target price you set on the <a href="/watchlist">Watchlist</a>.</p>
+    </div>
+  </div>
+  <div class="row">
+    <input type="text" id="discord-webhook" placeholder="https://discord.com/api/webhooks/…"
+           autocomplete="off" style="max-width:420px"
+           value="{{ account.discord_webhook_url or '' }}">
+    <button class="button secondary" onclick="saveDiscordWebhook()">Save</button>
+    {% if account.discord_webhook_url %}
+    <button class="button danger small" onclick="clearDiscordWebhook()">Remove</button>
+    {% endif %}
+  </div>
+  <div class="status-msg" id="webhook-status"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Desktop app</h2>
+      <p class="hint tight">Points the Windows app at this account, so its journal mirrors
+        this one and it reads your live Grand Exchange state from here. This is its own token,
+        separate from the plugin's above. Don't have the app?
+        <a href="/download">Download it</a>.</p>
+    </div>
+  </div>
+
+  <div class="row">
+    <input type="text" id="desktop-token-label" placeholder="Label (e.g. this PC)" autocomplete="off" style="max-width:220px">
+    <button class="button" onclick="generateDesktopToken()">Get a token</button>
+  </div>
+  <div id="generated-desktop-token-box" style="display:none">
+    <div class="code-box">
+      <code id="generated-desktop-token"></code>
+      <button class="button secondary small" onclick="copyValue('generated-desktop-token', this)">Copy</button>
+    </div>
+  </div>
+  <div class="status-msg" id="desktop-token-status"></div>
+
+  {% if desktop_tokens %}
+  <table style="margin-top:0.9rem">
+    <thead><tr><th>Label</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+    <tbody>
+      {% for token in desktop_tokens %}
+      <tr>
+        <td>{{ token.label }}</td>
+        <td>{{ token.created_at[:10] }}</td>
+        <td>{{ token.last_used_at[:10] if token.last_used_at else "Never" }}</td>
+        <td><button class="button danger small" onclick="revokeDesktopToken('{{ token.id }}')">Revoke</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <p class="hint">Paste it into the desktop app's <strong>Settings → Website</strong> tab.
+    <a href="/download">Get the app and set it up</a></p>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <h2>Synced characters</h2>
+    <p class="hint tight">Every RuneLite account seen playing through your token. Switch
+      between them in the header.</p>
+    {% if synced_characters %}
+    <div class="row" style="margin-top:0.8rem">
+      {% for character in synced_characters %}
+      <span class="chip" style="padding-right:0.75rem">
+        {{ character.account_name or (character.account_hash[:8] + '…') }}
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty" style="padding:1.1rem 0">
+      Nothing yet. Log in to the game with the plugin connected and your character will show up here.
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Named characters</h2>
+    <p class="hint tight">Labels for attributing a manual trade to one of your accounts. No
+      plugin needed.</p>
+    <div class="row" style="margin-top:0.8rem">
+      <input type="text" id="character-name" placeholder="Character name" autocomplete="off" style="max-width:190px"
+             onkeydown="if (event.key === 'Enter') { addCharacter(); }">
+      <button class="button secondary" onclick="addCharacter()">Add</button>
+    </div>
+    <div class="status-msg" id="character-status"></div>
+    {% if characters %}
+    <div class="row" style="margin-top:0.6rem">
+      {% for character in characters %}
+      <span class="chip">
+        {{ character.name }}
+        <a href="#" onclick="deleteCharacter({{ character.character_id }}); return false;" aria-label="Remove {{ character.name }}">&times;</a>
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Your data</h2>
+      <p class="hint tight">Everything RuneScope holds for this account, and how to take it with you.</p>
+    </div>
+    <a class="button secondary small" href="/api/export.csv">Export CSV</a>
+  </div>
+  <div class="stats" style="margin-bottom:0.9rem">
+    <div class="stat">
+      <div class="label">Positions</div>
+      <div class="value">{{ position_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Manual trades</div>
+      <div class="value">{{ trade_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Watched items</div>
+      <div class="value">{{ watchlist_count }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Savings goal</div>
+      <div class="value" style="font-size:1.05rem">{{ account.goal_label if account.has_goal else "None set" }}</div>
+      <div class="foot"><a href="/savings-goal">{{ "Review it" if account.has_goal else "Set one" }}</a></div>
+    </div>
+  </div>
+  <p class="hint">One database file on this server per account. The CSV export is the whole
+    journal, positions and manual trades both, in a format a spreadsheet opens.
+    <a href="/about">What is stored</a>.</p>
+  <hr style="margin:1rem 0;border-color:var(--border)">
+  <p class="hint tight"><strong>Delete everything.</strong> Removes your journal, watchlist,
+    named characters, saved tokens and this account. Unpairs the plugin first, so nothing it
+    already sent is left waiting for an account that no longer exists. There is no undo — export
+    first if you want to keep anything.</p>
+  <button class="button danger small" style="margin-top:0.5rem" onclick="deleteAccount()">Delete my account and data</button>
+</div>
+
+<div class="panel">
+  <h2>Appearance</h2>
+  <p class="hint tight">The theme button in the header cycles between following your system,
+    dark, and light. Your choice is kept in this browser, not on the server.</p>
+  <div class="row" style="margin-top:0.8rem">
+    <button class="button secondary small" onclick="setTheme('system')">Match system</button>
+    <button class="button secondary small" onclick="setTheme('dark')">Dark</button>
+    <button class="button secondary small" onclick="setTheme('light')">Light</button>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function setTheme(choice) {
+    try {
+      if (choice === 'system') { localStorage.removeItem('runescope-theme'); }
+      else { localStorage.setItem('runescope-theme', choice); }
+    } catch (e) { /* storage denied — the switch still applies to this page */ }
+    if (choice === 'system') { document.documentElement.removeAttribute('data-theme'); }
+    else { document.documentElement.setAttribute('data-theme', choice); }
+    toast(choice === 'system' ? 'Theme follows your system setting.' : 'Theme set to ' + choice + '.', 'ok');
+  }
+
+  async function saveDisplayName() {
+    const username = document.getElementById('display-name').value.trim();
+    if (!username) { return; }
+    const result = await api('PATCH', '/api/me', { username });
+    if (!result.ok) {
+      setStatus('name-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function generatePairingToken() {
+    // Replacing retires the old token, which is what keeps exactly one working at a time --
+    // and it means the plugin stops syncing the moment this is pressed, until the new token
+    // is pasted in. Worth one confirm: pressing it and walking away used to look identical
+    // to it having worked.
+    if ({{ 'true' if account.paired else 'false' }}) {
+      const ok = confirm(
+        'This replaces your current token and switches the old one off.\n\n'
+        + 'RuneLite will stop syncing until you paste the new one into the plugin. Continue?'
+      );
+      if (!ok) { return; }
+    }
+    setStatus('generate-status', 'Generating…');
+    const result = await api('POST', '/api/pairing-token/generate');
+    if (!result.ok) {
+      setStatus('generate-status', result.error, 'error');
+      return;
+    }
+    document.getElementById('generated-token').textContent = result.data.token;
+    document.getElementById('generated-token-box').style.display = 'block';
+    const retired = result.data.previous_revoked
+      ? ' Your previous token no longer works.'
+      : '';
+    setStatus(
+      'generate-status', "Paste this into the plugin's sidebar panel." + retired, 'ok');
+  }
+
+  async function disconnectPlugin() {
+    if (!confirm("Disconnect the plugin? Nothing already imported is deleted, new events just stop arriving.")) { return; }
+    await api('DELETE', '/api/pairing-token');
+    location.reload();
+  }
+
+  async function saveDiscordWebhook() {
+    const url = document.getElementById('discord-webhook').value.trim();
+    if (!url) { return; }
+    setStatus('webhook-status', 'Checking…');
+    const result = await api('PUT', '/api/discord-webhook', { url });
+    if (!result.ok) {
+      setStatus('webhook-status', result.error, 'error');
+      return;
+    }
+    setStatus('webhook-status', 'Saved.', 'ok');
+    setTimeout(() => location.reload(), 600);
+  }
+
+  async function clearDiscordWebhook() {
+    if (!confirm("Remove your Discord webhook? Alerts you've set won't notify you until you add a new one.")) { return; }
+    await api('DELETE', '/api/discord-webhook');
+    location.reload();
+  }
+
+  async function generateDesktopToken() {
+    const label = document.getElementById('desktop-token-label').value.trim();
+    setStatus('desktop-token-status', 'Generating…');
+    const result = await api('POST', '/api/desktop-tokens', { label });
+    if (!result.ok) {
+      setStatus('desktop-token-status', result.error, 'error');
+      return;
+    }
+    document.getElementById('generated-desktop-token').textContent = result.data.token;
+    document.getElementById('generated-desktop-token-box').style.display = 'block';
+    setStatus(
+      'desktop-token-status',
+      "Copy this now, it won't be shown again. Paste it into the desktop app.",
+      'ok'
+    );
+  }
+
+  async function revokeDesktopToken(tokenId) {
+    if (!confirm('Revoke this token? The desktop app using it stops syncing until a new one is entered.')) { return; }
+    await api('DELETE', `/api/desktop-tokens/${tokenId}`);
+    location.reload();
+  }
+
+  async function addCharacter() {
+    const name = document.getElementById('character-name').value.trim();
+    if (!name) { return; }
+    const result = await api('POST', '/api/characters', { name });
+    if (!result.ok) {
+      setStatus('character-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function deleteCharacter(characterId) {
+    if (!confirm('Remove this character? Trades already logged under it are kept, just unlabeled.')) { return; }
+    await api('DELETE', `/api/characters/${characterId}`);
+    location.reload();
+  }
+
+  async function deleteAccount() {
+    const typed = prompt(
+      'This deletes your journal, watchlist, characters, tokens and this account. '
+      + 'It cannot be undone.\n\nType DELETE to confirm.'
+    );
+    if (typed !== 'DELETE') { return; }
+    await api('POST', '/api/account/delete');
+    location.href = '/';
+  }
+</script>
+{% endblock %}
