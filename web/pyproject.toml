@@ -8,18 +8,22 @@ version = "0.1.0"
 description = "Web front end for OSRS Toolkit — the companion to the OSRS Toolkit RuneLite plugin."
 readme = "README.md"
 requires-python = ">=3.12"
-# osrs-toolkit supplies journal.py, ranking.py and the rest of the domain layer. It is not on
-# PyPI, so it is pinned to a commit in its own repository — that way a fresh clone of this repo
-# installs into something that actually runs, rather than importing a package nobody declared.
-# It is pinned to a commit rather than to a release tag on purpose: the desktop releases version
-# the Windows installer, and the domain layer this app needs regularly runs ahead of the newest
-# one. Bumping this line is how the domain layer moves, and it shows up in review as a diff.
-# No "gui" extra here keeps PySide6 out of this environment entirely.
+# osrs-toolkit -- journal.py, ranking.py and the rest of the domain layer -- is deliberately
+# not listed here. It lives in this same repository now, one directory up, so it is installed
+# from the checkout rather than fetched:
 #
-# Working on both repos at once? Install the sibling editable afterwards and it takes precedence:
-#   .venv/bin/pip install -e "../OSRS Toolkit"
+#   pip install -e .        (from the repository root, the domain layer)
+#   pip install -e web      (this app)
+#
+# It used to be a git dependency pinned to a commit, from back when the two were separate
+# repositories. That pin had to be bumped by hand every time the domain layer moved -- eleven
+# times in eight weeks, several of them commits that did nothing else -- and until it was
+# bumped the site ran against a domain layer older than the one the desktop app had. Neither
+# is possible now: one commit changes both halves.
+#
+# PySide6 still never enters this environment; it is the root project's "gui" extra, and
+# nothing here asks for it.
 dependencies = [
-    "osrs-toolkit @ git+https://github.com/Wolklaw/OSRS-Toolkit@b4d730884f67e02b3176d782203160c840b614e3",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "itsdangerous>=2.2",

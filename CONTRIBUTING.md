@@ -5,6 +5,19 @@ layer with [runescope.app](https://runescope.app) — the primary product now, s
 features (anything beyond the existing pages here) should land there first. Bug reports and
 focused pull requests on this desktop app are both welcome.
 
+## What is in this repository
+
+| | |
+|---|---|
+| `src/osrs_toolkit/` | The domain layer — journal, market, ranking, performance, PvM — and the PySide6 desktop app on top of it |
+| `web/` | [runescope.app](https://runescope.app): FastAPI and Jinja, importing that same domain layer |
+| `tests/`, `web/tests/` | One suite each; both run on every change |
+
+The website used to be its own repository, installing the domain layer as a git dependency
+pinned to a commit. That pin had to be bumped by hand whenever the domain layer moved, and
+until it was, the site ran against older domain code than the desktop app did. They are one
+repository now, so a single commit changes both and neither can drift from the other.
+
 ## Setting up
 
 ```powershell
@@ -19,6 +32,13 @@ The editable install puts the launcher on your path, so run the app with:
 osrs-toolkit
 ```
 
+Working on the website as well? Add it to the same environment — see
+[web/README.md](web/README.md):
+
+```powershell
+pip install -e "web[dev]"
+```
+
 ## Before opening a pull request
 
 ```bash
@@ -27,7 +47,14 @@ ruff check .
 ruff format --check .
 ```
 
-All three must pass. Tests live in `tests/` and run without network access or a real GE account —
+All three must pass. If you touched the domain layer, run the website's suite too — it imports
+the same code, and this is where a change that quietly breaks it now shows up:
+
+```bash
+cd web && pytest && ruff check . && ruff format --check .
+```
+
+Tests live in `tests/` and `web/tests/`, and run without network access or a real GE account —
 market responses are stubbed, so a failing test always means a real behavior change, not a
 quiet market. Keep it that way; anything that fetches from the OSRS Wiki API belongs behind a
 stub.

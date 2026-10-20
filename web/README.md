@@ -55,25 +55,20 @@ account — loopback in the deployed setup, and skipped entirely for an account 
 
 ## Running it
 
+Both halves install from this one checkout — run these from the repository root, not from
+`web/`:
+
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-python -m toolkit_web
+.venv/bin/pip install -e . -e "web[dev]"
+.venv/bin/python -m toolkit_web
 ```
 
-That is the whole setup. The domain layer comes down with it — `pyproject.toml` pins
-`osrs-toolkit` to a commit in its own repository, so there is nothing to clone by hand and no
-way to end up with a checkout that imports a package that was never installed.
-
-If you are changing the domain layer and this app together, install the sibling editable
-afterwards and it takes precedence for the rest of that session:
-
-```bash
-.venv/bin/pip install -e "../OSRS Toolkit"
-```
-
-When that work lands, bump the pinned commit in `pyproject.toml` — that is the one step that
-makes the change real for everyone else.
+That is the whole setup. The first install is the domain layer (`journal.py`, `ranking.py`,
+`sync_source.py` and the rest, in `src/osrs_toolkit`), the second is this app. Both are
+editable, so changing either is immediately live in the other — there is no pin to bump and no
+step that makes a domain change "real for everyone else" afterwards. PySide6 is not pulled in;
+the desktop GUI is the root project's `gui` extra, which nothing here asks for.
 
 Listens on `127.0.0.1:8100` by default and speaks plain HTTP — put a tunnel or reverse proxy in
 front of it for anything reachable from outside the machine, the same as the sync service.

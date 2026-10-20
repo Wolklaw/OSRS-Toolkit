@@ -16,7 +16,7 @@ everything; it is nothing the site depends on, and it has its own section below.
 | | |
 |---|---|
 | Web app | `~/osrs-web`, unit `toolkit-web.service`, listening on `127.0.0.1:8100` |
-| Domain layer | No checkout of its own — pip installs it from the commit pinned in `pyproject.toml` |
+| Domain layer | The same checkout, one directory up — `~/osrs-web` is the whole OSRS Toolkit repo |
 | Sync service | `~/osrs-sync`, unit `osrs-sync.service`, listening on `127.0.0.1:8000` |
 | Tunnel | `cloudflared.service`, config at `~/.cloudflared/config.yml` |
 | Console | `cockpit.socket`, listening on `127.0.0.1:9090` — a **system** unit, see below |
@@ -54,50 +54,63 @@ The hostname `wolkhost` is what the machine calls itself, not something every cl
 the Windows machine only has `192.168.0.172` in its `~/.ssh/config`, so that is what works from
 there.
 
-This repo is an editable install, so a pull is normally the whole deploy. Re-run
-`~/osrs-web/.venv/bin/pip install -e .` when `pyproject.toml` changed at all — that now includes
-the pinned domain layer, not just the third-party dependencies.
+Both halves are editable installs out of this one checkout, so a pull is normally the whole
+deploy — including a domain-layer change, which now arrives in the same pull as the page that
+needs it. Re-run the installs only when a `pyproject.toml` changed:
+
+```bash
+~/osrs-web/.venv/bin/pip install -e ~/osrs-web
+~/osrs-web/.venv/bin/pip install -e ~/osrs-web/web
+```
 
 ### When the domain layer moved too
 
-The web app has no domain layer of its own — it imports `journal.py`, `ranking.py`,
-`sync_source.py` and the rest from `osrs-toolkit`, which pip installs from the commit pinned in
-`pyproject.toml`. There is no second checkout on the laptop to keep in step, and no branch to
-get wrong. A domain-layer change reaches production by bumping that pin and pulling here:
+Nothing extra to do, and that is the point of the merge: the domain layer arrives in the same
+pull as the page that needs it. It used to live in its own repository, pinned to a commit in
+this app's `pyproject.toml`, and moving it meant bumping that pin, pulling, then uninstalling
+`osrs-toolkit` before reinstalling -- because pip treats a direct-URL requirement as satisfied
+by *anything* of that name already installed, pinned commit or not. On 2026-08-23 that left
+commit `d43bc56` installed against a pin of `e0b8f72` for two deploys running.
 
-```bash
-cd ~/osrs-web && git pull --ff-only
-~/osrs-web/.venv/bin/pip uninstall -y osrs-toolkit
-~/osrs-web/.venv/bin/pip install -e .
-systemctl --user restart toolkit-web
-```
-
-**The uninstall is the step that matters, and `--upgrade` is not a substitute for it.** This
-note used to say it was, and it is not: `osrs-toolkit` is a direct-URL requirement, so pip
-checks whether *something* named `osrs-toolkit` is installed, sees that something is, and
-leaves it alone — pinned commit or not. On 2026-08-23 that had left commit `d43bc56` installed
-against a pin of `e0b8f72` for two commits' worth of deploys. Uninstalling first is what forces
-the resolve.
-
-Confirm the pin actually took, rather than trusting pip's summary line, which happily reports
-success after changing nothing:
-
-```bash
-cat ~/osrs-web/.venv/lib/python3.14/site-packages/osrs_toolkit-*.dist-info/direct_url.json
-```
-
-The `commit_id` in there must match the pin in `pyproject.toml`.
-
-**A stale domain layer does not fail at import.** This note used to claim it did, and that the
-service would enter a restart loop and serve nothing — which would at least be obvious. What
-actually happens is that every page renders fine and one endpoint 500s on a method that is not
-there yet. The stale layer above cost `/api/journal/version` — the desktop app's once-a-minute
-mirror poll — for as long as nobody read the log. The import check is still worth running, but
-it proves less than it looks like it does:
+The reason that history is kept here rather than deleted is what it cost. **A stale domain
+layer did not fail at import.** Every page rendered fine and exactly one endpoint 500d on a
+method that was not there yet -- `/api/journal/version`, the desktop app's once-a-minute mirror
+poll -- for as long as nobody read the log. One checkout cannot drift against itself, so that
+particular trap is gone, but a pull that did not restart the service fails the same quiet way.
+Which is why the `journalctl` check below is not optional garnish, and why this import check
+proves less than it looks like it does:
 
 ```bash
 ~/osrs-web/.venv/bin/python -c "from toolkit_web.app import create_app; print('ok')"
 ```
+
+### Moving the laptop onto the merged repo
+
+One time only. `~/osrs-web` was a checkout of `osrs-toolkit-web`; the web app is now a
+directory inside the `OSRS-Toolkit` repository, so the remote changes and the venv needs the
+domain layer re-pointed at the checkout instead of at a fetched commit. The service keeps
+running off the old checkout until the restart, so this can be done unhurried.
+
+```bash
+cd ~/osrs-web
+git remote set-url origin https://github.com/Wolklaw/OSRS-Toolkit.git
+git fetch origin
+git checkout main && git reset --hard origin/main
+.venv/bin/pip uninstall -y osrs-toolkit osrs-toolkit-web
+.venv/bin/pip install -e ~/osrs-web -e ~/osrs-web/web
+systemctl --user restart toolkit-web
+```
+
+The uninstall is what drops the git-fetched copy of `osrs-toolkit` out of site-packages; skip
+it and the venv keeps importing the pinned clone instead of the checkout, which is the exact
+silent-staleness failure described above. Confirm it took:
+
+```bash
+.venv/bin/python -c "import osrs_toolkit, pathlib, inspect; print(pathlib.Path(inspect.getfile(osrs_toolkit)).parent)"
+```
+
+It must print a path under `~/osrs-web/src`. Anything mentioning `site-packages` means the
+fetched copy is still winning.
 
 ### Confirming it worked
 
