@@ -57,6 +57,36 @@ def test_ranker_expands_position_budget_when_only_one_slot_is_available() -> Non
     assert one_slot[0].capital_required == 1_000_000
 
 
+def test_a_stack_above_the_old_cash_cap_stays_exact() -> None:
+    """The Grand Exchange no longer stops a cash stack at 2,147,483,647, and none of this
+    ever modelled that cap -- so what matters is that the arithmetic stays exact and the
+    buy limit, not the size of the stack, is still what sizes the position."""
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Big stack item", True, 10_000, None)}
+    point = MarketPoint(
+        1,
+        120,
+        100,
+        now - 60,
+        now - 60,
+        20_000,
+        100_000,
+        110,
+        110,
+        average_high_5m=120,
+        average_low_5m=100,
+        average_high_1h=120,
+        average_low_1h=100,
+    )
+
+    ranked = rank_flips(mappings, [point], cash_stack=9_000_000_000, slot_count=1, now=now)
+    planned = plan_flip_portfolio(ranked, 9_000_000_000, slot_count=1)
+
+    assert ranked[0].suggested_quantity == 10_000
+    assert ranked[0].capital_required == 1_000_000
+    assert planned[0].capital_required == 1_000_000
+
+
 def test_ranker_expands_liquidity_allowance_for_one_slot() -> None:
     now = 2_000_000
     mappings = {1: ItemMapping(1, "Ogre arrow", True, 10_000, None)}

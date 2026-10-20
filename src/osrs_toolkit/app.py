@@ -16,6 +16,7 @@ from PySide6.QtCore import (
     QModelIndex,
     QObject,
     QSettings,
+    QSize,
     QStringListModel,
     Qt,
     QThread,
@@ -33,9 +34,11 @@ from PySide6.QtGui import (
     QIcon,
     QKeySequence,
     QShortcut,
+    QValidator,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -1076,6 +1079,191 @@ class RuneLiteConnectionDialog(QDialog):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.importer.sync_root)))
 
 
+# The Grand Exchange no longer stops a cash stack at 2,147,483,647, but QSpinBox always
+# will: its value is a C++ int, so setMaximum() cannot even be told about a larger amount.
+# A GP field has to keep a Python int instead, which leaves the journal's SQLite columns as
+# the only real ceiling -- a signed 64-bit integer.
+GP_FIELD_MAXIMUM = 2**63 - 1
+
+# Wide enough to read a trillion-gp stack and its separators. The range cannot be used to
+# pick a field width any more, because it deliberately no longer describes a reachable
+# amount, and QAbstractSpinBox otherwise sizes itself to whatever it happens to hold.
+_GP_FIELD_SAMPLE = 9_999_999_999_999
+
+
+def _gp_digits(text: str, suffix: str) -> str | None:
+    """The digits of a typed GP amount: "" for an empty field, None if it is not one.
+
+    Separators and the suffix the field writes itself are accepted, so a formatted amount
+    can be typed straight over. So is a half-deleted suffix: backspacing at the end of
+    "1,000 gp" eats the "p" first, and refusing that keystroke would trap the caret behind
+    a suffix the user has no way to remove.
+    """
+    body = text.strip()
+    tail = suffix.strip()
+    for length in range(len(tail), 0, -1):
+        if body.endswith(tail[:length]):
+            body = body[:-length]
+            break
+    body = body.replace(",", "").replace(" ", "")
+    if not body:
+        return ""
+    return body if body.isdecimal() else None
+
+
+class GpSpinBox(QAbstractSpinBox):
+    """A spin box for GP amounts, without QSpinBox's 32-bit ceiling on the value.
+
+    Reimplements the slice of the QSpinBox API a GP field in this app is asked for, and
+    keeps thousands separators on always: judging the magnitude of a ten-digit amount at a
+    glance is the whole point of the widget.
+    """
+
+    valueChanged = Signal("qlonglong")
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._minimum = 0
+        self._maximum = GP_FIELD_MAXIMUM
+        self._single_step = 1
+        self._suffix = ""
+        self._value = 0
+        self.lineEdit().textEdited.connect(self._text_edited)
+        self.editingFinished.connect(self._commit)
+        self._display()
+
+    def value(self) -> int:
+        return self._value
+
+    def setValue(self, value: int) -> None:
+        self._take(int(value))
+        self._display()
+
+    def setRange(self, minimum: int, maximum: int) -> None:
+        self._minimum = int(minimum)
+        self._maximum = min(int(maximum), GP_FIELD_MAXIMUM)
+        self.setValue(self._value)
+
+    def setSingleStep(self, step: int) -> None:
+        self._single_step = max(1, int(step))
+
+    def setSuffix(self, suffix: str) -> None:
+        self._suffix = suffix
+        self._display()
+
+    def minimum(self) -> int:
+        return self._minimum
+
+    def maximum(self) -> int:
+        return self._maximum
+
+    def validate(self, text: str, position: int) -> object:
+        digits = _gp_digits(text, self._suffix)
+        if digits is None:
+            return QValidator.State.Invalid, text, position
+        if not digits or int(digits) < self._minimum:
+            # Mid-entry: the "5" on the way to "50,000,000" is below any sane floor.
+            return QValidator.State.Intermediate, text, position
+        return QValidator.State.Acceptable, text, position
+
+    def fixup(self, text: str) -> str:
+        digits = _gp_digits(text, self._suffix)
+        return self._formatted(self._clamped(int(digits)) if digits else self._value)
+
+    def stepBy(self, steps: int) -> None:
+        self.setValue(self._value + steps * self._single_step)
+
+    def stepEnabled(self) -> QAbstractSpinBox.StepEnabledFlag:
+        enabled = QAbstractSpinBox.StepEnabledFlag.StepNone
+        if self._value > self._minimum:
+            enabled |= QAbstractSpinBox.StepEnabledFlag.StepDownEnabled
+        if self._value < self._maximum:
+            enabled |= QAbstractSpinBox.StepEnabledFlag.StepUpEnabled
+        return enabled
+
+    def focusOutEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        # editingFinished covers Enter, but an entry still below the minimum only ever
+        # validates as Intermediate and never emits it, so clicking away is handled here.
+        self._commit()
+        super().focusOutEvent(event)
+
+    def sizeHint(self) -> QSize:
+        return self._widened(super().sizeHint())
+
+    def minimumSizeHint(self) -> QSize:
+        return self._widened(super().minimumSizeHint())
+
+    def _widened(self, base: QSize) -> QSize:
+        """``base`` plus room for the amount itself.
+
+        A spin box built straight on QAbstractSpinBox measures as if it were empty -- the
+        text contributes nothing, because the width normally comes from running the range
+        through a textFromValue() that only QSpinBox and its relatives have.
+        """
+        room = self.fontMetrics().horizontalAdvance(self._formatted(_GP_FIELD_SAMPLE))
+        return QSize(base.width() + room, base.height())
+
+    def _formatted(self, value: int) -> str:
+        return f"{value:,}{self._suffix}"
+
+    def _clamped(self, value: int) -> int:
+        return min(max(value, self._minimum), self._maximum)
+
+    def _take(self, value: int) -> None:
+        """Adopt a value, clamped into range, announcing it only if it actually moved."""
+        clamped = self._clamped(value)
+        if clamped == self._value:
+            return
+        self._value = clamped
+        self.valueChanged.emit(clamped)
+
+    def _display(self) -> None:
+        edit = self.lineEdit()
+        edit.setText(self._formatted(self._value))
+        edit.setCursorPosition(len(edit.text()) - len(self._suffix))
+
+    def _text_edited(self, text: str) -> None:
+        digits = _gp_digits(text, self._suffix)
+        if not digits:
+            return
+        typed = min(int(digits), self._maximum)
+        self._regroup(typed)
+        if typed >= self._minimum:
+            self._take(typed)
+
+    def _commit(self) -> None:
+        """Settle the editor into a real value on Enter or focus-out.
+
+        An empty or abandoned entry keeps the value the field already had rather than
+        dropping to the minimum, which is what clearing a QSpinBox does too.
+        """
+        digits = _gp_digits(self.lineEdit().text(), self._suffix)
+        if digits:
+            self._take(int(digits))
+        self._display()
+
+    def _regroup(self, value: int) -> None:
+        """Rewrite the separators around what was just typed, without moving the caret.
+
+        Counted in digits rather than characters, because a separator appearing to the left
+        of the caret would otherwise shunt it one place into the number.
+        """
+        edit = self.lineEdit()
+        typed = sum(character.isdecimal() for character in edit.text()[: edit.cursorPosition()])
+        edit.setText(self._formatted(value))
+        edit.setCursorPosition(self._caret_after(typed))
+
+    def _caret_after(self, digits: int) -> int:
+        text = self.lineEdit().text()
+        seen = 0
+        for index, character in enumerate(text):
+            if seen == digits:
+                return index
+            if character.isdecimal():
+                seen += 1
+        return len(text) - len(self._suffix)
+
+
 class TradeEntryDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1130,8 +1318,10 @@ class SavingsGoalDialog(QDialog):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.goal_label = QLineEdit(label, placeholderText="e.g. Twisted bow")
-        self.goal_target = TradeEntryDialog._number_field(1, 2_000_000_000, target or 1_000_000)
+        self.goal_target = GpSpinBox()
+        self.goal_target.setRange(1, GP_FIELD_MAXIMUM)
         self.goal_target.setSuffix(" gp")
+        self.goal_target.setValue(target or 1_000_000)
         form.addRow("What for", self.goal_label)
         form.addRow("Target amount", self.goal_target)
         layout.addLayout(form)
@@ -2448,11 +2638,10 @@ class MainWindow(QMainWindow):
         controls = QHBoxLayout()
         self.search = SearchLineEdit("Search items…")
         self.search.textChanged.connect(self._render_flips)
-        self.cash = QSpinBox()
-        self.cash.setRange(10_000, 2_000_000_000)
+        self.cash = GpSpinBox()
+        self.cash.setRange(10_000, GP_FIELD_MAXIMUM)
         self.cash.setValue(10_000_000)
         self.cash.setSingleStep(1_000_000)
-        self.cash.setGroupSeparatorShown(True)
         self.cash.valueChanged.connect(self._schedule_cash_changed)
         self.slots = QSpinBox()
         self.slots.setRange(1, 8)
@@ -3076,7 +3265,7 @@ class MainWindow(QMainWindow):
         label = str(QSettings().value("savings_goal/label", ""))
         if not label:
             return None
-        target = _setting_int("savings_goal/target", 0, minimum=1, maximum=2_000_000_000)
+        target = _setting_int("savings_goal/target", 0, minimum=1, maximum=GP_FIELD_MAXIMUM)
         created_at = str(
             QSettings().value("savings_goal/created_at", datetime.now(UTC).isoformat())
         )
@@ -3198,13 +3387,12 @@ class MainWindow(QMainWindow):
             "Find liquid High Alchemy candidates using conservative recent prices, buy limits, and your available cash.",
         )
         controls = QHBoxLayout()
-        self.alch_budget = QSpinBox()
-        self.alch_budget.setRange(10_000, 2_000_000_000)
+        self.alch_budget = GpSpinBox()
+        self.alch_budget.setRange(10_000, GP_FIELD_MAXIMUM)
         self.alch_budget.setValue(
-            _setting_int("alch/budget", 2_000_000, minimum=10_000, maximum=2_000_000_000)
+            _setting_int("alch/budget", 2_000_000, minimum=10_000, maximum=GP_FIELD_MAXIMUM)
         )
         self.alch_budget.setSingleStep(100_000)
-        self.alch_budget.setGroupSeparatorShown(True)
         self.alch_budget.valueChanged.connect(self._alch_settings_changed)
         self.alch_safety = QComboBox()
         self.alch_safety.addItems(list(ALCH_POLICIES))
@@ -5480,14 +5668,17 @@ class MainWindow(QMainWindow):
             #nav {{ background: transparent; border: 0; outline: 0; padding-top: 16px; }}
             #nav::item {{ padding: 11px 12px; border-radius: {control}; margin: 1px 2px; }}
             #nav::item:selected {{ background: {palette.header}; color: {palette.nav_selected_text}; }}
-            QLineEdit, QSpinBox, QComboBox {{ background: {palette.field}; border: 1px solid {palette.border}; border-radius: {control}; padding: 7px 10px; min-height: 22px; selection-background-color: {palette.text_selection}; }}
-            QSpinBox {{ padding-right: 62px; }}
-            QSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 29px; border-left: 1px solid {palette.border}; border-bottom: 1px solid {palette.border}; border-top-right-radius: {control}; }}
-            QSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 29px; border-left: 1px solid {palette.border}; border-top: 1px solid {palette.border}; border-bottom-right-radius: {control}; }}
-            QSpinBox::up-arrow {{ image: url("{spin_up_icon}"); width: 12px; height: 8px; }}
-            QSpinBox::down-arrow {{ image: url("{spin_down_icon}"); width: 12px; height: 8px; }}
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {palette.header}; }}
-            QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{ border: 1px solid {palette.focus}; }}
+            /* Styled through QAbstractSpinBox, not QSpinBox: a type selector matches
+               subclasses, and GpSpinBox is a sibling of QSpinBox rather than a child of
+               it, so a QSpinBox rule would leave the GP fields unpainted and armless. */
+            QLineEdit, QAbstractSpinBox, QComboBox {{ background: {palette.field}; border: 1px solid {palette.border}; border-radius: {control}; padding: 7px 10px; min-height: 22px; selection-background-color: {palette.text_selection}; }}
+            QAbstractSpinBox {{ padding-right: 62px; }}
+            QAbstractSpinBox::up-button {{ subcontrol-origin: border; subcontrol-position: top right; width: 29px; border-left: 1px solid {palette.border}; border-bottom: 1px solid {palette.border}; border-top-right-radius: {control}; }}
+            QAbstractSpinBox::down-button {{ subcontrol-origin: border; subcontrol-position: bottom right; width: 29px; border-left: 1px solid {palette.border}; border-top: 1px solid {palette.border}; border-bottom-right-radius: {control}; }}
+            QAbstractSpinBox::up-arrow {{ image: url("{spin_up_icon}"); width: 12px; height: 8px; }}
+            QAbstractSpinBox::down-arrow {{ image: url("{spin_down_icon}"); width: 12px; height: 8px; }}
+            QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{ background: {palette.header}; }}
+            QLineEdit:focus, QAbstractSpinBox:focus, QComboBox:focus {{ border: 1px solid {palette.focus}; }}
             QComboBox::drop-down {{ border: 0; width: 30px; }}
             QCheckBox {{ spacing: 8px; min-height: 36px; }}
             QCheckBox::indicator {{ width: 18px; height: 18px; }}

@@ -9,6 +9,7 @@ wrong rather than raising, which is exactly the kind of thing that ships unnotic
 from __future__ import annotations
 
 import pytest
+from PySide6.QtWidgets import QAbstractSpinBox
 
 from osrs_toolkit.app import _PALETTES, MainWindow, SettingsDialog
 
@@ -61,3 +62,25 @@ def test_an_unknown_saved_theme_falls_back_to_dark(window: MainWindow) -> None:
 
     assert window._profit_color == _PALETTES["Dark"].profit
     assert _PALETTES["Dark"].background in window.styleSheet()
+
+
+@pytest.mark.parametrize("theme", list(_PALETTES))
+def test_the_gp_fields_are_painted_like_the_spin_boxes_beside_them(
+    window: MainWindow, theme: str
+) -> None:
+    """GpSpinBox is a sibling of QSpinBox rather than a subclass of it, and a stylesheet
+    type selector only reaches subclasses — so rules written against QSpinBox left the
+    cash stack and budget fields with no background, no border and no arrows at all.
+
+    Compared against the slot count beside it rather than against a colour, since what
+    matters is that one rule paints both.
+    """
+    window._apply_theme(theme)
+
+    assert _field_pixel(window.cash) == _field_pixel(window.slots)
+
+
+def _field_pixel(field: QAbstractSpinBox) -> int:
+    """The colour just inside a field's left border, where its background shows through."""
+    image = field.grab().toImage()
+    return image.pixel(6, image.height() // 2)

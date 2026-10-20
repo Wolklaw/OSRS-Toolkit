@@ -4,6 +4,12 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+- The cash stack, Alch Finder budget and savings goal fields take any amount now, instead of
+  stopping at 2,000,000,000. They were QSpinBoxes, whose value is a 32-bit int and so cannot
+  hold a stack past 2,147,483,647 at all -- with the Grand Exchange's cash cap gone, there
+  was no way to tell the app what you were actually holding. A saved budget or goal above the
+  old ceiling is no longer quietly written back down on start-up either.
+
 - The RuneLite sync loadout snapshot now carries skill experience alongside levels
   (`xp`, additive), so a session can tell "trained but didn't level up" from "did nothing".
   Requires the RuneLite plugin to send it; older builds keep working exactly as before.
