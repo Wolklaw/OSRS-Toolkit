@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import re
-
 import json
+import re
 import urllib.error
 from unittest.mock import MagicMock, patch
 

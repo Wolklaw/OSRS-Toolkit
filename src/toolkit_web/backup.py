@@ -41,9 +41,11 @@ def snapshot_sqlite(source: Path, destination: Path) -> None:
     restores over the real one.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as live:
-        with closing(sqlite3.connect(destination)) as copy:
-            live.backup(copy)
+    with (
+        closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as live,
+        closing(sqlite3.connect(destination)) as copy,
+    ):
+        live.backup(copy)
 
 
 def stage(data_dir: Path, sync_db: Path | None, staging: Path) -> list[Path]:

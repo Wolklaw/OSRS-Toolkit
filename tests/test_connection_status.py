@@ -8,7 +8,6 @@ with the game shut. Configured and arriving are two different facts and both are
 from __future__ import annotations
 
 import re
-
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
