@@ -12,6 +12,10 @@ packaging/wizard/
 *.egg-info/
 .idea/
 .vscode/
+# Claude Code's own session state: a launch config holding absolute paths, local permission
+# settings, and worktrees/ -- entire nested checkouts, one of which has a real accounts.db
+# in it. This repository is public, so one `git add -A` away from publishing a user database.
+.claude/
 *.log
 *.sqlite
 *.sqlite3
