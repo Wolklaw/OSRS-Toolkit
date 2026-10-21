@@ -21,6 +21,18 @@ MAX_NET_WORTH_HISTORY_PER_ACCOUNT = 2_000
 # Same cap and reasoning as net worth history, for skill levels over time.
 MAX_SKILLS_HISTORY_PER_ACCOUNT = 2_000
 
+# Snapshot history thins with age instead of being capped by count, because its rows are
+# not the same size as each other: a bank snapshot is up to 1,200 valued stacks, and one
+# arrives every time the bank meaningfully changes. Recent history stays whole because that
+# is what a trip's supply diff reads; older history only has to carry the shape of the
+# curve. Everything inside the first window, then the newest of each day, then of each week.
+SNAPSHOT_HISTORY_FULL_DAYS = 30
+SNAPSHOT_HISTORY_DAILY_DAYS = 365
+
+# SQLite's compiled-in cap on host parameters is 999 in builds older than 3.32, and snapshot
+# history can hold more rows than that, so fetches by id go out in chunks below it.
+MAX_SQL_PARAMETERS = 500
+
 # occurred_at is stored as text from the plugin, not a clean sortable instant (fields
 # omitted when zero, or a non-UTC offset), so text comparison is only safe as a loose lower
 # bound to cut away old rows cheaply. Callers still filter exactly on what comes back.
@@ -1011,6 +1023,44 @@ class JournalRepository:
             )
             self._add_missing_columns(
                 connection, "loadout_snapshots", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
+            )
+            # History is its own table rather than loadout_snapshots re-keyed on
+            # (account_hash, captured_at): changing a primary key in SQLite means rebuilding
+            # the table and renaming over the original, and these files hold real trading
+            # data. So loadout_snapshots stays exactly what every existing reader already
+            # treats it as -- the newest snapshot per character -- and this sits beside it,
+            # append-only, read by nothing else.
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS loadout_snapshot_history (
+                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_hash TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    captured_at TEXT NOT NULL,
+                    equipment_json TEXT NOT NULL,
+                    inventory_json TEXT NOT NULL,
+                    bank_json TEXT NOT NULL,
+                    skills_json TEXT NOT NULL,
+                    xp_json TEXT NOT NULL DEFAULT '{}'
+                )
+                """
+            )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS loadout_snapshot_history_captured "
+                "ON loadout_snapshot_history(account_hash, captured_at)"
+            )
+            # Seed the history from the single snapshot a journal written before this table
+            # already holds, so an existing character starts with a point rather than none.
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO loadout_snapshot_history (
+                    account_hash, account_name, captured_at, equipment_json, inventory_json,
+                    bank_json, skills_json, xp_json
+                )
+                SELECT account_hash, account_name, captured_at, equipment_json,
+                       inventory_json, bank_json, skills_json, xp_json
+                FROM loadout_snapshots
+                """
             )
             connection.execute(
                 """
@@ -2355,8 +2405,8 @@ class JournalRepository:
             connection.execute("DELETE FROM player_death_events WHERE event_id = ?", (event_id,))
 
     def save_loadout_snapshot(self, snapshot: LoadoutSnapshot) -> None:
-        """Replace the previous snapshot for this account and append its total value to
-        the net-worth and skills history."""
+        """Replace this account's newest snapshot, append it to the snapshot history, and
+        append its total value to the net-worth and skills history."""
 
         def dump(items: tuple[LoadoutItem, ...]) -> str:
             return json.dumps(
@@ -2371,6 +2421,14 @@ class JournalRepository:
                 ],
                 separators=(",", ":"),
             )
+
+        # Serialised once and reused by both inserts below -- a full bank is up to 1,200
+        # stacks, so dumping it twice would be the most expensive thing this method does.
+        equipment_json = dump(snapshot.equipment)
+        inventory_json = dump(snapshot.inventory)
+        bank_json = dump(snapshot.bank)
+        skills_json = json.dumps(snapshot.skills, separators=(",", ":"))
+        xp_json = json.dumps(snapshot.xp, separators=(",", ":"))
 
         with self._connect() as connection:
             connection.execute(
@@ -2392,13 +2450,42 @@ class JournalRepository:
                     snapshot.account_hash,
                     snapshot.account_name,
                     snapshot.captured_at,
-                    dump(snapshot.equipment),
-                    dump(snapshot.inventory),
-                    dump(snapshot.bank),
-                    json.dumps(snapshot.skills, separators=(",", ":")),
-                    json.dumps(snapshot.xp, separators=(",", ":")),
+                    equipment_json,
+                    inventory_json,
+                    bank_json,
+                    skills_json,
+                    xp_json,
                 ),
             )
+            # One row per account per captured_at: the sync service can redeliver an event,
+            # and the plugin only sends a snapshot when the bank actually changed, so a
+            # repeated timestamp is the same reading arriving twice, not a new one.
+            connection.execute(
+                """
+                INSERT INTO loadout_snapshot_history (
+                    account_hash, account_name, captured_at, equipment_json, inventory_json,
+                    bank_json, skills_json, xp_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_hash, captured_at) DO UPDATE SET
+                    account_name = excluded.account_name,
+                    equipment_json = excluded.equipment_json,
+                    inventory_json = excluded.inventory_json,
+                    bank_json = excluded.bank_json,
+                    skills_json = excluded.skills_json,
+                    xp_json = excluded.xp_json
+                """,
+                (
+                    snapshot.account_hash,
+                    snapshot.account_name,
+                    snapshot.captured_at,
+                    equipment_json,
+                    inventory_json,
+                    bank_json,
+                    skills_json,
+                    xp_json,
+                ),
+            )
+            self._prune_loadout_snapshot_history(connection, snapshot.account_hash)
             connection.execute(
                 """
                 INSERT INTO net_worth_history (
@@ -2434,8 +2521,8 @@ class JournalRepository:
                     snapshot.account_hash,
                     snapshot.account_name,
                     snapshot.captured_at,
-                    json.dumps(snapshot.skills, separators=(",", ":")),
-                    json.dumps(snapshot.xp, separators=(",", ":")),
+                    skills_json,
+                    xp_json,
                 ),
             )
             connection.execute(
@@ -2450,6 +2537,102 @@ class JournalRepository:
                 """,
                 (snapshot.account_hash, snapshot.account_hash, MAX_SKILLS_HISTORY_PER_ACCOUNT),
             )
+
+    @staticmethod
+    def _prune_loadout_snapshot_history(
+        connection: sqlite3.Connection, account_hash: str
+    ) -> None:
+        """Thin one account's snapshot history down the ladder described at
+        ``SNAPSHOT_HISTORY_FULL_DAYS``: keep everything recent, then the newest reading of
+        each day, then the newest of each week.
+
+        Bucketed in Python rather than by substr() on ``captured_at``, because that column
+        is the plugin's own text and not a uniform instant -- "Z" against "+00:00", and
+        offsets that aren't UTC -- so slicing it would file two snapshots of the same
+        evening under different days.
+        """
+        rows = connection.execute(
+            "SELECT entry_id, captured_at FROM loadout_snapshot_history WHERE account_hash = ?",
+            (account_hash,),
+        ).fetchall()
+        now = datetime.now(UTC)
+        keep_everything_after = now - timedelta(days=SNAPSHOT_HISTORY_FULL_DAYS)
+        keep_daily_after = now - timedelta(days=SNAPSHOT_HISTORY_DAILY_DAYS)
+        newest_in_bucket: dict[tuple[object, ...], tuple[datetime, int]] = {}
+        doomed: list[int] = []
+        for row in rows:
+            moment = _as_moment(row["captured_at"])
+            if moment >= keep_everything_after:
+                continue
+            if moment >= keep_daily_after:
+                bucket: tuple[object, ...] = ("day", moment.date().isoformat())
+            else:
+                year, week, _ = moment.isocalendar()
+                bucket = ("week", year, week)
+            candidate = (moment, int(row["entry_id"]))
+            previous = newest_in_bucket.get(bucket)
+            if previous is None:
+                newest_in_bucket[bucket] = candidate
+            elif candidate > previous:
+                newest_in_bucket[bucket] = candidate
+                doomed.append(previous[1])
+            else:
+                doomed.append(candidate[1])
+        if doomed:
+            connection.executemany(
+                "DELETE FROM loadout_snapshot_history WHERE entry_id = ?",
+                [(entry_id,) for entry_id in doomed],
+            )
+
+    def list_loadout_snapshots(
+        self,
+        account_hash: str | None = None,
+        *,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> list[LoadoutSnapshot]:
+        """Snapshot history oldest first, optionally bounded by ``since``/``until``
+        (inclusive).
+
+        Which rows to return is decided from ``entry_id`` and ``captured_at`` alone before
+        any of them is read, because the columns left out of that first pass are the bank
+        blobs: answering "the two snapshots either side of this trip" must not pay for
+        thirty days of them. The bounds are compared as instants rather than as text, since
+        "Z" and "+00:00" mean the same moment and don't sort against each other.
+        """
+        lower = _as_moment(since) if since else None
+        upper = _as_moment(until) if until else None
+        with self._connect() as connection:
+            if account_hash is None:
+                index = connection.execute(
+                    "SELECT entry_id, captured_at FROM loadout_snapshot_history"
+                ).fetchall()
+            else:
+                index = connection.execute(
+                    "SELECT entry_id, captured_at FROM loadout_snapshot_history"
+                    " WHERE account_hash = ?",
+                    (account_hash,),
+                ).fetchall()
+            wanted = sorted(
+                (moment, entry_id)
+                for moment, entry_id in (
+                    (_as_moment(row["captured_at"]), int(row["entry_id"])) for row in index
+                )
+                if (lower is None or moment >= lower) and (upper is None or moment <= upper)
+            )
+            by_id: dict[int, sqlite3.Row] = {}
+            for start in range(0, len(wanted), MAX_SQL_PARAMETERS):
+                chunk = [entry_id for _, entry_id in wanted[start : start + MAX_SQL_PARAMETERS]]
+                placeholders = ",".join("?" * len(chunk))
+                by_id.update(
+                    (int(row["entry_id"]), row)
+                    for row in connection.execute(
+                        "SELECT * FROM loadout_snapshot_history "
+                        f"WHERE entry_id IN ({placeholders})",
+                        chunk,
+                    )
+                )
+        return [self._row_to_loadout_snapshot(by_id[entry_id]) for _, entry_id in wanted]
 
     def list_net_worth_history(self, account_hash: str | None = None) -> list[NetWorthPoint]:
         with self._connect() as connection:

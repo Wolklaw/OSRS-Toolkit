@@ -171,7 +171,9 @@ Stored, per account, in each user's own SQLite journal:
 - `synced_trades` + `synced_trade_items` — GE fills and player trades, item-level
 - `tracked_trades` + `tracked_buy_fills` + `tracked_sale_fills` — positions, plan and actual
 - `npc_loot_events` + `npc_loot_items`, `player_death_events` + `player_death_items`
-- `loadout_snapshots` — **one row per character**, overwritten
+- `loadout_snapshots` — one row per character, overwritten; the newest-snapshot cache
+- `loadout_snapshot_history` — **append-only**, one row per `(account_hash, captured_at)`,
+  thinned on a ladder with age
 - `net_worth_history` — a time series of one number, total value
 - `skills_history` — a time series of levels and experience
 
@@ -190,16 +192,13 @@ roughly 75 days of six-hour average price and volume history per item.
 
 Worth stating plainly, because it is the reason Phase 0 exists:
 
-1. **Bank composition history.** `loadout_snapshots` has `account_hash` as its PRIMARY KEY, so
-   every bank open overwrites the last one. The richest payload the plugin sends — 1,200 valued
-   stacks — survives only as two derived numbers: a net worth total and a skills blob.
-2. **When an offer was placed.** `applied_offer_events` keeps `(event_id, applied_at)` and
+1. **When an offer was placed.** `applied_offer_events` keeps `(event_id, applied_at)` and
    nothing else; the opened moment, its price and its quantity are discarded once applied. And
    `tracked_buy_fills` / `tracked_sale_fills` carry **no timestamp at all**. So the time
    between placing an offer and it filling — the single most useful number a flipper can have —
    is recoverable only roughly, from a position's `created_at`, and not at all for an offer
    that was cancelled before it created one. Both ends of it already arrive.
-3. **The market context of a fill.** When a fill lands we know the 5m and 1h prices at that
+2. **The market context of a fill.** When a fill lands we know the 5m and 1h prices at that
    moment and keep none of them, so a recorded fill price can never afterwards be read as
    "1h low +0.4%".
 
@@ -216,12 +215,16 @@ Three schema changes in `src/osrs_toolkit/journal.py`, additive and backward-com
 Nothing user-visible ships in this phase; everything below depends on it, so the sooner it
 lands the sooner history starts accumulating.
 
-- **Append-only loadout snapshots.** Re-key on `(account_hash, captured_at)` and keep
-  `get_loadout_snapshot` returning the newest, so PvM Readiness is untouched. The plugin
-  already skips a snapshot that matches the last one sent, so the volume is "once per
-  meaningful bank change", not once per bank open. Prune on a ladder — everything for 30 days,
-  then daily, then weekly — and consider storing item-level deltas against the previous
-  snapshot rather than full copies if size becomes real.
+- **Append-only loadout snapshots.** *Landed 2026-10-21.* History went into its own
+  `loadout_snapshot_history` table, uniquely keyed on `(account_hash, captured_at)`, rather
+  than `loadout_snapshots` re-keyed: SQLite can only change a primary key by rebuilding the
+  table and renaming over the original, and these files hold real trading data. So
+  `loadout_snapshots` stays the newest-row cache every existing reader already uses and PvM
+  Readiness is untouched, existing journals are seeded from the one row they had, and
+  `list_loadout_snapshots` reads the history back within a window. Pruned on a ladder —
+  everything for 30 days, the newest of each day out to a year, then the newest of each week.
+  Item-level deltas against the previous snapshot are still the fallback if size becomes
+  real.
 - **Retain the offer lifecycle.** A real table for openings and cancellations, with price,
   quantity, side and `restored`, not just a dedupe id. Add `filled_at` to both fill tables.
 - **Stamp market context onto a fill.** The 5m and 1h point at the moment of import, stored
