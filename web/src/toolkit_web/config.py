@@ -1,12 +1,3 @@
-"""Runtime settings, all overridable from the environment.
-
-Nothing here has a usable default for the pieces that need an account somewhere else — a
-Discord application, a Cloudflare Turnstile widget. Those are None until set, and the app
-turns the feature off rather than half-running it: no Discord keys means the OAuth routes
-refuse instead of accepting a login nobody could complete, and no Turnstile secret means no
-challenge is drawn and none is demanded.
-"""
-
 from __future__ import annotations
 
 import os
@@ -31,25 +22,10 @@ class Settings:
     data_dir: Path
     accounts_db_path: Path
     sync_base_url: str
-    #: Lets this app mint a pairing token on a signed-in visitor's behalf while the sync
-    #: service is closed to the public — see ``token_probe.mint_pairing_token``. None while
-    #: the sync service is open, since nothing needs to be supplied at that point.
     sync_invite_code: str | None
-    #: Issues a session for any Discord id the caller names, with no Discord involved at all.
-    #: Exists so the app can be built, tested and demonstrated before a real Discord
-    #: application exists to authenticate against. Must never be true where the service is
-    #: reachable by anyone but the person developing it.
     dev_login_enabled: bool
-    #: Cloudflare Turnstile, which guards account creation without Discord. Both unset means
-    #: no challenge is drawn and none is demanded -- the local and test setups, where there is
-    #: no Cloudflare account to get keys from and nothing to protect. Set the secret in
-    #: production: the check is enforced exactly when a secret exists to check against.
     turnstile_site_key: str | None = None
     turnstile_secret_key: str | None = None
-    #: Shared secret for ``POST /internal/check-alerts``, called by an external scheduler
-    #: (Task Scheduler, cron) rather than a scheduler living inside this process — see
-    #: ``app.py``'s alert-checking route. Unset means the route refuses entirely, the same
-    #: "no key means the feature turns off" rule the Discord and Turnstile settings follow.
     internal_task_token: str | None = None
 
     @classmethod
@@ -61,10 +37,6 @@ class Settings:
             discord_redirect_uri=os.environ.get(
                 "DISCORD_REDIRECT_URI", "https://runescope.app/auth/discord/callback"
             ),
-            # Generated fresh on every start where none is set, which is fine for local
-            # development — a restart just signs everyone out — and wrong for production,
-            # where TOOLKIT_SESSION_SECRET has to be set to something stable or every deploy
-            # would log every user out.
             session_secret=os.environ.get("TOOLKIT_SESSION_SECRET") or secrets.token_urlsafe(32),
             data_dir=data_dir,
             accounts_db_path=data_dir / "accounts.db",

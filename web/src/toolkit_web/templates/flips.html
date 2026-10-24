@@ -10,11 +10,7 @@
       <label for="cash-stack">Cash stack{% if cash_stack_prefilled %} <span class="hint tight">(from your synced coins)</span>{% endif %}</label>
       <input type="number" id="cash-stack" name="cash_stack" value="{{ cash_stack }}" min="10000" step="100000">
     </div>
-    {#
-      Three mutually exclusive horizons, all worth seeing at once: how long you are willing
-      to wait is the single biggest thing separating one set of suggestions from another, and
-      a closed <select> hid two thirds of that choice behind a click.
-    #}
+
     <div class="field">
       <label>Strategy</label>
       <div class="seg" role="radiogroup" aria-label="Strategy">
@@ -91,11 +87,7 @@
     <button class="button ghost small" onclick="refreshMarket(this)">Refresh</button>
   </div>
   {% if portfolio %}
-  {#
-    A plan is a way to spend the eight slots the game gives you, so it is drawn as slots.
-    The free ones are drawn too — "the plan uses five of your six" is a fact about the plan,
-    and counting table rows was the only way to learn it before.
-  #}
+
   <div class="slot-grid">
     {% for candidate in portfolio %}
     <div class="slot">
@@ -184,11 +176,7 @@
           <td class="num" style="color:var(--buy)">{{ "{:,}".format(candidate.buy_price) }}</td>
           <td class="num" style="color:var(--sell)">{{ "{:,}".format(candidate.sell_price) }}</td>
           <td class="num {{ 'positive' if candidate.profit_each >= 0 else 'negative' }}">{{ "{:+,}".format(candidate.profit_each) }}</td>
-          {#
-            ROI and confidence are the two columns anyone actually ranks by, so they carry
-            their own size as well as their digits. The ROI bar tops out at 12%, the same
-            ceiling the ranker's own score uses, rather than at whatever today's best row is.
-          #}
+
           <td class="num cell-meter">
             {{ "%.1f"|format(candidate.roi) }}%
             <div class="meter"><span style="--fill: {{ [candidate.roi / 12 * 100, 100] | min }}%"></span></div>
@@ -220,8 +208,7 @@
 <script>
   const flipStrategy = {{ strategy | tojson }};
 
-  /** Opens a planned position from a ranked row, with that row's own numbers as the plan —
-   *  the point of tracking a suggestion is to be graded against what it suggested later. */
+
   async function trackFlip(candidate, button) {
     const quantity = Number(candidate.suggested_quantity) || 1;
     const result = await api('POST', '/api/positions', {

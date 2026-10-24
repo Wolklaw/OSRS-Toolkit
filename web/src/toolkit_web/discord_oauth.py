@@ -1,12 +1,3 @@
-"""Sign-in with Discord: the OAuth2 authorization code flow, and nothing more of it.
-
-Only the ``identify`` scope is asked for — a user id, a username, an avatar hash. Nothing here
-ever sees a Discord password, and nothing here asks for a scope this app has no use for. The
-access token returned by the exchange is used once, to read the profile, and then discarded:
-this app has no reason to act as the user on Discord again later, so there is nothing to store
-and nothing to refresh.
-"""
-
 from __future__ import annotations
 
 import json
@@ -23,9 +14,6 @@ TOKEN_URL = "https://discord.com/api/oauth2/token"
 USER_URL = "https://discord.com/api/users/@me"
 TIMEOUT_SECONDS = 15
 
-# Discord's API sits behind Cloudflare, which turns away the standard library's default
-# User-Agent outright — the same "error code: 1010" block the sync service applies to its own
-# callers. Every request here needs a real one or Discord never sees it at all.
 USER_AGENT = "OSRS-Toolkit-Web/1.0 (+https://runescope.app)"
 
 
@@ -37,12 +25,6 @@ class DiscordUser:
 
 
 def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
-    # No "prompt" override -- Discord's default already skips the consent screen for a user
-    # who previously authorized this app. "prompt=none" looks like the same optimization but
-    # is not: it also suppresses Discord's own login form, so anyone not already signed into
-    # Discord in that browser (a fresh device, a fresh profile, an installed PWA's isolated
-    # storage) gets bounced to discord.com's homepage with no way back into the flow, instead
-    # of being asked to log in. That's what a fresh tablet with no Discord session hit.
     query = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -56,13 +38,6 @@ def authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
 
 
 def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: str) -> str | None:
-    """The access token for a freshly granted authorization, or ``None`` on any failure.
-
-    Every failure — a wrong or reused code, an outage on Discord's side, a network hiccup —
-    ends in the same place: no session is issued. There is nothing a caller can usefully do
-    differently for one failure over another, since the fix in every case is the same: send
-    the user to sign in again.
-    """
     body = urllib.parse.urlencode(
         {
             "client_id": client_id,
@@ -79,9 +54,6 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as error:
-        # Discord's error body says exactly what was wrong with the request — a bad secret, a
-        # redirect_uri that does not match what is registered, a reused code — and that reason
-        # is worth a line in the log even though the caller only ever sees "sign in again".
         log.warning("Discord token exchange failed (%s): %s", error.code, error.read())
         return None
     except (

@@ -1,5 +1,3 @@
-"""The disk cache is a fallback for the *next* run, not part of whether this one succeeded."""
-
 from __future__ import annotations
 
 import json
@@ -58,9 +56,6 @@ def test_a_fetched_payload_is_cached_for_the_next_run(
 def test_fresh_prices_survive_a_cache_write_that_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A full disk, an antivirus scanner, or a second copy of the app holding the file open
-    must not throw away prices that downloaded perfectly well — nor quietly answer with the
-    older ones already on disk."""
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     (cache_dir / "latest.json").write_text(json.dumps({"data": "yesterday"}), encoding="utf-8")
@@ -98,8 +93,6 @@ def test_a_failed_fetch_with_no_cache_reports_the_failure(
 
 
 def _serve_by_route(monkeypatch: pytest.MonkeyPatch, routes: dict[str, object], seen: list[str]):
-    """Answer each endpoint from its own payload, recording which were actually requested."""
-
     def open_url(request: object, timeout: float | None = None) -> object:
         url = request.full_url  # type: ignore[attr-defined]
         route = url.rsplit("/", 1)[-1]
@@ -116,8 +109,6 @@ _PRICES = {"data": {"4151": {"high": 100, "low": 90, "highTime": 1, "lowTime": 1
 def test_the_item_mapping_is_reused_instead_of_refetched_every_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Prices move every few minutes; item names and buy limits do not. Refetching ~900KB of
-    metadata on the price cycle was downloading, parsing and rewriting it to learn nothing."""
     seen: list[str] = []
     _serve_by_route(
         monkeypatch,
@@ -173,8 +164,6 @@ def test_a_reused_mapping_still_carries_its_parsed_values(
 def test_the_timeseries_cache_is_pruned_to_a_bound(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One file is written per item whose details are opened, and nothing used to remove
-    them — on a server where anyone can browse to any item, that only grows."""
     cache_dir = tmp_path / "cache"
     cache_dir.mkdir()
     for n in range(MAX_TIMESERIES_CACHE_FILES + 20):

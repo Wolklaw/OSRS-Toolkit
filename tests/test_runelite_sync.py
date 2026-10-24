@@ -96,10 +96,6 @@ def test_ge_fill_import_auto_applies_to_a_tracked_position(tmp_path: Path) -> No
 def test_ge_fill_import_with_no_matching_position_and_no_total_quantity_is_left_unmatched(
     tmp_path: Path,
 ) -> None:
-    """Without the offer's total_quantity, a fresh fill can't be sized correctly — even
-    though this particular fill happens to be the whole order (offer_state: BOUGHT), the
-    app has no way to tell that apart from just one slice of a much bigger order without
-    total_quantity, so it is left for the RuneLite activity feed rather than guessed at."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     event = _event(
@@ -126,9 +122,6 @@ def test_ge_fill_import_with_no_matching_position_and_no_total_quantity_is_left_
 
 
 def test_ge_fill_import_sizes_new_position_to_the_offers_total_quantity(tmp_path: Path) -> None:
-    """A partially filled offer reports its own total_quantity; the auto-created position
-    should use that as its target so the offer's remaining fills keep landing on the same
-    position instead of each spawning their own."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
@@ -162,8 +155,6 @@ def test_ge_fill_import_sizes_new_position_to_the_offers_total_quantity(tmp_path
 def test_ge_fill_import_seeds_the_live_suggestion_for_an_untracked_position(
     tmp_path: Path,
 ) -> None:
-    """The price lookup passed to import_pending reaches a freshly created position's sell
-    suggestion, so a fill nobody pre-tracked still gets a real profit estimate."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
@@ -223,8 +214,6 @@ def test_offer_opened_import_seeds_the_live_suggestion_for_an_untracked_position
 def test_a_position_manually_marked_supplies_still_absorbs_its_remaining_fills(
     tmp_path: Path,
 ) -> None:
-    """Regression: reclassifying a still-filling position to 'Supplies' must not stop the
-    matcher from seeing it, or the offer's next fill would spawn a duplicate row."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(379, "Lobster", 5_000, 150, 150)
@@ -342,7 +331,6 @@ def test_zero_coin_ge_fill_is_rejected_without_touching_the_journal(tmp_path: Pa
 def test_locked_event_file_left_for_retry_but_still_imported(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A cleanup failure (e.g. a locked file) must not lose the durable DB commit or crash."""
     root = tmp_path / "sync"
     event = _event(
         "ge_fill",
@@ -573,9 +561,6 @@ def test_connection_status_exposes_active_runelite_character(tmp_path: Path) -> 
 
 
 def test_an_unreachable_sources_error_reaches_the_connection_status() -> None:
-    """The reason a source failed is only worth carrying if a caller actually asks for it --
-    this is that ask, for a source that can say why (unlike the local folder, which can't)."""
-
     class _UnreachableSource:
         last_error = "timed out"
 
@@ -638,10 +623,6 @@ _COAL_OFFER: dict[str, object] = {
 def test_an_offer_event_left_in_the_queue_is_not_applied_a_second_time(
     tmp_path: Path,
 ) -> None:
-    """Regression: an opening edits a position but records nothing in the activity log, so
-    unlike a fill it had nothing to be recognised by. A queue file that outlives its import —
-    a locked file on Windows — was applied again on the next pass, opening a second row for
-    an offer already tracked."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     event = _offer_event(
@@ -654,7 +635,6 @@ def test_an_offer_event_left_in_the_queue_is_not_applied_a_second_time(
     importer = RuneLiteSyncImporter(root)
 
     first = importer.import_pending(repository)
-    # Stands in for a delete that failed: the same file is back in front of the next pass.
     _write_event(root, event)
     second = importer.import_pending(repository)
 
@@ -664,9 +644,6 @@ def test_an_offer_event_left_in_the_queue_is_not_applied_a_second_time(
 
 
 def test_a_restored_offer_rejoins_the_position_already_tracking_it(tmp_path: Path) -> None:
-    """The game re-sends every live offer on login and on a world hop. The plugin marks those,
-    and a marked one belongs to whatever is already tracking it — however much has bought
-    against it, and whatever price the plan was made at."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(453, "Coal", 500, 110, 130)
@@ -691,13 +668,9 @@ def test_a_restored_offer_rejoins_the_position_already_tracking_it(tmp_path: Pat
 
 
 def test_offer_is_opened_before_its_fills_even_when_file_names_disagree(tmp_path: Path) -> None:
-    """The queue is named by random UUID, so file order says nothing about event order. Applying
-    a fill before the opening that created its position would leave one offer split across two
-    Journal rows — one from the fill, one from the opening that followed it."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
-    # Named so sorting by file name puts the fill first, while time puts the opening first.
     _write_event(
         root,
         _offer_event(
@@ -804,9 +777,6 @@ def test_cancelling_a_part_filled_buy_resizes_the_position_to_what_bought(
 def test_a_final_fill_still_lands_when_it_shares_a_timestamp_with_the_cancellation(
     tmp_path: Path,
 ) -> None:
-    """The plugin writes the last fill and the cancellation back to back, so they can carry the
-    same instant. Applying the cancellation first would resize the position before the fill
-    arrived, and the fill would then have nowhere left to go."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
@@ -819,7 +789,6 @@ def test_a_final_fill_still_lands_when_it_shares_a_timestamp_with_the_cancellati
             dict(_COAL_OFFER),
         ),
     )
-    # Sorts before the fill by file name, and ties with it on time.
     _write_event(
         root,
         _offer_event(
@@ -874,8 +843,6 @@ def test_cancelling_a_sell_returns_the_position_to_bought(tmp_path: Path) -> Non
 def test_cancelling_a_partial_sell_listing_still_returns_the_position_to_bought(
     tmp_path: Path,
 ) -> None:
-    """A sell offer can cover part of a position, so its size says nothing about the position's.
-    Only the listing status is reliable to match on — and putting it back is harmless if wrong."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(453, "Coal", 500, 100, 120)
@@ -927,8 +894,6 @@ def test_cancelling_leaves_a_hand_made_position_of_a_different_size_alone(
 def test_events_replay_in_time_order_when_the_writer_omitted_zero_seconds(
     tmp_path: Path,
 ) -> None:
-    """Java's instant formatter drops fields that are zero, so "05:00Z" and "05:00:30Z" sort the
-    wrong way round as text. Only comparing them as instants gets the order right."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     _write_event(
@@ -960,9 +925,6 @@ def test_events_replay_in_time_order_when_the_writer_omitted_zero_seconds(
 def test_an_event_type_this_build_does_not_know_waits_instead_of_being_quarantined(
     tmp_path: Path,
 ) -> None:
-    """The plugin updates itself through the Plugin Hub while the app is updated by hand, so a
-    plugin ahead of the app is normal. Quarantining its events would move them out of the queue
-    before the version that understands them ever arrives."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     event = _offer_event(
@@ -1003,8 +965,6 @@ def test_a_newer_schema_version_also_waits_rather_than_being_quarantined(
 
 
 def test_a_genuinely_malformed_event_is_still_quarantined(tmp_path: Path) -> None:
-    """Waiting is only right for events that are sound but unfamiliar. A file with a schema
-    version that isn't a number is broken, and no future version will rescue it."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     event = _offer_event(
@@ -1027,8 +987,6 @@ def test_a_genuinely_malformed_event_is_still_quarantined(tmp_path: Path) -> Non
 def test_a_backlog_of_unknown_events_does_not_starve_the_ones_that_work(
     tmp_path: Path,
 ) -> None:
-    """Unknown events stay queued, so without stepping over them a large backlog would fill the
-    per-pass budget and the app would stop importing anything it does understand."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     for index in range(600):
@@ -1041,7 +999,6 @@ def test_a_backlog_of_unknown_events_does_not_starve_the_ones_that_work(
                 dict(_COAL_OFFER),
             ),
         )
-    # Sorts last, so a budget spent on the backlog would never reach it.
     _write_event(
         root,
         _offer_event(
@@ -1074,7 +1031,6 @@ def test_rejected_events_are_capped_so_they_cannot_fill_the_disk(tmp_path: Path)
 
     remaining = sorted(path.name for path in rejected.glob("*.invalid"))
     assert len(remaining) == 200
-    # The oldest went first.
     assert remaining[0] == "old-0010.invalid"
 
 
@@ -1108,9 +1064,6 @@ def _slot_payload(
 
 
 def test_read_offer_state_reflects_a_slot_never_filled_at_all(tmp_path: Path) -> None:
-    """The one thing no combination of synced events can tell the app on their own: a
-    brand-new offer with zero fills yet still shows up, because this reads the plugin's
-    own live bookkeeping instead of reconstructing state from history."""
     root = tmp_path / "sync"
     _write_offer_state(
         root, "abc123", {"2": _slot_payload(2, quantity_filled=0, spent_gp=0, state="BUYING")}
@@ -1151,8 +1104,6 @@ def test_read_offer_state_flags_terminal_uncollected_offers(tmp_path: Path) -> N
 def test_read_placed_offers_tells_an_empty_grand_exchange_from_an_unreadable_one(
     tmp_path: Path,
 ) -> None:
-    """Regression: every slot collected is the ordinary way to have no offers, and reading it
-    as "cannot say" is what stopped a plan with nothing placed for it ever being labelled."""
     root = tmp_path / "sync"
     _write_offer_state(root, "abc123", {})
 
@@ -1172,7 +1123,6 @@ def test_read_placed_offers_is_none_when_the_state_cannot_be_parsed(tmp_path: Pa
 
 
 def test_read_offer_state_still_reads_an_unreadable_file_as_no_slots(tmp_path: Path) -> None:
-    """The dashboard only cares what is in each slot, so nothing there changes."""
     assert RuneLiteSyncImporter(tmp_path / "sync").read_offer_state("abc123") == {}
 
 
@@ -1276,7 +1226,6 @@ def test_read_offer_screen_stops_believing_a_stamp_that_stopped_moving(
 
 
 def test_read_offer_screen_drops_a_side_it_does_not_recognise(tmp_path: Path) -> None:
-    """A side that means nothing is worse than no side: it would narrow to the wrong rows."""
     root = tmp_path / "sync"
     _write_offer_screen(root, "abc123", _screen_payload(side="haggle"))
 
@@ -1296,7 +1245,6 @@ def test_read_offer_screen_refuses_a_malformed_file(tmp_path: Path) -> None:
 
 
 def test_read_offer_screen_reads_no_item_as_standing_there_unfocused(tmp_path: Path) -> None:
-    """At the Grand Exchange with no box up — watching an offer fill, or collecting one."""
     root = tmp_path / "sync"
     _write_offer_screen(root, "abc123", _screen_payload(item_id=0, item_name=None, side=None))
 

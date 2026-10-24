@@ -1,9 +1,3 @@
-"""Export the Trade Journal to CSV, independent of Qt.
-
-Includes every tracked position and manual trade regardless of the current status/period
-filter — an export is a backup, not a view of the filtered table.
-"""
-
 from __future__ import annotations
 
 import csv

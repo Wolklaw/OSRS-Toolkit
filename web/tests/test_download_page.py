@@ -32,7 +32,6 @@ def test_the_download_page_offers_both_builds_of_the_current_release(client: Tes
 
 
 def test_the_download_page_reads_signed_out(client: TestClient):
-    """Whether to use the site or the app is exactly the question asked before signing up."""
     with patch("toolkit_web.releases.fetch_latest", return_value=LATEST):
         response = client.get("/download")
 
@@ -71,12 +70,10 @@ def test_a_failed_refresh_keeps_whatever_was_last_fetched():
         cache.latest()
 
     with patch("toolkit_web.releases.fetch_latest", return_value=None):
-        # Whatever it holds outlives an outage; the page loses freshness, not content.
         assert cache.latest() == LATEST
 
 
 def test_assets_are_picked_by_file_type_rather_than_by_name():
-    """So a renamed or re-versioned artifact never quietly costs the page a button."""
     release = _parse(
         {
             "tag_name": "v9.9.9",

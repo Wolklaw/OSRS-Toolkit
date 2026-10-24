@@ -24,13 +24,12 @@ from osrs_toolkit.sync_source import (
     SyncSource,
 )
 
-__all__ = ["RuneLiteConnectionStatus"]  # re-exported: callers imported it from here first
+__all__ = ["RuneLiteConnectionStatus"]
 
 SCHEMA_VERSION = 1
 MAX_EVENT_BYTES = 1_000_000
 MAX_STATUS_BYTES = 16_384
 MAX_EVENTS_PER_IMPORT = 500
-# Bounds how many files one pass scans, even with unreadable events backlogged in the queue.
 MAX_EVENT_SCAN = 2_000
 MAX_ITEMS_PER_SIDE = 56
 MAX_LOADOUT_ITEMS = 1_200
@@ -38,21 +37,12 @@ MAX_SKILLS = 40
 MAX_REJECTED_FILES = 200
 MAX_OFFER_STATE_BYTES = 16_384
 MAX_OFFER_SCREEN_BYTES = 4_096
-# How long the "offer box open" file stays believable. Plugin re-stamps it every 10s while
-# open and deletes it on close; this guards against a client that crashed with the box still up.
 OFFER_SCREEN_MAX_AGE_SECONDS = 45
-# The GE always has 8 offer slots (F2P just uses fewer). Sizes the dashboard and bounds a
-# malformed state file.
 GE_SLOT_COUNT = 8
 
 _BUY_OFFER_STATES = frozenset({"BUYING", "BOUGHT", "CANCELLED_BUY"})
 _SELL_OFFER_STATES = frozenset({"SELLING", "SOLD", "CANCELLED_SELL"})
-# Public: an offer that filled completely. This is the only outcome the dashboard blinks a
-# slot for -- a cancelled offer is finished too, but the player is the one who cancelled it,
-# so telling them about it is telling them what they just did.
 FILLED_OFFER_STATES = frozenset({"BOUGHT", "SOLD"})
-# Public: finished, whether it filled or was cancelled. Either way the goods or the coins are
-# still sitting in the slot waiting to be collected.
 TERMINAL_OFFER_STATES = FILLED_OFFER_STATES | frozenset({"CANCELLED_BUY", "CANCELLED_SELL"})
 
 ParsedEvent = (
@@ -65,8 +55,7 @@ class SyncEventError(ValueError):
 
 
 class UnsupportedEventError(SyncEventError):
-    """A well-formed event of a type/schema version this build doesn't know yet. Kept separate
-    from a malformed event: the right response is to wait for a newer build, not quarantine it."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,9 +69,6 @@ class ImportResult:
 
 @dataclass(frozen=True, slots=True)
 class GEOfferSlot:
-    """One of the account's 8 GE slots, read from the plugin's own state file. ``state`` is a
-    raw RuneLite ``GrandExchangeOfferState`` name (e.g. "BUYING", "BOUGHT", "CANCELLED_SELL")."""
-
     slot: int
     item_id: int
     item_name: str
@@ -102,12 +88,10 @@ class GEOfferSlot:
 
     @property
     def is_terminal(self) -> bool:
-        """Finished but still uncollected — the plugin only clears a slot once collected in-game."""
         return self.state in TERMINAL_OFFER_STATES
 
     @property
     def is_filled(self) -> bool:
-        """Bought or sold in full, as opposed to cancelled part-way."""
         return self.state in FILLED_OFFER_STATES
 
     @property
@@ -117,19 +101,12 @@ class GEOfferSlot:
 
 @dataclass(frozen=True, slots=True)
 class GEOfferScreen:
-    """Where the player is in the GE interface right now.
-
-    ``item_id`` of 0 means the interface is open with no item selected (watching/collecting an
-    offer); a nonzero id is the "Set up offer" box open on that item.
-    """
-
     item_id: int
     item_name: str
     side: str | None
 
     @property
     def focused(self) -> bool:
-        """Whether the player is on one item rather than the interface at large."""
         return self.item_id > 0
 
 
@@ -145,23 +122,12 @@ def ge_offer_status_label(state: str) -> str:
 
 
 class RuneLiteSyncImporter:
-    """Turns whatever a source is holding into journal entries.
-
-    The transport is injected so the same parsing/ordering/de-dup serves both a folder of
-    files from an older plugin and a queue held by the sync service.
-    """
-
     def __init__(self, sync_root: Path | None = None, *, source: SyncSource | None = None) -> None:
         self.source = source or LocalFileSource(sync_root)
         self.sync_root = getattr(self.source, "sync_root", None)
 
     @property
     def configured(self) -> bool:
-        """Whether the source has a credential to work with, for sources that need one.
-
-        A local folder has nothing to configure, so it defaults to ``True``; a source that
-        does have the concept (the website) answers for itself.
-        """
         return getattr(self.source, "configured", True)
 
     @property
@@ -173,24 +139,12 @@ class RuneLiteSyncImporter:
         return self.connection_status().active
 
     def known_accounts(self) -> list[dict]:
-        """Every character seen under this connection, for a "switch character" control.
-
-        Empty for a source with no such registry — the local file bridge only ever knew
-        whichever character was logged in when it last wrote a file.
-        """
         lister = getattr(self.source, "known_accounts", None)
         return lister() if callable(lister) else []
 
     def connection_status(self) -> RuneLiteConnectionStatus:
-        """Whether anything is feeding us, and who it says is logged in.
-
-        "Detected but not active" means the plugin stopped or the service is unreachable —
-        worth distinguishing from "never installed".
-        """
         detected, payload, fresh = self.source.status_payload()
         if not detected or not isinstance(payload, dict):
-            # Detected but no payload: the source exists but didn't answer (site down, token
-            # revoked). Plugin may be fine.
             last_error = getattr(self.source, "last_error", None) if detected else None
             return RuneLiteConnectionStatus(
                 detected=detected, source_reachable=not detected, last_error=last_error
@@ -219,19 +173,10 @@ class RuneLiteSyncImporter:
         )
 
     def read_offer_state(self, account_hash: str) -> dict[int, GEOfferSlot]:
-        """The account's 8 GE slots right now, read from the plugin's state file.
-
-        A missing slot means empty, not unknown — read failures also degrade to empty rather
-        than breaking the dashboard. Use ``read_placed_offers`` where you need to tell "empty"
-        apart from "unreadable".
-        """
         slots = self.read_placed_offers(account_hash)
         return {} if slots is None else slots
 
     def read_placed_offers(self, account_hash: str) -> dict[int, GEOfferSlot] | None:
-        """Same as ``read_offer_state``, but returns None instead of {} when the state can't
-        be read — lets a caller tell "GE really is empty" apart from "couldn't check".
-        """
         payload = self.source.offer_state_payload(account_hash)
         if payload is None:
             return None
@@ -245,11 +190,6 @@ class RuneLiteSyncImporter:
         return slots
 
     def read_offer_screen(self, account_hash: str) -> GEOfferScreen | None:
-        """The GE offer box the player has open, or None if there is none.
-
-        Missing file, unreadable file, and a stale timestamp all return None — see
-        ``OFFER_SCREEN_MAX_AGE_SECONDS`` for why staleness matters.
-        """
         payload = self.source.offer_screen_payload(account_hash)
         if payload is None:
             return None
@@ -260,8 +200,6 @@ class RuneLiteSyncImporter:
         written_at = written_at.replace(tzinfo=UTC) if written_at.tzinfo is None else written_at
         if (datetime.now(UTC) - written_at).total_seconds() > OFFER_SCREEN_MAX_AGE_SECONDS:
             return None
-        # An unreadable item means the interface is open with no box up, not a bad file —
-        # worth reporting as such.
         try:
             item_id = _positive_int(payload.get("item_id"), "item id")
             item_name = _text(payload.get("item_name"), "item name", 128)
@@ -279,12 +217,6 @@ class RuneLiteSyncImporter:
         repository: JournalRepository,
         suggested_sell_prices: Mapping[int, int] | None = None,
     ) -> ImportResult:
-        """Import queued RuneLite events into the journal.
-
-        ``suggested_sell_prices`` maps item_id to the current passive sell target
-        (``ranking.offer_targets``), used to seed a real profit estimate for an untracked buy
-        fill/offer instead of one that reads as break-even. Safe to omit.
-        """
         suggested_sell_prices = suggested_sell_prices or {}
         rejected = skipped = 0
         parsed: list[tuple[PendingSyncEvent, ParsedEvent]] = []
@@ -292,17 +224,12 @@ class RuneLiteSyncImporter:
             if len(parsed) + rejected >= MAX_EVENTS_PER_IMPORT:
                 break
             if pending.payload is None:
-                # Unreadable payload — reading it again would fail the same way, so quarantine
-                # rather than block the queue.
                 rejected += 1
                 self.source.quarantine(pending)
                 continue
             try:
                 parsed_event = parse_sync_event(pending.payload)
             except UnsupportedEventError:
-                # Plugin and app update on separate schedules, so an unrecognized event type is
-                # normal drift, not corruption. Left unacknowledged for a later version to
-                # import; doesn't count against the per-pass budget.
                 skipped += 1
                 continue
             except (SyncEventError, TypeError, KeyError, ValueError):
@@ -311,14 +238,10 @@ class RuneLiteSyncImporter:
                 continue
             parsed.append((pending, parsed_event))
 
-        # Replay in the order events happened (open before fills before cancel). File names are
-        # random UUIDs, so sort by event time, breaking ties by lifecycle order for same-instant
-        # events.
         parsed.sort(
             key=lambda pair: (_event_instant(pair[1]), _lifecycle_rank(pair[1]), pair[0].handle)
         )
 
-        # One connection for the whole batch instead of one per event.
         trades = [(pending, event) for pending, event in parsed if isinstance(event, SyncedTrade)]
         results = repository.add_synced_trades([trade for _path, trade in trades])
         was_imported = {
@@ -354,15 +277,11 @@ class RuneLiteSyncImporter:
             elif not repository.claim_offer_event(event.event_id):
                 duplicates += 1
             else:
-                # Not a trade — opening/cancelling moves no coins or items, so only the
-                # Journal position needs updating.
                 imported += 1
                 if self._apply_offer_lifecycle(repository, event, suggested_sell_prices):
                     applied_to_tracked += 1
             collected.append(pending.handle)
 
-        # Acknowledged together, only after all are applied. Each event is keyed by its own id,
-        # so an unacknowledged batch just gets re-read, not reapplied.
         self.source.collected(collected)
         self.source.housekeeping()
         return ImportResult(
@@ -431,16 +350,11 @@ class RuneLiteSyncImporter:
                 occurred_at=trade.occurred_at,
             )
         except ValueError:
-            # A matching invariant failed (e.g. stale quantity) — leave for manual review
-            # rather than break the rest of the pass.
             return False
         return position_id is not None
 
 
 def _event_instant(event: ParsedEvent) -> datetime:
-    """When the event happened, as a comparable instant. Timestamps are validated ISO-8601 but
-    text order isn't time order, and a value without a zone can't compare to one that has it —
-    hence the UTC default."""
     raw = event.captured_at if isinstance(event, LoadoutSnapshot) else event.occurred_at
     parsed = datetime.fromisoformat(raw)
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
@@ -459,7 +373,6 @@ def parse_sync_event(payload: object) -> ParsedEvent:
         raise SyncEventError("Event must be an object")
     schema_version = payload.get("schema_version")
     if isinstance(schema_version, bool) or not isinstance(schema_version, int):
-        # Missing or non-numeric is malformed, not merely unfamiliar.
         raise SyncEventError("Invalid schema version")
     if schema_version != SCHEMA_VERSION:
         raise UnsupportedEventError("Unsupported schema version")
@@ -511,12 +424,6 @@ def _parse_offer_lifecycle(
     account_name: str,
     body: dict[str, object],
 ) -> OfferOpened | OfferCancelled:
-    """Opening and cancelling share the same fields — a cancellation is matched to its opening
-    by the offer's size and price.
-
-    Only an opening carries ``restored``; missing/non-boolean reads as False (the assumption
-    older plugin builds made before the flag existed).
-    """
     side = _text(body.get("side"), "side", 8).lower()
     if side not in {"buy", "sell"}:
         raise SyncEventError("Invalid GE side")
@@ -550,9 +457,6 @@ def _parse_ge_fill(
     coins = _positive_int(body.get("coins"), "coins")
     item_id = _positive_int(body.get("item_id"), "item id")
     item_name = _text(body.get("item_name"), "item name", 128)
-    # coins is the gross value from RuneLite's GrandExchangeOffer.getSpent() — GE tax is not
-    # deducted. Verified 2026-08-15 against live sells. Tax comes off once, downstream, in
-    # TrackedTrade.realized_profit via ge_tax(). Do not subtract it here too.
     unit_price = coins // quantity
     item = SyncedItem(
         flow="received" if side == "buy" else "given",
@@ -645,8 +549,6 @@ def _parse_loadout_snapshot(
     skills: dict[str, int] = {}
     for name, level in skills_raw.items():
         skills[_text(name, "skill name", 32)] = _nonnegative_int(level, "skill level")
-    # Optional: a plugin build predating experience tracking sends no "xp" key at all, and
-    # that parses as "nothing to diff" rather than an error.
     xp_raw = body.get("xp")
     xp: dict[str, int] = {}
     if xp_raw is not None:
@@ -727,9 +629,6 @@ def _parse_player_death(
 
 
 def _parse_offer_slot(key: object, value: object) -> GEOfferSlot | None:
-    """A single slot entry from the plugin's offer-state file. Returns None on any
-    validation failure rather than raising, so one malformed slot degrades to reading
-    empty instead of blanking the whole dashboard."""
     try:
         slot_index = int(str(key))
     except (TypeError, ValueError):

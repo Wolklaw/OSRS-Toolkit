@@ -1,12 +1,3 @@
-"""Regression tests for table columns fitting the window they are shown in.
-
-Column widths start from ``resizeColumnsToContents()``, which measures the single longest
-row. A free-text column ("Notes" on PvM Readiness, "Assumption" on Skilling Profit) can
-demand more width that way than the whole window has, which used to push every column
-after it — including the Guide link column — off the right edge with nothing on screen to
-suggest they existed.
-"""
-
 from __future__ import annotations
 
 import time
@@ -48,13 +39,6 @@ def _lay_out(
     page: str,
     viewport_width: int,
 ) -> None:
-    """Give ``table`` roughly ``viewport_width`` pixels of room, as a real window would.
-
-    The window has to be shown and sized rather than the table resized directly: Qt holds
-    back resize events for hidden widgets, so a table nobody has shown never re-lays out
-    its columns at all. The chrome around it (sidebar, margins, frame) is measured rather
-    than assumed, since it moves with the font the host happens to have.
-    """
     window.nav.setCurrentRow(MainWindow.NAV_ITEMS.index(page))
     window.show()
     qt_app.processEvents()
@@ -71,11 +55,8 @@ def _right_edge(table: ResponsiveTableWidget) -> int:
 def test_pvm_guide_column_stays_on_screen_when_the_window_cannot_fit_every_column(
     qt_app: QApplication, window: MainWindow
 ) -> None:
-    """Regression: the Guide column sat past the right edge on a 1080p monitor."""
     window._render_pvm()
     table = window.pvm_table
-    # Comfortably above the point where the columns can no longer be squeezed at all, but
-    # well below the width they would take if each got the room its content asked for.
     assert sum(table._floor_widths) + 150 < sum(table._preferred_widths)
     _lay_out(qt_app, window, table, "PvM Readiness", sum(table._floor_widths) + 150)
 
@@ -98,7 +79,6 @@ def test_skilling_columns_stay_on_screen_when_the_window_cannot_fit_every_column
 def test_columns_still_fill_a_viewport_wider_than_they_asked_for(
     qt_app: QApplication, window: MainWindow
 ) -> None:
-    """Growing to fill the window must survive the shrinking path being added."""
     window._render_pvm()
     table = window.pvm_table
     _lay_out(qt_app, window, table, "PvM Readiness", sum(table._preferred_widths) + 400)
@@ -108,7 +88,6 @@ def test_columns_still_fill_a_viewport_wider_than_they_asked_for(
 
 
 def test_a_long_notes_column_cannot_outgrow_its_cap(window: MainWindow) -> None:
-    """The PvM notes run to full sentences; unbounded, one row sets the column width."""
     window._render_pvm()
     table = window.pvm_table
     longest = max(len(activity_notes) for activity_notes in _pvm_notes(window))
@@ -125,7 +104,6 @@ def _pvm_notes(window: MainWindow) -> list[str]:
 
 
 def test_prose_columns_read_left_to_right(window: MainWindow) -> None:
-    """A right-aligned sentence elides its beginning and reads as a ragged left edge."""
     window._render_pvm()
     table = window.pvm_table
     left = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -133,5 +111,4 @@ def test_prose_columns_read_left_to_right(window: MainWindow) -> None:
 
     for column in (1, 2, 3, 5, 6):
         assert table.item(0, column).textAlignment() == left, f"column {column}"
-    # The figures either side of them keep their right alignment.
     assert table.item(0, 4).textAlignment() == right

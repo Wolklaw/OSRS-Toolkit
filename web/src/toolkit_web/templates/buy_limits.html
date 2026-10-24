@@ -39,11 +39,7 @@
           </td>
           <td class="num">{{ "{:,}".format(status.bought_recently) }}</td>
           <td class="num">{{ "{:,}".format(status.limit) }}</td>
-          {#
-            This page exists to answer "can I still buy this", which is a proportion, not a
-            count. The bar says it at a glance; the number is there for when the answer is
-            "yes, but how many".
-          #}
+
           <td class="num cell-meter">
             <span class="{{ 'negative' if status.remaining == 0 else '' }}">{{ "{:,}".format(status.remaining) }}</span>
             <div class="meter {{ 'bad' if status.remaining == 0 else 'good' }}">

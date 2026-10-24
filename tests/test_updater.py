@@ -103,10 +103,6 @@ def test_download_verifies_digest(tmp_path: Path) -> None:
 
 
 def test_download_survives_a_transient_lock_on_finalize(tmp_path: Path) -> None:
-    """Regression: a real-world WinError 5 from antivirus briefly holding the file open.
-
-    The rename must succeed once the lock clears, without the whole download failing.
-    """
     content = b"installer-content"
     release = ReleaseInfo(
         version="1.2.0",
@@ -136,8 +132,6 @@ def test_download_survives_a_transient_lock_on_finalize(tmp_path: Path) -> None:
 
 
 def test_download_reports_a_persistent_lock_clearly(tmp_path: Path) -> None:
-    """A destination locked by something else must fail with an actionable message,
-    not the raw WinError text, and must not leave the .part file behind."""
     content = b"installer-content"
     release = ReleaseInfo(
         version="1.2.0",
@@ -178,8 +172,6 @@ def test_download_rejects_bad_digest(tmp_path: Path) -> None:
 
 
 class FakeKey:
-    """The one value find_install reads out of the uninstall entry."""
-
     def __init__(self, location: str) -> None:
         self.location = location
 
@@ -192,8 +184,6 @@ class FakeKey:
 
 @contextmanager
 def registered_installs(locations: dict[int, str]) -> Iterator[None]:
-    """Stand in for the uninstall entry Inno Setup writes, in the hives given."""
-
     def open_key(root: int, _path: str) -> FakeKey:
         if root not in locations:
             raise FileNotFoundError(2, "The system cannot find the file specified")
@@ -228,12 +218,6 @@ def test_a_machine_wide_install_is_recognised_as_one(tmp_path: Path) -> None:
 def test_running_the_portable_copy_alongside_an_installed_one_stays_portable(
     tmp_path: Path,
 ) -> None:
-    """Owning an installed copy does not make the portable one an installed copy.
-
-    Both can sit on the same machine, and the registered folder is what tells them apart —
-    without which a portable folder would be silently replaced by an installer that
-    believes it is updating something else.
-    """
     installed = tmp_path / "installed"
     portable = tmp_path / "portable"
     installed.mkdir()
@@ -243,8 +227,6 @@ def test_running_the_portable_copy_alongside_an_installed_one_stays_portable(
 
 
 def test_an_empty_install_location_is_not_a_match(tmp_path: Path) -> None:
-    """A blank InstallLocation resolves to the working directory, which would match by
-    accident from the wrong folder."""
     with registered_installs({winreg.HKEY_CURRENT_USER: "   "}):
         assert find_install(tmp_path) is None
 

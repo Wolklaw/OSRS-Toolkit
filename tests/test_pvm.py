@@ -28,8 +28,6 @@ def _snapshot(skills: dict[str, int], item_names: list[str]) -> LoadoutSnapshot:
 
 
 def test_missing_snapshot_reports_nothing_either_way() -> None:
-    """Without a loadout there is nothing to compare, and an account that has told us
-    nothing is not an account that owns nothing."""
     king_black_dragon = next(a for a in PVM_ACTIVITIES if a.name == "King Black Dragon")
 
     readiness = assess_readiness(king_black_dragon, None)
@@ -76,8 +74,6 @@ def test_gear_match_is_case_insensitive_and_accepts_any_alternative() -> None:
 
 
 def test_gear_match_ignores_a_potion_dose_suffix() -> None:
-    """Regression: RuneLite reports real potion names with a dose count, e.g.
-    "Prayer potion(4)" — checklist requirements are written without one and must still match."""
     barrows = next(a for a in PVM_ACTIVITIES if a.name == "Barrows")
     snapshot = _snapshot(
         skills={"Hitpoints": 60, "Prayer": 50},
@@ -152,8 +148,6 @@ def test_gp_estimate_nets_live_supply_cost_from_the_gross_baseline() -> None:
 
 
 def test_gp_estimate_falls_back_to_the_gross_figure_without_live_prices() -> None:
-    """A missing snapshot (e.g. market data hasn't loaded yet) must not crash the tab or
-    hide an activity's numbers — it should just show the community baseline as-is."""
     barrows = next(a for a in PVM_ACTIVITIES if a.name == "Barrows")
 
     estimate = estimate_gp_per_hour(barrows, {}, [], now=1_000_000)
@@ -180,9 +174,6 @@ def test_gp_estimate_prices_what_it_can_when_one_supply_item_is_missing() -> Non
 
     estimate = estimate_gp_per_hour(barrows, {}, points, now=1_000_000)
 
-    # A partial price picture is treated the same as none: showing a supply cost that only
-    # accounts for some of what's consumed would understate the real cost, so the estimate
-    # falls back to the gross figure rather than silently netting an incomplete number.
     assert estimate.priced is False
     assert estimate.net_gp_per_hour == barrows.gross_gp_per_hour
 
@@ -209,7 +200,6 @@ def test_observed_gp_per_hour_divides_total_value_by_elapsed_time() -> None:
         _loot("b", "2026-08-15T01:30:00+00:00", 1_000_000),
     ]
 
-    # 2,000,000 gp over 1.5 hours.
     assert observed_gp_per_hour(events) == 1_333_333
 
 

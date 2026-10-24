@@ -205,10 +205,8 @@ from osrs_toolkit.web_source import (
     WebAppSource,
 )
 
-# How often the journal is checked against the website.
 MIRROR_INTERVAL_MS = 60 * 1_000
 
-# Slower poll while the window isn't focused.
 MIRROR_BACKGROUND_INTERVAL_MS = 5 * 60 * 1_000
 
 WEB_BASE_URL_KEY = "web/base_url"
@@ -216,29 +214,12 @@ WEB_TOKEN_KEY = "web/token"
 
 
 def configured_web_client(timeout: float | None = None) -> ToolkitWebClient:
-    """A client for whatever website this app has been pointed at.
-
-    The token is stored in ``QSettings`` (Windows registry) as plain text -- there's no
-    system keychain dependency here. It only grants this account's journal, and can be
-    revoked immediately from the website's Profile page.
-    """
     base_url = str(QSettings().value(WEB_BASE_URL_KEY, DEFAULT_BASE_URL) or "")
     token = str(QSettings().value(WEB_TOKEN_KEY, "") or "")
     return ToolkitWebClient(base_url, token, timeout)
 
 
 def build_sync_importer() -> RuneLiteSyncImporter:
-    """Where this app reads live plugin state from: the website, always.
-
-    Never falls back to the local ``.runelite`` folder, even with no token configured --
-    that's the same-machine plugin arrangement the Plugin Hub rejected. An unconfigured
-    client just answers "nothing yet"; ``RuneLiteConnectionDialog`` prompts for the
-    missing token instead.
-
-    Given the short poll timeout rather than the 20s default: this source is read from the
-    GUI thread on a 3-second timer, so that default is how long the window could sit frozen
-    on one stalled request.
-    """
     return RuneLiteSyncImporter(source=WebAppSource(configured_web_client(POLL_TIMEOUT_SECONDS)))
 
 
@@ -254,7 +235,7 @@ class MarketWorker(QObject):
             client = WikiMarketClient()
             mappings, points = client.fetch_snapshot()
             self.finished.emit(mappings, points, client.used_cache)
-        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+        except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
 
 
@@ -271,18 +252,15 @@ class AccountWorker(QObject):
             self.finished.emit(fetch_player(self.character_name))
         except AccountLookupError as exc:
             self.failed.emit(str(exc))
-        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+        except Exception as exc:  # noqa: BLE001
             self.failed.emit(f"Unexpected error while looking up hiscores: {exc}")
 
 
 class SearchLineEdit(QLineEdit):
-    """A native-feeling search field with a clear action and Escape support."""
-
     def __init__(self, placeholder: str) -> None:
         super().__init__()
         self.setPlaceholderText(placeholder)
         self.setClearButtonEnabled(True)
-        # Without a floor, this is the widget that gets squeezed first as the window shrinks.
         self.setMinimumWidth(180)
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
@@ -299,7 +277,7 @@ class UpdateCheckWorker(QObject):
     def run(self) -> None:
         try:
             self.finished.emit(fetch_latest_release())
-        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+        except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
 
 
@@ -316,37 +294,26 @@ class UpdateDownloadWorker(QObject):
         try:
             path = download_installer(self.release, self.progress.emit)
             self.finished.emit(path)
-        except Exception as exc:  # noqa: BLE001 - worker boundary reports failures to the GUI.
+        except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
 
 
 CHANGELOG_URL = "https://github.com/Wolklaw/OSRS-Toolkit/blob/main/CHANGELOG.md"
 
-# Cap on content-measured column width, so a long notes column can't push other columns off screen.
 DEFAULT_MAXIMUM_COLUMN_WIDTH = 320
 
-# Below this, a column holds a short label/figure and isn't worth squeezing further.
 NARROW_COLUMN_WIDTH = 160
 
-# Stylesheet per-cell padding (7px a side) plus a little slack.
 CELL_PADDING_WIDTH = 24
-# Thirds of the room between a strategy's minimum and 100 — see confidence_standing.
 _CONFIDENCE_FAIR = 1 / 3
 _CONFIDENCE_STRONG = 2 / 3
 
-# Kept apart from column 0's UserRole, which holds a tracked position id or manual trade id
-# from a different numbering. Only tracked rows carry this.
 _FLASH_KEY_ROLE = Qt.ItemDataRole.UserRole + 1
-# Positions with goods actually on the Grand Exchange, so a live offer's price is theirs.
 _LISTED_STATUSES = frozenset({"Listed for sale", "Partially sold"})
 
-# Doubled ampersand is Qt's escape for a literal "&" in a tab title (a single & underlines
-# the next letter as an Alt shortcut).
 _PLANS_TAB_TITLE = "Plans && completed"
 _PLANS_TAB_INDEX = 0
 
-# The Guide column on the Skilling Profit / PvM Readiness tables -- carries a wiki URL, the
-# only cell a double-click opens.
 _SKILL_GUIDE_COLUMN = 11
 _PVM_GUIDE_COLUMN = 6
 
@@ -354,21 +321,15 @@ LAST_SEEN_VERSION_KEY = "app/last_seen_version"
 SKIPPED_VERSION_KEY = "updates/skipped_version"
 WINDOW_GEOMETRY_KEY = "window/geometry"
 
-# How much of a restored window has to land on an attached monitor to be worth keeping.
-# Qt clamps most cases back on screen itself; this covers the rest.
 _ONSCREEN_MINIMUM = 120
 
 
 def current_release_notes(*, since: str = "", limit: int = 5) -> list[ReleaseNotes]:
-    """Release notes for the running version plus anything released since ``since``."""
     releases = load_release_notes(_resource_path("CHANGELOG.md"))
     return catch_up_notes(releases, current=__version__, since=since, limit=limit)
 
 
 class WhatsNewDialog(QDialog):
-    """Headline notes for the running version and any missed before it. Full detail is a
-    click away rather than shown inline."""
-
     def __init__(self, releases: list[ReleaseNotes], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"What's new in {releases[0].version}")
@@ -391,13 +352,6 @@ class WhatsNewDialog(QDialog):
 
 
 class UpdateAvailableDialog(QDialog):
-    """Offers a newer official release: install it now, defer it, or skip the version.
-
-    Owns the download so both the start-up check and the manual check in Settings install
-    an update the same way. An installed copy is replaced in place and reopened; a portable
-    copy is instead offered the installer wizard.
-    """
-
     def __init__(
         self,
         release: ReleaseInfo,
@@ -407,8 +361,6 @@ class UpdateAvailableDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.release = release
-        # Settled up front so the window can say which path (install vs. installer wizard)
-        # is about to happen before the download starts.
         self._install = find_install()
         self._download_thread: QThread | None = None
         self._download_worker: QObject | None = None
@@ -499,10 +451,9 @@ class UpdateAvailableDialog(QDialog):
         )
         try:
             start_installer(path, self._install)
-        except Exception as exc:  # noqa: BLE001 - present launch failures to the user.
+        except Exception as exc:  # noqa: BLE001
             self._download_failed(str(exc))
             return
-        # Setup can't replace this executable while it's running.
         QApplication.quit()
 
     def _download_failed(self, message: str) -> None:
@@ -518,7 +469,6 @@ class UpdateAvailableDialog(QDialog):
         self._download_thread = None
 
     def closeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        # Let an in-flight download finish rather than leave a half-written installer behind.
         if self._download_thread is not None and self._download_thread.isRunning():
             self._report("Finishing the download — this window closes when the update starts.")
             event.ignore()
@@ -557,11 +507,6 @@ def _default_database_path() -> Path:
 
 
 class _Palette(NamedTuple):
-    """One theme's colours, plus the few shape choices a theme may make.
-
-    Fields with defaults hold the common values; each theme overrides only what it changes.
-    """
-
     background: str
     sidebar: str
     text: str
@@ -584,12 +529,8 @@ class _Palette(NamedTuple):
     accent: str = "#d5ad52"
     accent_hover: str = "#e2bd64"
     on_accent: str = "#11151b"
-    # Attention blink: flash is the lit-up text/edge, flash_row the tinted wash behind it
-    # (a tint, not a fill, so the row's own status/P&L colour stays readable).
     flash: str = "#ffd34d"
     flash_row: str = "#4a3c14"
-    # The price a live Grand Exchange offer is working on. Deliberately a different colour
-    # from flash, since this holds for as long as the offer does rather than blinking briefly.
     live_offer: str = "#65a9ff"
     button_border: str = "0"
     focus: str = "#d5ad52"
@@ -656,8 +597,6 @@ _PALETTES: dict[str, _Palette] = {
         live_offer="#1f64a8",
         icon_variant="-dark",
     ),
-    # Styled after the game's own interfaces: stone panels, square corners, interface
-    # orange for emphasis. Profit/loss keep their own green/red regardless.
     "Old School": _Palette(
         background="#241f18",
         sidebar="#2f2921",
@@ -880,11 +819,6 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
 
     def _check_website(self) -> None:
-        """Check the entered website/token before saving.
-
-        Uses the interactive timeout, not the background one, so a bad address comes back
-        quickly instead of freezing the window.
-        """
         self.web_status.setText("Checking…")
         self.check_website_button.setEnabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -924,7 +858,6 @@ class SettingsDialog(QDialog):
         self.database_path_field.setText(str(path))
 
     def _show_whats_new(self) -> None:
-        # Shows recent history regardless of whether this launch had anything new to report.
         notes = current_release_notes()
         if not notes:
             QMessageBox.information(
@@ -976,7 +909,6 @@ class SettingsDialog(QDialog):
         self.update_button.setEnabled(True)
 
     def _download_update(self, release: ReleaseInfo) -> None:
-        # Skipping a version only makes sense from the start-up check, not a manual one.
         UpdateAvailableDialog(release, self, allow_skip=False).exec()
 
     def _update_failed(self, message: str) -> None:
@@ -1042,8 +974,6 @@ class RuneLiteConnectionDialog(QDialog):
                 f"Player-trade tracking is {player_trades}."
             )
         elif reading_website and not self.importer.configured:
-            # Distinguish "no token configured" from "plugin not installed" -- otherwise
-            # someone with a working plugin gets sent to reinstall it.
             self.status.setText(
                 "No desktop access token yet. Get one from your runescope.app Profile page, "
                 "under Desktop app, then paste it into Settings → Website."
@@ -1063,7 +993,6 @@ class RuneLiteConnectionDialog(QDialog):
                 "Not connected yet. Install and enable the RuneLite plugin, then choose Check "
                 "connection."
             )
-        # The privacy claim depends on which source is configured -- keep it accurate.
         self.privacy.setText(
             "Trade and position data reaches your runescope.app account, and nowhere else. "
             "Jagex credentials are never involved."
@@ -1079,26 +1008,12 @@ class RuneLiteConnectionDialog(QDialog):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.importer.sync_root)))
 
 
-# The Grand Exchange no longer stops a cash stack at 2,147,483,647, but QSpinBox always
-# will: its value is a C++ int, so setMaximum() cannot even be told about a larger amount.
-# A GP field has to keep a Python int instead, which leaves the journal's SQLite columns as
-# the only real ceiling -- a signed 64-bit integer.
 GP_FIELD_MAXIMUM = 2**63 - 1
 
-# Wide enough to read a trillion-gp stack and its separators. The range cannot be used to
-# pick a field width any more, because it deliberately no longer describes a reachable
-# amount, and QAbstractSpinBox otherwise sizes itself to whatever it happens to hold.
 _GP_FIELD_SAMPLE = 9_999_999_999_999
 
 
 def _gp_digits(text: str, suffix: str) -> str | None:
-    """The digits of a typed GP amount: "" for an empty field, None if it is not one.
-
-    Separators and the suffix the field writes itself are accepted, so a formatted amount
-    can be typed straight over. So is a half-deleted suffix: backspacing at the end of
-    "1,000 gp" eats the "p" first, and refusing that keystroke would trap the caret behind
-    a suffix the user has no way to remove.
-    """
     body = text.strip()
     tail = suffix.strip()
     for length in range(len(tail), 0, -1):
@@ -1112,13 +1027,6 @@ def _gp_digits(text: str, suffix: str) -> str | None:
 
 
 class GpSpinBox(QAbstractSpinBox):
-    """A spin box for GP amounts, without QSpinBox's 32-bit ceiling on the value.
-
-    Reimplements the slice of the QSpinBox API a GP field in this app is asked for, and
-    keeps thousands separators on always: judging the magnitude of a ten-digit amount at a
-    glance is the whole point of the widget.
-    """
-
     valueChanged = Signal("qlonglong")
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -1162,7 +1070,6 @@ class GpSpinBox(QAbstractSpinBox):
         if digits is None:
             return QValidator.State.Invalid, text, position
         if not digits or int(digits) < self._minimum:
-            # Mid-entry: the "5" on the way to "50,000,000" is below any sane floor.
             return QValidator.State.Intermediate, text, position
         return QValidator.State.Acceptable, text, position
 
@@ -1182,8 +1089,6 @@ class GpSpinBox(QAbstractSpinBox):
         return enabled
 
     def focusOutEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        # editingFinished covers Enter, but an entry still below the minimum only ever
-        # validates as Intermediate and never emits it, so clicking away is handled here.
         self._commit()
         super().focusOutEvent(event)
 
@@ -1194,12 +1099,6 @@ class GpSpinBox(QAbstractSpinBox):
         return self._widened(super().minimumSizeHint())
 
     def _widened(self, base: QSize) -> QSize:
-        """``base`` plus room for the amount itself.
-
-        A spin box built straight on QAbstractSpinBox measures as if it were empty -- the
-        text contributes nothing, because the width normally comes from running the range
-        through a textFromValue() that only QSpinBox and its relatives have.
-        """
         room = self.fontMetrics().horizontalAdvance(self._formatted(_GP_FIELD_SAMPLE))
         return QSize(base.width() + room, base.height())
 
@@ -1210,7 +1109,6 @@ class GpSpinBox(QAbstractSpinBox):
         return min(max(value, self._minimum), self._maximum)
 
     def _take(self, value: int) -> None:
-        """Adopt a value, clamped into range, announcing it only if it actually moved."""
         clamped = self._clamped(value)
         if clamped == self._value:
             return
@@ -1232,22 +1130,12 @@ class GpSpinBox(QAbstractSpinBox):
             self._take(typed)
 
     def _commit(self) -> None:
-        """Settle the editor into a real value on Enter or focus-out.
-
-        An empty or abandoned entry keeps the value the field already had rather than
-        dropping to the minimum, which is what clearing a QSpinBox does too.
-        """
         digits = _gp_digits(self.lineEdit().text(), self._suffix)
         if digits:
             self._take(int(digits))
         self._display()
 
     def _regroup(self, value: int) -> None:
-        """Rewrite the separators around what was just typed, without moving the caret.
-
-        Counted in digits rather than characters, because a separator appearing to the left
-        of the caret would otherwise shunt it one place into the number.
-        """
         edit = self.lineEdit()
         typed = sum(character.isdecimal() for character in edit.text()[: edit.cursorPosition()])
         edit.setText(self._formatted(value))
@@ -1347,17 +1235,7 @@ class SavingsGoalDialog(QDialog):
 
 
 class RetagTradesDialog(QDialog):
-    """Refile several positions at once: what they are, not what they hold.
-
-    Every field starts on "Leave unchanged" and means it, so this only ever writes what was
-    deliberately picked. Nothing here can touch a price, a fill or a quantity — those differ
-    per position, and a batch editor that could overwrite them across a selection is a way to
-    lose a day's real numbers to one wrong click.
-    """
-
     UNCHANGED_LABEL = "Leave unchanged"
-    #: Only meaningful for a batch. Marking a whole shopping trip as Supplies is the case
-    #: this dialog exists for, so it leads.
     STATUSES: ClassVar[list[str]] = [
         "Supplies",
         "Pending buy",
@@ -1419,9 +1297,6 @@ class RetagTradesDialog(QDialog):
         layout.addWidget(buttons)
 
     def _status_changed(self, status: str) -> None:
-        # Said before the click rather than reported after it: "Completed" is the one status
-        # a position can fail to qualify for, and finding that out from a summary afterwards
-        # reads like the app ignored you.
         self.warning.setText(
             "Only positions whose buy and sell fills already cover their full quantity can "
             "become Completed. Any that don't are left as they are."
@@ -1438,11 +1313,6 @@ class RetagTradesDialog(QDialog):
         return None if text == self.UNCHANGED_LABEL else text
 
     def chosen_character(self) -> str | None | object:
-        """The account hash to file these under, or ``UNCHANGED``.
-
-        ``None`` is a real answer here — "belongs to no character in particular" — so it
-        cannot double as "leave alone", which is why the sentinel exists.
-        """
         if self.character.currentText() == self.UNCHANGED_LABEL:
             return UNCHANGED
         return self.character.currentData()
@@ -1718,8 +1588,6 @@ class UpdateTrackedTradeDialog(QDialog):
 
 
 class SortableTableItem(QTableWidgetItem):
-    """Display formatted text while sorting by its underlying numeric meaning."""
-
     def __init__(self, value: str) -> None:
         super().__init__(value)
         self.sort_value = _table_sort_value(value)
@@ -1731,12 +1599,6 @@ class SortableTableItem(QTableWidgetItem):
 
 
 class ClickableCard(QLabel):
-    """A summary card that navigates to the rows behind its own number.
-
-    Only clickable while it has something to point at -- the hand cursor is the whole
-    affordance, so a card reading zero must not show one.
-    """
-
     clicked = Signal()
 
     def __init__(self, text: str, **kwargs: object) -> None:
@@ -1760,14 +1622,6 @@ class ClickableCard(QLabel):
 
 
 class ResponsiveTableWidget(QTableWidget):
-    """Fill wide viewports while preserving readable widths in compact windows.
-
-    Each column has a preferred width and a floor. Spare space is shared proportionally;
-    a too-narrow viewport scales all columns down together, never letting one get pushed
-    off the right edge.
-    """
-
-    # A row opened from the keyboard, as (row, column) to match cellDoubleClicked.
     rowActivated = Signal(int, int)
 
     def __init__(self, column_count: int) -> None:
@@ -1778,9 +1632,6 @@ class ResponsiveTableWidget(QTableWidget):
         self._user_resized_columns: set[int] = set()
         self._tooltip_index = QModelIndex()
         self.horizontalHeader().sectionResized.connect(self._section_resized)
-        # Qt's native tooltip only fires once the cursor stops moving, which is a small
-        # target for a narrow glyph like the warning icon. Track every move instead and
-        # show on arrival at the cell.
         self.setMouseTracking(True)
 
     def _section_resized(self, column: int, _old_width: int, _new_width: int) -> None:
@@ -1788,7 +1639,6 @@ class ResponsiveTableWidget(QTableWidget):
             self._user_resized_columns.add(column)
 
     def viewportEvent(self, event) -> bool:  # type: ignore[no-untyped-def]
-        """Suppress Qt's native tooltip; ``mouseMoveEvent`` shows it instead, on arrival."""
         if event.type() == QEvent.Type.ToolTip:
             return True
         return super().viewportEvent(event)
@@ -1804,7 +1654,6 @@ class ResponsiveTableWidget(QTableWidget):
         if not text:
             QToolTip.hideText()
             return
-        # Anchoring to the cell's rect lets Qt hide the tooltip as soon as the cursor leaves it.
         QToolTip.showText(event.globalPosition().toPoint(), text, self, self.visualRect(index))
 
     def leaveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
@@ -1813,11 +1662,6 @@ class ResponsiveTableWidget(QTableWidget):
         QToolTip.hideText()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        """Enter opens the current row, like double-clicking it.
-
-        Not using Qt's ``activated`` signal: on Windows it also fires on the double-click
-        that ``cellDoubleClicked`` reports, which would open the row twice.
-        """
         if (
             event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
             and not event.modifiers()
@@ -1830,23 +1674,16 @@ class ResponsiveTableWidget(QTableWidget):
         super().keyPressEvent(event)
 
     def _tooltip_text(self, item: QTableWidgetItem, index) -> str:  # type: ignore[no-untyped-def]
-        """A cell's tooltip, skipped when it just repeats the visible (non-elided) text.
-
-        A tooltip that differs from the cell text is a deliberate explanation (a P/L
-        breakdown, a stale ask, etc.) and always shows.
-        """
         tooltip = item.toolTip()
         if tooltip != item.text() or self._is_elided(item, index):
             return tooltip
         return ""
 
     def _is_elided(self, item: QTableWidgetItem, index) -> bool:  # type: ignore[no-untyped-def]
-        """Whether this cell is showing less than its whole text."""
         width = self.visualRect(index).width() - CELL_PADDING_WIDTH
         return QFontMetrics(item.font()).horizontalAdvance(item.text()) > width
 
     def begin_bulk_resize(self) -> None:
-        """Suspend user-resize tracking around programmatic sizing (e.g. initial layout)."""
         self._applying_widths = True
 
     def end_bulk_resize(self) -> None:
@@ -1861,12 +1698,9 @@ class ResponsiveTableWidget(QTableWidget):
         self._apply_responsive_widths()
 
     def _header_floor(self, column: int) -> int:
-        """The narrowest this column may be squeezed to: enough to read its own header."""
         header = self.horizontalHeader()
         item = self.horizontalHeaderItem(column)
         label = item.text() if item is not None else ""
-        # Stylesheet pads header sections 10px a side; a sorted column also needs room for
-        # its indicator.
         return max(
             header.minimumSectionSize(),
             header.fontMetrics().horizontalAdvance(label) + 40,
@@ -1904,18 +1738,11 @@ class ResponsiveTableWidget(QTableWidget):
             self._applying_widths = False
 
     def _grown_widths(self, columns: list[int], extra: int) -> dict[int, int]:
-        """Share spare viewport space out in proportion to each column's preferred width."""
         weights = [self._preferred_widths[column] for column in columns]
         additions = self._distribute(columns, extra, weights)
         return {column: self._preferred_widths[column] + additions[column] for column in columns}
 
     def _shrunk_widths(self, columns: list[int], available: int) -> dict[int, int]:
-        """Scale every column down together, proportionally, holding each at its floor.
-
-        Proportional shrinking keeps the widest column on a large monitor still the widest
-        on a small one. Columns that would fall under their floor are pinned there and the
-        rest re-share what's left; if even the floors overflow, the table scrolls.
-        """
         widths = {column: self._floor_widths[column] for column in columns}
         scalable = columns
         budget = available
@@ -1939,11 +1766,6 @@ class ResponsiveTableWidget(QTableWidget):
 
     @staticmethod
     def _distribute(columns: list[int], amount: int, weights: list[int]) -> dict[int, int]:
-        """Split ``amount`` across ``columns`` in proportion to ``weights``.
-
-        Independent rounding can leave a few pixels over; the widest column absorbs them
-        so the parts always sum back to ``amount`` exactly.
-        """
         total = sum(weights)
         if total <= 0:
             return dict.fromkeys(columns, 0)
@@ -1957,12 +1779,6 @@ class ResponsiveTableWidget(QTableWidget):
 
 
 class ElidedLabel(QLabel):
-    """A label that elides its own text to whatever width the layout gives it.
-
-    A plain QLabel refuses to go below the width of its text. This one keeps the full text
-    as a tooltip and shows as much as fits.
-    """
-
     def __init__(self, object_name: str) -> None:
         super().__init__(objectName=object_name)
         self._full_text = ""
@@ -1986,12 +1802,6 @@ class ElidedLabel(QLabel):
 
 
 class FittedScrollArea(QScrollArea):
-    """A scroll area that takes exactly the height its contents want, up to a ceiling.
-
-    Grows to fit content instead of using a fixed height. ``window_reserve`` is the height
-    the rest of the page needs; whatever's left over is all this may take.
-    """
-
     def __init__(self, content: QWidget, *, minimum: int, window_reserve: int) -> None:
         super().__init__()
         self._content = content
@@ -2010,9 +1820,6 @@ class FittedScrollArea(QScrollArea):
         self.fit()
 
     def fit(self) -> None:
-        """Re-measure the contents. Call after changing them, and on a window resize."""
-        # Measured as if the scrollbar were always present, to avoid a resize loop where
-        # the wider assumption makes a scrollbar appear, re-wrapping the text taller.
         width = self.width() - self.verticalScrollBar().sizeHint().width()
         wanted = self._content.heightForWidth(width) if width > 0 else 0
         if wanted <= 0:
@@ -2025,16 +1832,8 @@ class FittedScrollArea(QScrollArea):
 
 
 class AttentionFlasher(QObject):
-    """Blinks a set of things on and off a few times, to put the eye on what just changed.
-
-    Keeps only the bookkeeping (which keys are lit, and whether this is an "on" beat);
-    drawing is left to whoever connects to ``pulsed``, since a table row and a GE slot
-    card highlight differently. A key is whatever the caller identifies targets by.
-    """
-
     pulsed = Signal()
 
-    # Three full blinks, ending dark.
     BEATS = 6
     BEAT_MS = 260
 
@@ -2047,11 +1846,6 @@ class AttentionFlasher(QObject):
         self._timer.timeout.connect(self._beat)
 
     def start(self, keys: Iterable[Hashable]) -> None:
-        """Blink ``keys``, restarting the count and keeping anything already blinking.
-
-        A second offer finishing shortly after the first joins in rather than cutting the
-        first one's blink short.
-        """
         added = set(keys)
         if not added:
             return
@@ -2061,11 +1855,6 @@ class AttentionFlasher(QObject):
         self.pulsed.emit()
 
     def focus(self, keys: Iterable[Hashable]) -> None:
-        """Blink ``keys`` and only ``keys``, dropping whatever was blinking before.
-
-        Unlike ``start`` (which joins), this replaces -- a click on a slot card is a new
-        "which row is this?" question, not an event to add to the last one.
-        """
         wanted = set(keys)
         if not wanted:
             return
@@ -2080,24 +1869,16 @@ class AttentionFlasher(QObject):
         self._beats_left = 0
 
     def is_lit(self, key: Hashable) -> bool:
-        """Whether ``key`` should be drawn highlighted at this instant."""
         return self._beats_left > 0 and self._beats_left % 2 == 0 and key in self._keys
 
     def _beat(self) -> None:
         self._beats_left -= 1
         if self._beats_left <= 0:
             self.stop()
-        # Emitted after stopping too, so the last beat clears the highlight.
         self.pulsed.emit()
 
 
 class GEOfferSlotCard(QFrame):
-    """One Grand Exchange slot, laid out like the slot it mirrors in-game.
-
-    Shows fill progress as a bar rather than a raw "31 / 116" figure.
-    """
-
-    # The item this slot holds an offer for. Zero (empty slot) is never emitted.
     clicked = Signal(int)
 
     def __init__(self, slot_index: int) -> None:
@@ -2147,7 +1928,6 @@ class GEOfferSlotCard(QFrame):
 
     def show_offer(self, slot: GEOfferSlot) -> None:
         side = "Buy" if slot.side == "buy" else "Sell" if slot.side == "sell" else ""
-        # Terminal offers are done but not yet collected in-game -- give them their own tone.
         self.setProperty("slotState", "collect" if slot.is_terminal else slot.side or "empty")
         self._item_id = slot.item_id
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -2169,7 +1949,6 @@ class GEOfferSlotCard(QFrame):
         self._repolish()
 
     def set_flashing(self, lit: bool) -> None:
-        """Light the whole card up, or put it back to the tone its state calls for."""
         wanted = "on" if lit else ""
         if self.property("flash") == wanted:
             return
@@ -2186,7 +1965,6 @@ class GEOfferSlotCard(QFrame):
             self.clicked.emit(self._item_id)
 
     def _repolish(self) -> None:
-        """Qt only re-reads a property-based stylesheet rule when asked to."""
         for widget in (
             self,
             self._number,
@@ -2242,13 +2020,9 @@ class MainWindow(QMainWindow):
                 Path(str(saved_database_path)) if saved_database_path else None
             )
         except OSError:
-            # The configured location may be unavailable (e.g. a removed drive). Fall
-            # back to the default so the app can still start.
             self._journal = JournalRepository()
         self._sync_importer = build_sync_importer()
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
-        # Dedicated to on-demand item-details lookups (price history), separate from the
-        # transient client MarketWorker creates for each periodic snapshot poll.
         self._market_client = WikiMarketClient()
         self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
         self._last_sync_message = ""
@@ -2272,31 +2046,15 @@ class MainWindow(QMainWindow):
         self._flash_color = "#ffd34d"
         self._flash_row_color = "#4a3c14"
         self._live_offer_color = "#65a9ff"
-        # The last state each renderer saw, so the next pass can tell what changed. None
-        # means "nothing seen yet" -- the first look after startup seeds these silently,
-        # so nothing left finished overnight blinks the moment the app opens.
         self._journal_statuses: dict[int, str] | None = None
-        # Position id -> item id, for matching a queued flash against a GE slot (which
-        # only knows items).
         self._journal_item_ids: dict[int, int | None] = {}
         self._ge_slot_states: dict[int, str] | None = None
-        # Items currently finished-but-uncollected on the GE. None means "not read yet",
-        # same convention as _ge_slot_states.
         self._ge_terminal_items: frozenset[int] | None = None
-        # The character the Grand Exchange panel is drawing, held across a moment where the
-        # website could not be reached -- see _synced_account_hash.
         self._last_synced_account_hash: str | None = None
-        # What the Needs attention card is counting, so clicking it can show them. Newest
-        # first, the order the table itself is in -- a set would hand back an arbitrary one.
         self._attention_positions: list[int] = []
-        # Where the plugin says the player is in the GE interface, every buy or sale the
-        # Grand Exchange has going as (item id, side), and which of each journal row's two
-        # price cells that marks (resolved by _render_journal).
         self._offer_screen: GEOfferScreen | None = None
         self._live_offers: frozenset[tuple[int, str | None]] = frozenset()
         self._live_price_sides: dict[int, frozenset[str]] = {}
-        # Held until the surface each points at is actually being looked at — see
-        # _release_pending_flashes.
         self._pending_journal_flash: set[int] = set()
         self._pending_slot_flash: set[int] = set()
         self._journal_flasher = AttentionFlasher(self)
@@ -2304,20 +2062,14 @@ class MainWindow(QMainWindow):
         self._slot_flasher = AttentionFlasher(self)
         self._slot_flasher.pulsed.connect(self._paint_slot_flash)
         self._market_buttons: list[QPushButton] = []
-        # Buttons that act on "the selected row" -- held here so selection changes can
-        # enable/disable them together, rather than each failing with "select a row first".
         self._journal_row_buttons: list[QPushButton] = []
         self._loot_log_row_buttons: list[QPushButton] = []
         self._death_log_row_buttons: list[QPushButton] = []
-        # The Journal page is built first and renders itself as it is built, which reaches
-        # the Performance page's renderer before its widgets exist.
         self._performance_ready = False
         self._cash_debounce = QTimer(self)
         self._cash_debounce.setSingleShot(True)
         self._cash_debounce.setInterval(200)
         self._cash_debounce.timeout.connect(self._cash_changed)
-        # Built before _restore_window_geometry: restoreGeometry can fire changeEvent
-        # synchronously, and changeEvent reaches for this timer.
         self._mirror_timer = QTimer(self)
         self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
         self._mirror_timer.timeout.connect(self._mirror_journal)
@@ -2328,20 +2080,15 @@ class MainWindow(QMainWindow):
         self._sync_timer.setInterval(3_000)
         self._sync_timer.timeout.connect(self._import_runelite_events)
         self._sync_timer.start()
-        # self as receiver so Qt drops the pending call if the window is gone by then.
         QTimer.singleShot(100, self, self._import_runelite_events)
         QTimer.singleShot(250, self, self.load_market)
-        # Let the window paint before anything modal appears in front of it.
         QTimer.singleShot(600, self, self._run_startup_notices)
         self._mirror_timer.start()
-        # Delayed rather than run alongside the first import -- nothing here is urgent.
         QTimer.singleShot(4_000, self, self._mirror_journal)
         self._market_timer = QTimer(self)
         self._market_timer.setInterval(5 * 60 * 1_000)
         self._market_timer.timeout.connect(self.load_market)
         self._market_timer.start()
-        # Rechecks periodically so a long-running session still learns about a release
-        # published after startup, on the same quiet terms as the startup check.
         self._update_check_timer = QTimer(self)
         self._update_check_timer.setInterval(60 * 60 * 1_000)
         self._update_check_timer.timeout.connect(self._start_startup_update_check)
@@ -2376,12 +2123,10 @@ class MainWindow(QMainWindow):
         self.nav.addItems(self.NAV_ITEMS)
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._change_page)
-        # Ctrl+1..7, in sidebar order. Advertised via the tooltip on each row.
         for index, title in enumerate(self.NAV_ITEMS):
             self.nav.item(index).setToolTip(f"{title}  (Ctrl+{index + 1})")
             shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
             shortcut.activated.connect(lambda row=index: self.nav.setCurrentRow(row))
-        # load_market already ignores a refresh asked for while one is running.
         QShortcut(QKeySequence.StandardKey.Refresh, self).activated.connect(self.load_market)
         side.addWidget(self.nav, 1)
         settings_button = QPushButton("⚙  Settings", objectName="settingsButton")
@@ -2422,11 +2167,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
     def _restore_window_geometry(self) -> None:
-        """Reopen where the player left the window, when that place still exists.
-
-        ``restoreGeometry`` already clamps to an attached monitor; the check below is a
-        backstop for the cases it misses, falling back to ``__init__``'s default geometry.
-        """
         saved = QSettings().value(WINDOW_GEOMETRY_KEY)
         if not isinstance(saved, (QByteArray, bytes, bytearray)):
             return
@@ -2437,7 +2177,6 @@ class MainWindow(QMainWindow):
             self.setGeometry(default_geometry)
 
     def _is_on_an_attached_screen(self) -> bool:
-        """Whether enough of the window has landed somewhere the player can see and grab."""
         frame = self.frameGeometry()
         for screen in QGuiApplication.screens():
             visible = screen.availableGeometry().intersected(frame)
@@ -2448,18 +2187,12 @@ class MainWindow(QMainWindow):
     def _open_rows_with(
         self, table: ResponsiveTableWidget, open_row: Callable[[int, int], None]
     ) -> None:
-        """Wire both ways of opening a row: double-click it, or select it and press Enter."""
         table.cellDoubleClicked.connect(open_row)
         table.rowActivated.connect(open_row)
 
     def _install_row_menu(
         self, table: ResponsiveTableWidget, build: Callable[[QMenu, int], None]
     ) -> None:
-        """Right-click a row for the verbs that apply to it.
-
-        The row is made current before ``build`` runs, so "the selected trade" always
-        means the row the menu opened over. An empty menu is never shown.
-        """
         table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
         def show_menu(position) -> None:  # type: ignore[no-untyped-def]
@@ -2476,7 +2209,6 @@ class MainWindow(QMainWindow):
         table.customContextMenuRequested.connect(show_menu)
 
     def _row_item_id(self, table: QTableWidget, row: int) -> int | None:
-        """The item a row stands for, as ``_fill_table`` stored it against column 0."""
         anchor = table.item(row, 0)
         if anchor is None:
             return None
@@ -2484,13 +2216,11 @@ class MainWindow(QMainWindow):
         return item_id if isinstance(item_id, int) else None
 
     def _copy_text(self, text: str) -> None:
-        """Put one field on the clipboard, ready to paste into the game's own search box."""
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(text)
 
     def _add_copy_action(self, menu: QMenu, table: QTableWidget, row: int, column: int) -> None:
-        """A "copy this name" entry, when the row has a name to copy."""
         cell = table.item(row, column)
         if cell is None or not cell.text().strip():
             return
@@ -2498,7 +2228,6 @@ class MainWindow(QMainWindow):
         menu.addAction(f"Copy “{name}”", lambda: self._copy_text(name))
 
     def _set_watched(self, item_id: int, watched: bool) -> None:
-        """Add or drop a watchlist entry and persist it, from wherever the ask came from."""
         if watched:
             self._watchlist.add(item_id)
         else:
@@ -2507,11 +2236,6 @@ class MainWindow(QMainWindow):
         self._render_watchlist()
 
     def _build_market_row_menu(self, table: ResponsiveTableWidget) -> Callable[[QMenu, int], None]:
-        """The row menu for a table of market items: details, tracking, watchlist, copy.
-
-        Shared by the GE Flipper, Watchlist, and Alch Finder tables -- all keyed to an item id.
-        """
-
         def build(menu: QMenu, row: int) -> None:
             item_id = self._row_item_id(table, row)
             if item_id is None:
@@ -2536,10 +2260,6 @@ class MainWindow(QMainWindow):
     def _delete_selected_row_on_delete_key(
         self, table: ResponsiveTableWidget, delete: Callable[[], None]
     ) -> None:
-        """Delete removes the selected row, scoped to the table that has focus.
-
-        ``delete`` still asks for confirmation -- this just saves reaching for the button.
-        """
         shortcut = QShortcut(QKeySequence.StandardKey.Delete, table)
         shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
         shortcut.activated.connect(delete)
@@ -2548,15 +2268,12 @@ class MainWindow(QMainWindow):
         selected = bool(self.journal_table.selectionModel().hasSelection())
         for button in self._journal_row_buttons:
             button.setEnabled(selected)
-        # The button says which editor it opens, because they are different dialogs: one row
-        # gets the full editor with its fills, several get the batch one.
         count = len(self._selected_journal_rows())
         self.journal_update_button.setText(
             f"Update {count} selected trades" if count > 1 else "Update selected trade"
         )
 
     def _build_journal_row_menu(self, menu: QMenu, row: int) -> None:
-        """The row menu for a journal entry: the two buttons above it, on the row itself."""
         count = len(self._selected_journal_rows())
         menu.addAction(
             f"Update {count} trades…" if count > 1 else "Update trade…",
@@ -2575,7 +2292,6 @@ class MainWindow(QMainWindow):
             button.setEnabled(selected)
 
     def _build_loot_log_row_menu(self, menu: QMenu, row: int) -> None:
-        """The row menu for an imported loot delivery."""
         menu.addAction("Delete entry…", self._delete_selected_loot_event)
         menu.addSeparator()
         self._add_copy_action(menu, self.loot_log_table, row, 1)
@@ -2586,7 +2302,6 @@ class MainWindow(QMainWindow):
             button.setEnabled(selected)
 
     def _build_death_log_row_menu(self, menu: QMenu, row: int) -> None:
-        """The row menu for an imported death."""
         menu.addAction("Delete entry…", self._delete_selected_death_event)
         menu.addSeparator()
         self._add_copy_action(menu, self.death_log_table, row, 1)
@@ -2597,8 +2312,6 @@ class MainWindow(QMainWindow):
         guide_column: int,
         open_guide: Callable[[int, int], None],
     ) -> Callable[[QMenu, int], None]:
-        """The row menu for a table whose rows link out to the wiki."""
-
         def build(menu: QMenu, row: int) -> None:
             cell = table.item(row, guide_column)
             if cell is not None and isinstance(cell.data(Qt.ItemDataRole.UserRole), str):
@@ -2611,8 +2324,6 @@ class MainWindow(QMainWindow):
     def _page_heading(
         self, title: str, subtitle: str, *, market_refresh: bool = True
     ) -> QVBoxLayout:
-        """Standard page header. Pages that read no market data pass ``market_refresh=False``
-        rather than offering a button that cannot change anything they show."""
         layout = QVBoxLayout()
         heading = QHBoxLayout()
         heading.addWidget(QLabel(title, objectName="title"))
@@ -2658,8 +2369,6 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.slots)
         controls.addWidget(self.strategy)
         layout.addLayout(controls)
-        # Headline and closing note sit outside the scroll area, so a long list scrolls
-        # under them rather than carrying them off the top of the card.
         recommendation = QFrame(objectName="recommendation")
         recommendation_layout = QVBoxLayout(recommendation)
         recommendation_layout.setSpacing(10)
@@ -2674,7 +2383,6 @@ class MainWindow(QMainWindow):
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         self.flip_recommendation.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        # Reserve covers the page heading, controls, card text, buttons, and ~4 table rows.
         self.flip_recommendation_rows = FittedScrollArea(
             self.flip_recommendation, minimum=64, window_reserve=580
         )
@@ -2816,8 +2524,6 @@ class MainWindow(QMainWindow):
         summary.addWidget(self.journal_period_filter)
         layout.addLayout(summary)
 
-        # The 8 GE slots, laid out like the game does. Re-rendered every 3s by
-        # _import_runelite_events, so it fills as the offers do.
         self.ge_offers_empty = QLabel(
             "Connect RuneLite with a character logged in to see your 8 Grand Exchange "
             "slots here, live.",
@@ -2843,7 +2549,6 @@ class MainWindow(QMainWindow):
         for column in range(4):
             slot_grid.setColumnStretch(column, 1)
         layout.addWidget(self.ge_slots_frame)
-        # Only shown when a slot click needs explaining.
         self.ge_slot_hint = QLabel(objectName="muted")
         self.ge_slot_hint.setWordWrap(True)
         self.ge_slot_hint.hide()
@@ -2900,9 +2605,6 @@ class MainWindow(QMainWindow):
         self.journal_status_filter.currentTextChanged.connect(self._journal_status_filter_changed)
         actions.addWidget(self.journal_status_filter)
         plans_layout.addLayout(actions)
-        # Lived in the RuneLite activity tab until that tab was removed. Still worth showing
-        # on this page: it is what says whether the fills filling this table are still
-        # arriving, and _update_runelite_status has written to it all along.
         self.runelite_status = QLabel("RuneLite not connected", objectName="status")
         self.runelite_status.setWordWrap(True)
         plans_layout.addWidget(self.runelite_status)
@@ -2984,8 +2686,6 @@ class MainWindow(QMainWindow):
 
         buy_limits_tab = QWidget()
         buy_limits_layout = QVBoxLayout(buy_limits_tab)
-        # Set in _render_buy_limits, which knows whether an empty table means "nothing is
-        # limited" or "nothing is being counted".
         self.buy_limits_empty = QLabel(objectName="status")
         self.buy_limits_empty.setWordWrap(True)
         buy_limits_layout.addWidget(self.buy_limits_empty)
@@ -3200,11 +2900,9 @@ class MainWindow(QMainWindow):
         self._render_performance()
 
     def _render_performance(self) -> None:
-        # _render_journal fires while the Journal page is still being built.
         if not self._performance_ready:
             return
         period = self.performance_period_filter.currentText()
-        # Local, not UTC, so "Today" means the user's day.
         now = datetime.now().astimezone()
         tracked = [trade for trade in self._journal.list_tracked() if trade.status != "Supplies"]
         results = realized_results(tracked, self._journal.list_all(), period, now)
@@ -3260,8 +2958,6 @@ class MainWindow(QMainWindow):
         self._render_savings_goal(tracked)
 
     def _saved_savings_goal(self) -> tuple[str, int, str] | None:
-        """The persisted goal, or None if none is set. Stored in QSettings, not the
-        journal database, since it's app configuration rather than trade history."""
         label = str(QSettings().value("savings_goal/label", ""))
         if not label:
             return None
@@ -3337,11 +3033,6 @@ class MainWindow(QMainWindow):
         self._render_performance()
 
     def _decorate_calibration_row(self, index: int, rows: list[CalibrationRow]) -> None:
-        """Color the drift cell by whether the drift was in the trader's favor.
-
-        Sign alone cannot decide this: paying *under* the buy target is a good outcome
-        with a negative drift, so the generic green/red column rule would paint it red.
-        """
         row = rows[index]
         table = self.performance_plan_table
         drift_cell = table.item(index, 3)
@@ -3354,15 +3045,9 @@ class MainWindow(QMainWindow):
             cell = table.item(index, column)
             if cell is None:
                 continue
-            # Every cell in the row carries the caveat, not just one column.
             cell.setToolTip(f"{row.note}. {row.detail}")
 
     def _confidence_reading(self, confidence: int, floor: int) -> tuple[str, str]:
-        """The colour a confidence score is drawn in, and what that colour is saying.
-
-        One place, because the flip table and the recommendation card show the same score
-        and must not grade it differently.
-        """
         standing = confidence_standing(confidence, floor)
         if standing >= _CONFIDENCE_STRONG:
             return self._profit_color, "Strong for this strategy."
@@ -3481,8 +3166,6 @@ class MainWindow(QMainWindow):
             text_columns={1, 9, 10, 11},
         )
         self.skill_table.cellDoubleClicked.connect(self._open_skill_guide)
-        # Enter opens the guide from anywhere on the row, unlike a double-click which has
-        # to land on the Guide cell itself -- otherwise it's unreachable without a mouse.
         self.skill_table.rowActivated.connect(
             lambda row, _column: self._open_skill_guide(row, _SKILL_GUIDE_COLUMN)
         )
@@ -3543,16 +3226,6 @@ class MainWindow(QMainWindow):
         text_columns: set[int] | None = None,
         multi_select: bool = False,
     ) -> QTableWidget:
-        """A table sized from its content, within per-column bounds.
-
-        ``maximum_widths`` overrides ``DEFAULT_MAXIMUM_COLUMN_WIDTH``; a column's minimum
-        always wins over its maximum. Columns are right-aligned by default (for figures);
-        ``text_columns`` marks the ones holding prose instead, which are left-aligned.
-
-        ``multi_select`` allows the usual ctrl/shift range selection, for a table whose row
-        actions can act on a batch. Off elsewhere, since a table whose actions only ever
-        apply to one row should not let somebody select five and wonder why.
-        """
         table = ResponsiveTableWidget(len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.setAlternatingRowColors(True)
@@ -3562,9 +3235,6 @@ class MainWindow(QMainWindow):
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(64)
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        # Qt defaults a sorting-enabled table to an active column-0 sort indicator, which
-        # would silently re-sort every _fill_table() population. Clear it so tables keep
-        # their intended order until a user clicks a header.
         header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
         table.setProperty("minimumColumnWidths", minimum_widths or {})
         table.setProperty("maximumColumnWidths", maximum_widths or {})
@@ -3608,11 +3278,6 @@ class MainWindow(QMainWindow):
             self._change_database_location(dialog.requested_database_path)
 
     def _save_website_settings(self, base_url: str, token: str) -> None:
-        """Persist where this app reads from, and start reading from there.
-
-        Rebuilds the importer so a newly pasted token takes effect immediately rather than
-        needing a restart.
-        """
         if (base_url, token) == (
             str(QSettings().value(WEB_BASE_URL_KEY, DEFAULT_BASE_URL) or ""),
             str(QSettings().value(WEB_TOKEN_KEY, "") or ""),
@@ -3621,8 +3286,6 @@ class MainWindow(QMainWindow):
         QSettings().setValue(WEB_BASE_URL_KEY, base_url)
         QSettings().setValue(WEB_TOKEN_KEY, token)
         self._sync_importer = build_sync_importer()
-        # A new credential may be a different account, so the mirror starts fresh rather
-        # than carrying over watermarks from the old one.
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
         self._last_sync_message = ""
         self._last_mirror_message = ""
@@ -3759,7 +3422,6 @@ class MainWindow(QMainWindow):
         self._mappings, self._points = mappings, points
         self._refresh_watchlist_completer()
         self._refresh_overnight_suggestions()
-        # The cash field may have changed while the download was in progress.
         self._flips = rank_flips(
             mappings,
             points,
@@ -3781,11 +3443,9 @@ class MainWindow(QMainWindow):
         self._render_pvm()
 
     def _schedule_cash_changed(self, _cash_stack: int) -> None:
-        """Coalesce rapid spinbox ticks (e.g. holding an arrow key) into one re-rank."""
         self._cash_debounce.start()
 
     def _cash_changed(self) -> None:
-        """Re-rank the local snapshot; no market download is needed."""
         if not self._points:
             return
         self._flips = rank_flips(
@@ -3838,8 +3498,6 @@ class MainWindow(QMainWindow):
         self._excluded_item_ids = {candidate.item_id for candidate in self._portfolio}
 
     def _recommend_alternative(self) -> None:
-        """Replace the shown recommendation with the next-best combination, excluding
-        any item already recommended this session."""
         if not self._points:
             return
         remaining = [
@@ -3950,12 +3608,8 @@ class MainWindow(QMainWindow):
         self.flip_recommendation_rows.fit()
 
     def _portfolio_html(self) -> str:
-        """The plan as one row per offer, so the numbers line up in columns instead of
-        running together in a paragraph each."""
         muted = self._muted_color
         floor = int(STRATEGIES[self.strategy.currentText()]["min_confidence"])
-        # Every column but the item name is fixed width, so the item name takes all the
-        # slack and the figures stay in one block on the right.
         headers = "".join(
             f'<td align="{alignment}"{width} style="color:{muted}">{title}</td>'
             for title, alignment, width in (
@@ -4039,7 +3693,6 @@ class MainWindow(QMainWindow):
         )
 
     def _refresh_overnight_suggestions(self) -> None:
-        """Review open overnight targets once per local calendar day."""
         now = datetime.now().astimezone()
         point_by_id = {point.item_id: point for point in self._points}
         for trade in self._journal.list_tracked():
@@ -4141,24 +3794,18 @@ class MainWindow(QMainWindow):
     def _render_journal(self) -> None:
         tracked = self._journal.list_tracked()
         trades = self._journal.list_all()
-        # Every journal mutation funnels through here, so this is where a status change
-        # (a buy finishing, a sale closing the flip out) gets noticed.
         statuses = {trade.position_id: trade.status for trade in tracked}
         self._flash_journal_rows(journal_alert_positions(self._journal_statuses, statuses))
         self._journal_statuses = statuses
         self._journal_item_ids = {trade.position_id: trade.item_id for trade in tracked}
         selected_filter = self.journal_status_filter.currentText()
         selected_period = self.journal_period_filter.currentText()
-        # Local, not UTC, matching _refresh_overnight_suggestions' day boundary.
         now = datetime.now().astimezone()
         point_by_id = {point.item_id: point for point in self._points}
-        # Read once for the whole table rather than per row: this is a file read.
         slots = self._placed_offers()
         placed_item_ids = self._items_with_a_live_buy_offer(slots)
         if self._adopt_live_asks(tracked, self._live_sell_asks(slots)):
             tracked = self._journal.list_tracked()
-        # Over every tracked position, not just the rendered ones -- a hidden row doesn't
-        # stop the Grand Exchange working on that item.
         self._live_offers = self._ge_offers_in_flight(slots, self._offer_screen)
         self._live_price_sides = live_price_highlights(
             self._live_offers,
@@ -4175,10 +3822,6 @@ class MainWindow(QMainWindow):
                 return None
             return live_sell_price
 
-        # Computed over every tracked position, not scoped to the status/period filters --
-        # this is a "needs a look" signal, not a filtered statistic. The explanation for
-        # each flag is built here too, since the table has no column for the live
-        # suggestion or the real ask.
         attention_detail: dict[int, str] = {}
         live_sell_by_id: dict[int, int] = {}
         for trade in tracked:
@@ -4194,7 +3837,6 @@ class MainWindow(QMainWindow):
         attention_positions = set(attention_detail)
 
         rendered_rows: list[_JournalRow] = []
-        # Position id -> (what to actually ask, whether that clears what was paid).
         ask_detail: dict[int, tuple[int, bool]] = {}
         for trade in tracked:
             if not journal_status_matches(trade.status, selected_filter):
@@ -4211,7 +3853,6 @@ class MainWindow(QMainWindow):
             display_status = journal_display_status(
                 trade.status, trade.bought_quantity, trade.item_id, placed_item_ids
             )
-            # A "Bought" row shows ``_ask_price``'s number here, not the plan's frozen target.
             sell_cell_price = trade.sell_suggestion
             if trade.status == READY_TO_SELL_STATUS:
                 sell_cell_price, ask_is_sound = _ask_price(
@@ -4278,16 +3919,12 @@ class MainWindow(QMainWindow):
                     raw_status,
                     raw_status,
                     profit,
-                    # A manual entry has no live market comparison to grade its price
-                    # against — it records a completed outcome, not an open ask.
                     False,
                 )
             )
 
         def decorate_row(row_index: int) -> None:
             row = rendered_rows[row_index]
-            # Only a tracked position carries a flash key -- a manual entry's trade_id and
-            # a position_id can collide, since they're numbered from different tables.
             if row.raw_status in UpdateTrackedTradeDialog.STATUSES:
                 self.journal_table.item(row_index, 0).setData(_FLASH_KEY_ROLE, row.record_id)
             status_cell = self.journal_table.item(row_index, 1)
@@ -4310,8 +3947,6 @@ class MainWindow(QMainWindow):
                 QColor(self._journal_status_colors.get(row.display_status, self._muted_color))
             )
             if row.raw_status == READY_TO_SELL_STATUS:
-                # Stays picked out in amber until listed, since the flash itself is over
-                # in two seconds while the player is still in-game.
                 ask_cell = self.journal_table.item(row_index, 6)
                 ask_font = ask_cell.font()
                 ask_font.setBold(True)
@@ -4321,7 +3956,6 @@ class MainWindow(QMainWindow):
                     ask_cell.setForeground(QColor(self._warning_color))
                     ask_cell.setToolTip("Ready to list.\nThis is the price to ask for it.")
                 else:
-                    # Neither the live market nor the original plan clears the buy price.
                     ask_cell.setForeground(QColor(self._loss_color))
                     ask_cell.setToolTip(
                         "Ready to list, but neither the market nor the original plan "
@@ -4333,11 +3967,9 @@ class MainWindow(QMainWindow):
             if row.needs_attention:
                 self.journal_table.item(row_index, 2).setForeground(QColor(self._warning_color))
             if attention is not None:
-                # Every cell, not just the warning one -- the flag is about the row.
                 for column in range(self.journal_table.columnCount()):
                     self.journal_table.item(row_index, column).setToolTip(attention)
 
-            # Runs last so its tooltip joins rather than replaces what the blocks above set.
             if row.raw_status in UpdateTrackedTradeDialog.STATUSES:
                 self._mark_live_prices(
                     row_index, row, self._live_price_sides.get(row.record_id, frozenset())
@@ -4358,8 +3990,6 @@ class MainWindow(QMainWindow):
             )
 
         self.journal_filter_empty.setVisible(not rendered_rows)
-        # Decorated through _fill_table's decorate hook, not after: the Status cell's sort
-        # key needs to be set before the table sorts by that column.
         self._fill_table(
             self.journal_table,
             [row.cells for row in rendered_rows],
@@ -4367,11 +3997,8 @@ class MainWindow(QMainWindow):
             row_ids=[row.record_id for row in rendered_rows],
             decorate=decorate_row,
         )
-        # Fresh cells have no background, so a blink part-way through has to be reapplied.
         self._paint_journal_flash()
 
-        # Same summarize/realized_results helpers the Performance page uses, so the two
-        # pages' figures for the same period always agree.
         summary = summarize(
             realized_results(
                 [trade for trade in tracked if trade.status != "Supplies"],
@@ -4384,20 +4011,13 @@ class MainWindow(QMainWindow):
         self._set_money_state(self.journal_profit, summary.realized_profit)
         self.journal_win_rate.setText(f"Win rate\n{_percent(summary.win_rate)}")
         self.journal_invested.setText(f"Capital traded\n{_gp(summary.capital_traded)}")
-        # From the dict, not the set: list_tracked is newest first and dicts keep that.
         self._attention_positions = list(attention_detail)
         self.journal_attention.set_live(bool(attention_positions))
         self.journal_attention.setText(f"Needs attention\n{len(attention_positions):,}")
-        # Negated: any positive count should read as the card's "negative" (warning) tone;
-        # zero should read neutral. There is no profit/loss sign to reuse here directly.
         self._set_money_state(self.journal_attention, -len(attention_positions))
         self._render_supplies_spend(tracked)
         self._render_performance()
-        # A filter change re-renders without calling _flash_journal_rows, so a flash
-        # queued behind the old filter needs this to get its chance to play.
         self._release_pending_flashes()
-        # Rebuilding the table may have dropped the selection; Qt only announces that when
-        # rows actually go, so ask directly.
         self._journal_selection_changed()
 
     def _render_supplies_spend(self, tracked: list[TrackedTrade]) -> None:
@@ -4417,51 +4037,33 @@ class MainWindow(QMainWindow):
         self._fill_table(self.supplies_spend_table, values, green_columns=set())
 
     def _suggested_sell_prices(self) -> dict[int, int]:
-        """The live passive sell target for every item with a current market snapshot.
-
-        Empty before the first market load completes; ``apply_offer_opened`` and
-        ``apply_synced_ge_fill`` treat that the same as no suggestion at all.
-        """
         prices: dict[int, int] = {}
         for point in self._points:
             try:
                 _buy_price, sell_price = offer_targets(point)
             except ValueError:
-                # No usable observation on one side (e.g. an item with no trade history yet).
                 continue
             prices[point.item_id] = sell_price
         return prices
 
     def _mirror_journal(self) -> None:
-        """One exchange with the website, on a timer.
-
-        Runs on this thread deliberately -- a worker thread would need a second journal
-        connection and a merge racing the window's own writes, to avoid a pause nobody sees.
-        """
         if not self._journal_mirror.client.configured:
             return
         try:
             result = self._journal_mirror.sync()
-        except Exception as exc:  # noqa: BLE001 - a sync failure must not break the UI loop.
+        except Exception as exc:  # noqa: BLE001
             self._last_mirror_message = f" • journal sync paused: {exc}"
             return
         self._last_mirror_message = "" if result.checked_only else f" • {result.describe()}"
-        # Redraw the status line now rather than waiting up to three seconds for its own timer.
         self._update_runelite_status()
         if result.changed:
             self._refresh_journal_views()
 
     def _refresh_journal_views(self) -> None:
-        """Redraw what reads the journal, after a sync changed it underneath.
-
-        Only these two -- the mirror carries trades and tracked positions and nothing else,
-        so GE panels, buy limits, and the loadout are unaffected.
-        """
         self._render_journal()
         self._render_performance()
 
     def _apply_mirror_interval(self, active: bool) -> None:
-        """Ask less often while nothing on screen is waiting for the answer."""
         self._mirror_timer.setInterval(
             MIRROR_INTERVAL_MS if active else MIRROR_BACKGROUND_INTERVAL_MS
         )
@@ -4471,7 +4073,7 @@ class MainWindow(QMainWindow):
             result = self._sync_importer.import_pending(
                 self._journal, self._suggested_sell_prices()
             )
-        except Exception as exc:  # noqa: BLE001 - a transient local failure must not break the UI loop.
+        except Exception as exc:  # noqa: BLE001
             self._last_sync_message = f" • sync paused: {exc}"
             self._update_runelite_status()
             return
@@ -4489,8 +4091,6 @@ class MainWindow(QMainWindow):
                 f"{'s' if result.rejected != 1 else ''} quarantined"
             )
         elif result.skipped:
-            # Held, not lost: the RuneLite plugin has outrun this app, so these wait in the
-            # queue for a version that understands them.
             self._last_sync_message = (
                 f" • {result.skipped} event{'s' if result.skipped != 1 else ''} waiting"
                 " for a newer version of OSRS Toolkit"
@@ -4506,10 +4106,7 @@ class MainWindow(QMainWindow):
             self._render_pvm()
             if result.applied_to_tracked:
                 self._render_journal()
-        # Recomputed every tick, not just on import: purchases age out of the rolling
-        # 4-hour buy-limit window purely by the clock moving forward.
         self._render_buy_limits()
-        # Also unconditional: the plugin's offer-state file can change without a sync event.
         self._render_ge_offers()
         self._refresh_live_offers()
 
@@ -4520,15 +4117,12 @@ class MainWindow(QMainWindow):
             if item.buy_limit is not None
         }
         now = datetime.now(UTC)
-        # Bounded to the 4-hour window buy_limit_status actually uses, since this is called
-        # every 3 seconds and loading full history would get slower over time.
         statuses = buy_limit_status(
             self._journal.list_synced_trades("ge_fill", since=now - BUY_LIMIT_WINDOW),
             limits,
             now,
         )
         self.buy_limits_empty.setVisible(not statuses)
-        # An empty table means something different with the plugin connected vs. not.
         if self._sync_importer.plugin_detected:
             self.buy_limits_empty.setText(
                 "Nothing is currently limited. Items you've bought through RuneLite in the "
@@ -4557,10 +4151,6 @@ class MainWindow(QMainWindow):
         self._fill_table(self.buy_limits_table, values, green_columns=set())
 
     def _placed_offers(self) -> dict[int, GEOfferSlot] | None:
-        """The account's Grand Exchange slots, or None if there's nothing to read them from.
-
-        Read once per render and asked several questions, because it is a file read.
-        """
         account_hash = self._synced_account_hash()
         if account_hash is None:
             return None
@@ -4570,12 +4160,6 @@ class MainWindow(QMainWindow):
     def _items_with_a_live_buy_offer(
         slots: dict[int, GEOfferSlot] | None,
     ) -> frozenset[int] | None:
-        """Items one of the eight Grand Exchange slots is currently holding a buy for.
-
-        None means there's nothing to judge against, distinct from an empty set (no buys
-        placed), so the Journal can tell "not placed" apart from "cannot say". A slot
-        counts until the player collects it, even once its offer has finished.
-        """
         if slots is None:
             return None
         return frozenset(
@@ -4584,7 +4168,6 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _live_sell_asks(slots: dict[int, GEOfferSlot] | None) -> dict[int, int]:
-        """What each item on the Grand Exchange is currently listed at."""
         if slots is None:
             return {}
         return {
@@ -4594,12 +4177,6 @@ class MainWindow(QMainWindow):
         }
 
     def _adopt_live_asks(self, tracked: list[TrackedTrade], asks: dict[int, int]) -> bool:
-        """Record what the Grand Exchange says a listed position is really asking.
-
-        Backfills positions listed before ``apply_offer_opened`` existed to write this
-        directly. Writes only where it disagrees, so this costs nothing once they agree.
-        Returns whether anything changed, since the caller is holding stale positions.
-        """
         changed = False
         for trade in tracked:
             if trade.item_id is None or trade.status not in _LISTED_STATUSES:
@@ -4612,19 +4189,6 @@ class MainWindow(QMainWindow):
         return changed
 
     def _synced_account_hash(self) -> str | None:
-        """Whose Grand Exchange state to draw, held steady through a moment offline.
-
-        ``connection_status`` reports no character at all when the source did not answer,
-        which is a different thing from there being no character to report. Since the desktop
-        reads through the website rather than off disk, "did not answer" is now an ordinary
-        event -- one slow request over a home connection -- and ``WebAppSource`` caches the
-        empty answer for a couple of seconds on top, so every consumer in that window agrees
-        there is nobody. Taken literally, that emptied the Grand Exchange panel mid-session,
-        over and over, while the plugin was sending perfectly the whole time.
-
-        So a blip keeps the last character, and only an answer that genuinely names nobody --
-        the token cleared, or a pairing nobody has played -- puts the panel back to empty.
-        """
         connection = self._sync_importer.connection_status()
         if connection.account_hash is not None:
             self._last_synced_account_hash = connection.account_hash
@@ -4637,14 +4201,11 @@ class MainWindow(QMainWindow):
         self.ge_offers_empty.setVisible(account_hash is None)
         self.ge_slots_frame.setVisible(account_hash is not None)
         if account_hash is None:
-            # Reset rather than kept: a newly connected character's slots aren't "new" events.
             self._ge_slot_states = None
             self._ge_terminal_items = None
             return
         slots = self._sync_importer.read_offer_state(account_hash)
         states = {slot_index: slot.state for slot_index, slot in slots.items()}
-        # Filled, not merely finished: a cancelled offer is uncollected too, but the player
-        # cancelled it a second ago and does not need calling back to look at it.
         self._flash_ge_slots(newly_reached(self._ge_slot_states, states, FILLED_OFFER_STATES))
         self._ge_slot_states = states
         terminal_items = frozenset(
@@ -4659,38 +4220,18 @@ class MainWindow(QMainWindow):
                 card.show_empty()
             else:
                 card.show_offer(slot)
-        # show_empty/show_offer both reset the card's look, so the beat currently showing
-        # has to be put back on top of it.
         self._paint_slot_flash()
 
     @staticmethod
     def _ge_offers_in_flight(
         slots: dict[int, GEOfferSlot] | None, screen: GEOfferScreen | None
     ) -> frozenset[tuple[int, str | None]]:
-        """Every buy or sale the Grand Exchange has going, as (item id, side).
-
-        One entry per occupied slot -- which is the trade itself, and lasts from confirming
-        the offer until collecting it, whether or not the player is standing at the GE --
-        plus the "Set up offer" box while one is open, which is the moment before the offer
-        exists and the one where the price is actually being typed.
-
-        A union, not a choice between the two. Opening a box on one item does not stop the
-        other seven slots filling, and a highlight that jumped to whichever screen was up
-        was following the player around rather than following the trade.
-        """
         offers = {(slot.item_id, slot.side) for slot in (slots or {}).values() if slot.item_id > 0}
         if screen is not None and screen.focused:
             offers.add((screen.item_id, screen.side))
         return frozenset(offers)
 
     def _refresh_live_offers(self) -> None:
-        """Re-read what the Grand Exchange is working on, and redraw the journal if it moved.
-
-        Redraws only when the answer actually changes -- re-rendering every 3-second tick
-        would fight the table's selection and scroll position while the player is reading it.
-        Polled rather than event-driven because collecting an offer empties a slot without
-        producing any event the journal would otherwise hear about.
-        """
         account_hash = self._synced_account_hash()
         screen = (
             None if account_hash is None else self._sync_importer.read_offer_screen(account_hash)
@@ -4703,7 +4244,6 @@ class MainWindow(QMainWindow):
         self._render_journal()
 
     def _flash_journal_rows(self, position_ids: Iterable[int]) -> None:
-        """Queue an attention blink on these journal rows."""
         pending = set(position_ids)
         if not pending:
             return
@@ -4711,13 +4251,6 @@ class MainWindow(QMainWindow):
         self._release_pending_flashes()
 
     def _cancel_stale_completed_flashes(self, collected_item_ids: frozenset[int]) -> None:
-        """Drop a queued "come see this" flash once collecting it already answered it.
-
-        A "Completed" flash means "the coins are waiting for you on the GE" -- if they're
-        collected (a slot disappearing) before the flash ever plays, painting it afterward
-        would only announce money the player already has. A "Bought" flash means something
-        else (go list this) and isn't affected by collection, so it stays queued.
-        """
         if self._journal_statuses is None or not collected_item_ids:
             return
         stale = {
@@ -4731,7 +4264,6 @@ class MainWindow(QMainWindow):
             self._update_journal_badge()
 
     def _flash_ge_slots(self, slot_indexes: Iterable[int]) -> None:
-        """Queue an attention blink on these Grand Exchange slot cards."""
         pending = set(slot_indexes)
         if not pending:
             return
@@ -4739,19 +4271,8 @@ class MainWindow(QMainWindow):
         self._release_pending_flashes()
 
     def _release_pending_flashes(self) -> None:
-        """Play whatever is queued once its surface is on screen and being looked at.
-
-        A blink queued while the player is off in RuneLite would otherwise be spent on
-        nobody -- it waits for the window to be focused/unminimised and the right
-        page/tab showing, with a sidebar dot marking that something is waiting.
-
-        A journal row also waits on the Status filter: a sale finishing is exactly the
-        transition that can drop a row out of the default "Active trades" filter, so a
-        flash for a row the current filter won't render stays queued until a wider
-        filter (or the next re-render) brings the row into view.
-        """
         if getattr(self, "journal_tabs", None) is None:
-            return  # Still being built; nothing is on screen to flash yet.
+            return
         watched = self.isVisible() and not self.isMinimized() and self.isActiveWindow()
         on_page = watched and self.pages.currentIndex() == self._journal_page_index()
         if on_page and self._pending_slot_flash:
@@ -4779,11 +4300,6 @@ class MainWindow(QMainWindow):
         return self.NAV_ITEMS.index("Trade Journal")
 
     def _update_journal_badge(self) -> None:
-        """Mark the sidebar and the tab while a blink is waiting to be seen.
-
-        The blink itself only plays when someone is looking; this stays put until they
-        arrive, for a player who was in-game when it happened.
-        """
         nav_item = self.nav.item(self._journal_page_index())
         if nav_item is None or getattr(self, "journal_tabs", None) is None:
             return
@@ -4803,19 +4319,9 @@ class MainWindow(QMainWindow):
             _PLANS_TAB_TITLE + ("  ●" if self._pending_journal_flash else ""),
         )
 
-    # Journal columns holding the price each side of a trade is working towards.
     _PRICE_COLUMN: ClassVar[dict[str, int]] = {"buy": 4, "sell": 6}
 
     def _mark_live_prices(self, row_index: int, row: _JournalRow, sides: frozenset[str]) -> None:
-        """Pick out the price a live Grand Exchange offer is working on, and only that.
-
-        The whole point of the mark is "this is the number to type", so it goes on the one
-        cell holding that number and nothing else -- no row wash, no second figure. It holds
-        for the whole buy or sale, from opening the offer box to collecting the slot.
-
-        A price cell already carrying the "ready to list" colour keeps it: that colour says
-        something (whether the price clears what was paid) this mark can't.
-        """
         for side in sorted(sides):
             column = self._PRICE_COLUMN[side]
             cell = self.journal_table.item(row_index, column)
@@ -4838,21 +4344,16 @@ class MainWindow(QMainWindow):
             cell.setToolTip("\n\n".join(part for part in (hint, existing) if part))
 
     def _paint_journal_flash(self) -> None:
-        """Wash the blinking rows, and clear the wash the beat it stops applying."""
         table = self.journal_table
         lit_brush = QBrush(QColor(self._flash_row_color))
         for row in range(table.rowCount()):
             anchor = table.item(row, 0)
             if anchor is None:
                 continue
-            # Null brush, not the table's background colour, hands the row back to the
-            # alternating-row colours instead of freezing it on one.
             lit = self._journal_flasher.is_lit(anchor.data(_FLASH_KEY_ROLE))
             brush = lit_brush if lit else QBrush()
             for column in range(table.columnCount()):
                 cell = table.item(row, column)
-                # Only where it actually changes -- setting a cell to a brush it already
-                # has still repaints it, and this runs six times per blink.
                 if cell is not None and cell.background() != brush:
                     cell.setBackground(brush)
 
@@ -4861,10 +4362,6 @@ class MainWindow(QMainWindow):
             card.set_flashing(self._slot_flasher.is_lit(slot_index))
 
     def _reveal_offer_in_journal(self, item_id: int) -> None:
-        """Answer "which row is this offer?" from the slot card's side.
-
-        If the current filters are hiding the row, they're widened until it shows.
-        """
         self.ge_slot_hint.hide()
         position_id = self._journal_position_for_item(item_id)
         if position_id is None:
@@ -4877,21 +4374,13 @@ class MainWindow(QMainWindow):
             return
         self.journal_tabs.setCurrentIndex(_PLANS_TAB_INDEX)
         if not self._select_journal_position(position_id):
-            # A completed flip can fall outside the period filter as easily as the status
-            # one, so both give way; each setter re-renders the table on its way through.
             self.journal_status_filter.setCurrentText(JOURNAL_STATUS_FILTERS[0])
             self.journal_period_filter.setCurrentText(PERIOD_FILTERS[0])
             if not self._select_journal_position(position_id):
                 return
-        # focus, not start: this replaces whatever was blinking rather than joining it.
         self._journal_flasher.focus({position_id})
 
     def _reveal_attention_positions(self) -> None:
-        """Answer the Needs attention card: show me the rows you are counting.
-
-        The newest is selected and scrolled to, but the whole set blinks -- pointing at
-        just one would only answer half the count.
-        """
         if not self._attention_positions:
             return
         newest = self._attention_positions[0]
@@ -4899,7 +4388,6 @@ class MainWindow(QMainWindow):
         if not self._select_journal_position(newest):
             self.journal_status_filter.setCurrentText(JOURNAL_STATUS_FILTERS[0])
             self.journal_period_filter.setCurrentText(PERIOD_FILTERS[0])
-            # Each setter re-renders on its way through, which rebuilds the list.
             if not self._attention_positions:
                 return
             newest = self._attention_positions[0]
@@ -4908,12 +4396,6 @@ class MainWindow(QMainWindow):
         self._journal_flasher.focus(self._attention_positions)
 
     def _journal_position_for_item(self, item_id: int) -> int | None:
-        """The journal row a Grand Exchange slot is about.
-
-        The newest in-progress position for the item, falling back to the newest of any
-        status so an uncollected finished flip is still found. ``list_tracked`` returns
-        newest first.
-        """
         matches = [trade for trade in self._journal.list_tracked() if trade.item_id == item_id]
         chosen = next(
             (trade for trade in matches if journal_status_matches(trade.status, "Active trades")),
@@ -4922,7 +4404,6 @@ class MainWindow(QMainWindow):
         return chosen.position_id if chosen is not None else None
 
     def _select_journal_position(self, position_id: int) -> bool:
-        """Select and scroll to a position's row, if the current filters are showing it."""
         table = self.journal_table
         for row in range(table.rowCount()):
             anchor = table.item(row, 0)
@@ -4943,7 +4424,6 @@ class MainWindow(QMainWindow):
                 f"player trades {player_trades}"
             )
         elif connection.detected and not connection.source_reachable:
-            # Not the plugin's fault -- it's the website (where we read from) unreachable.
             button_text = "Website unreachable"
             reason = f" ({connection.last_error})" if connection.last_error else ""
             status_text = (
@@ -4957,7 +4437,6 @@ class MainWindow(QMainWindow):
             button_text = "Connect RuneLite"
             status_text = "Connect RuneLite to import GE fills and optional player trades"
         self.runelite_button.setText(button_text)
-        # Dropped only when it would just repeat the "website unreachable" text above.
         mirror_message = self._last_mirror_message
         if (
             connection.detected
@@ -5091,7 +4570,6 @@ class MainWindow(QMainWindow):
         ]
         self._render_journal()
         self.nav.setCurrentRow(self._journal_page_index())
-        # Reuses the "just finished" blink to say "these are the ones you asked for".
         self._flash_journal_rows(tracked)
 
     def _track_candidate(self, candidate: FlipCandidate) -> None:
@@ -5112,8 +4590,6 @@ class MainWindow(QMainWindow):
         if not rows:
             QMessageBox.information(self, "No trade selected", "Select a journal row first.")
             return
-        # Read every row's identity before deleting any of them: each delete re-renders the
-        # table, so row numbers collected up front stop meaning what they meant.
         doomed = [
             (
                 self.journal_table.item(row, 0).data(Qt.ItemDataRole.UserRole),
@@ -5156,8 +4632,6 @@ class MainWindow(QMainWindow):
             return
         content = journal_csv(self._journal.list_tracked(), self._journal.list_all())
         try:
-            # utf-8-sig so Excel reads non-ASCII text correctly; newline="" avoids
-            # doubling up the csv module's own line endings.
             Path(path).write_text(content, encoding="utf-8-sig", newline="")
         except OSError as exc:
             QMessageBox.warning(self, "Export failed", f"Could not write the file: {exc}")
@@ -5165,13 +4639,6 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Export complete", f"Journal exported to {path}")
 
     def _import_journal_csv(self) -> None:
-        """Read a journal CSV back in, adding to this journal or replacing it.
-
-        Nothing is written before the confirmation, and the confirmation names the number of
-        trades replacing would delete -- the file is chosen in one dialog and the destructive
-        option lives in the next, so "replace" is never a thing that happens because somebody
-        clicked through a file picker on autopilot.
-        """
         path, _selected_filter = QFileDialog.getOpenFileName(
             self, "Import Trade Journal", "", "CSV files (*.csv);;All files (*)"
         )
@@ -5215,8 +4682,6 @@ class MainWindow(QMainWindow):
             return
 
         if chosen is replace:
-            # Asked twice on purpose. The first dialog is about a file; this one is about
-            # deleting trades that are already here, which is the part with no undo.
             confirm = QMessageBox.warning(
                 self,
                 "Replace the journal?",
@@ -5241,20 +4706,10 @@ class MainWindow(QMainWindow):
         )
 
     def _selected_journal_rows(self) -> list[int]:
-        """The selected rows, top to bottom, however they were selected.
-
-        ``selectedIndexes`` returns one index per cell, so a row selection arrives nine times
-        over; the set collapses that back to rows.
-        """
         rows = {index.row() for index in self.journal_table.selectedIndexes()}
         return sorted(rows)
 
     def _selected_tracked_positions(self, rows: list[int]) -> tuple[list[int], int]:
-        """(position ids that can be refiled, how many selected rows could not be).
-
-        A manually completed entry is not a tracked position and has no status to change, so
-        it is counted rather than silently treated as one.
-        """
         position_ids: list[int] = []
         ineligible = 0
         for row in rows:
@@ -5267,7 +4722,6 @@ class MainWindow(QMainWindow):
         return position_ids, ineligible
 
     def _retag_selected_trades(self, rows: list[int]) -> None:
-        """Refile several positions at once, for the shopping-trip case."""
         position_ids, ineligible = self._selected_tracked_positions(rows)
         if not position_ids:
             QMessageBox.information(
@@ -5470,7 +4924,6 @@ class MainWindow(QMainWindow):
                     QColor(self._profit_color if result.is_ready else self._loss_color)
                 )
             else:
-                # Nothing was checked, so this reads as neither a pass nor a failure.
                 status_cell.setForeground(QColor(self._muted_color))
                 status_cell.setToolTip(
                     "Nothing is known about this account's gear or levels yet, so no "
@@ -5511,11 +4964,6 @@ class MainWindow(QMainWindow):
         row_ids: list[int | str] | None = None,
         decorate: Callable[[int], None] | None = None,
     ) -> None:
-        """Populate a table, optionally decorating each row by its source index.
-
-        ``decorate`` must run while sorting is still suspended (it does, here), so its row
-        index reliably means "the nth entry the caller passed in".
-        """
         table.setSortingEnabled(False)
         table.setRowCount(len(values))
         text_columns = table.property("textColumns") or set()
@@ -5550,11 +4998,7 @@ class MainWindow(QMainWindow):
             preferred_widths: list[int] = []
             for column in range(table.columnCount()):
                 minimum = minimum_widths.get(column, 0)
-                # resizeColumnsToContents() measures text alone; add back the stylesheet's
-                # cell padding or a figure sized to the pixel elides anyway.
                 width = max(table.columnWidth(column), minimum) + CELL_PADDING_WIDTH
-                # Cap a free-text column so its longest row can't push everything after it
-                # off the right edge; the full text stays available in the tooltip.
                 width = max(
                     min(width, maximum_widths.get(column, DEFAULT_MAXIMUM_COLUMN_WIDTH)),
                     minimum,
@@ -5568,12 +5012,6 @@ class MainWindow(QMainWindow):
         table.setSortingEnabled(True)
 
     def _open_market_item(self, table: QTableWidget, row: int) -> None:
-        """The market breakdown for a row, from whichever table asked.
-
-        Takes ``table`` as an argument rather than using ``sender()``, since this is
-        reached four ways (double-click, Enter, row menu, watchlist page) and only two
-        of those have a sender to ask.
-        """
         item_id = self._row_item_id(table, row)
         if item_id is None:
             return
@@ -5610,14 +5048,11 @@ class MainWindow(QMainWindow):
             "Cancelled": palette.muted,
             "Supplies": palette.muted,
         }
-        # Shares "Bought"'s amber, already this app's color for "waiting on a user action".
         self._warning_color = palette.bought
         self._flash_color = palette.flash
         self._flash_row_color = palette.flash_row
         self._live_offer_color = palette.live_offer
         self._update_journal_badge()
-        # The game draws interfaces with hard pixel edges, so the Old School theme squares
-        # off the corners the modern themes round.
         card, panel, control, bar, chunk = (
             ("0", "0", "0", "0", "0")
             if palette.square_corners
@@ -5709,18 +5144,14 @@ class MainWindow(QMainWindow):
         self._render_pvm()
 
     def _run_startup_notices(self) -> None:
-        """Say what changed in this version, then look for a newer one."""
         self._show_whats_new_if_updated()
         self._start_startup_update_check()
 
     def _show_whats_new_if_updated(self) -> None:
-        """Show the release notes once, on the first run of a version."""
         last_seen = str(QSettings().value(LAST_SEEN_VERSION_KEY, ""))
         if last_seen == __version__:
             return
-        # Recorded before the window opens so a failure here can't make it reappear every launch.
         QSettings().setValue(LAST_SEEN_VERSION_KEY, __version__)
-        # A first run announces only the current version, not the whole release history.
         notes = current_release_notes(since=last_seen, limit=5 if last_seen else 1)
         if not notes:
             return
@@ -5737,7 +5168,6 @@ class MainWindow(QMainWindow):
         worker.finished.connect(worker.deleteLater)
         worker.failed.connect(worker.deleteLater)
         worker.finished.connect(thread.quit)
-        # Fails quietly at startup (usually just no network); Settings offers a visible retry.
         worker.failed.connect(thread.quit)
         thread.finished.connect(self._clear_update_worker)
         self._update_thread = thread
@@ -5759,23 +5189,17 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().resizeEvent(event)
-        # __init__ resizes before building the UI, so the first call can arrive with no
-        # card to measure yet.
         rows = getattr(self, "flip_recommendation_rows", None)
         if rows is not None:
             rows.fit()
 
     def changeEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().changeEvent(event)
-        # Coming back to the window is when a flash held while the player was in-game
-        # finally has an audience.
         if event.type() in (
             QEvent.Type.ActivationChange,
             QEvent.Type.WindowStateChange,
         ):
             self._release_pending_flashes()
-            # Also restore the quick poll cadence and check once immediately, rather than
-            # leaving a stale table for up to a minute.
             active = self.isActiveWindow()
             self._apply_mirror_interval(active)
             if active:
@@ -5793,12 +5217,6 @@ class MainWindow(QMainWindow):
 
 
 class _JournalRow(NamedTuple):
-    """A journal table row: the cells to show, and what decorating them needs.
-
-    ``display_status`` is what the Status cell shows; ``raw_status`` is what's stored and
-    what buttons act on. They differ when a plan with no offer placed reads "Planned".
-    """
-
     cells: list[str]
     record_id: int
     display_status: str
@@ -5821,7 +5239,6 @@ _JOURNAL_STATUS_ORDER: dict[str, int] = {
 
 
 def _setting_int(key: str, default: int, *, minimum: int, maximum: int) -> int:
-    """Read an int QSetting, falling back to the default on a corrupted value."""
     try:
         value = int(QSettings().value(key, default))
     except (TypeError, ValueError):
@@ -5830,16 +5247,6 @@ def _setting_int(key: str, default: int, *, minimum: int, maximum: int) -> int:
 
 
 def _ask_price(trade: TrackedTrade, live_sell_price: int | None) -> tuple[int, bool]:
-    """What a "Bought" row should tell the player to ask, and whether that number is sound.
-
-    ``trade.sell_suggestion`` is frozen at planning time, which can be hours stale for a
-    Quick/Balanced strategy that never revisits it; the live sell target wins whenever
-    there is one, falling back to the frozen suggestion otherwise.
-
-    "Sound" means the number clears what was actually paid, after tax -- a stale plan or
-    an auto-created position (see ``TrackedTrade.asking_price``) can otherwise suggest a
-    guaranteed loss.
-    """
     price = live_sell_price if live_sell_price is not None else trade.sell_suggestion
     if trade.actual_buy is None:
         return price, True
@@ -5847,7 +5254,6 @@ def _ask_price(trade: TrackedTrade, live_sell_price: int | None) -> tuple[int, b
 
 
 def _leading_number(value: str) -> float:
-    """Extract a formatted result's leading number for sign-aware coloring."""
     token = value.strip().removeprefix("Est. ").split(" ", 1)[0].replace(",", "")
     token = token.removesuffix("%")
     try:
@@ -5875,11 +5281,6 @@ def _table_sort_value(value: str) -> tuple[int, float | str]:
 
 
 def _resource_path(relative_path: str) -> Path:
-    """Find bundled resources in releases and project resources during development.
-
-    A compiled build marks every module with ``__compiled__`` and lays data files out
-    beside the executable; a source checkout has them two directories above this file.
-    """
     if "__compiled__" in globals():
         root = Path(sys.executable).parent
     else:
@@ -5888,7 +5289,6 @@ def _resource_path(relative_path: str) -> Path:
 
 
 def _set_windows_app_id() -> None:
-    """Give Windows a stable taskbar identity instead of Python's generic identity."""
     if sys.platform != "win32":
         return
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(  # type: ignore[attr-defined]

@@ -1,12 +1,3 @@
-"""How many times drawing the live-state panel asks the sync service.
-
-The dashboard polls ``/api/sync-state`` every few seconds, and it used to cost four requests
-to the sync service per poll: the character list, then the same ``/v1/state`` response fetched
-three separate times for three different keys out of it. On a home server that is the most
-expensive question this app asks, asked constantly, and the three copies of one answer could
-each describe a different moment.
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,8 +11,6 @@ from toolkit_web import importing
 
 @pytest.fixture(autouse=True)
 def _clear_caches():
-    """Both caches are keyed by pairing token and live for the process, so tests reusing a
-    token would otherwise read each other's answers and pass in the wrong order."""
     importing._activity_cache.clear()
     importing._characters_cache.clear()
     yield
@@ -84,9 +73,6 @@ def test_the_character_list_is_not_re_fetched_on_every_poll(signed_in: TestClien
 
 
 def test_a_pairing_with_no_characters_yet_is_asked_again_next_poll(signed_in: TestClient):
-    """The seconds between pasting a token and the plugin's first heartbeat look exactly like
-    an unreachable service. Remembering either for a minute would hide a character from the
-    person sitting there watching for it to appear."""
     _paired(signed_in)
     state = {"active": False, "account_hash": None, "offers": None, "screen": None}
 

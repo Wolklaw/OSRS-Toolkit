@@ -40,7 +40,7 @@ def test_the_loadout_page_shows_skills_and_bank(signed_in: TestClient, settings:
 
     assert response.status_code == 200
     assert "Attack" in response.text
-    assert "155" in response.text  # total level
+    assert "155" in response.text
     assert "Armadyl godsword" in response.text
 
 

@@ -120,9 +120,8 @@
 {% block scripts %}
 <script>
   document.addEventListener('DOMContentLoaded', () => {
-    // The shared install-cta script only ever shows a real button or the iOS note -- neither
-    // fires for a desktop browser with no beforeinstallprompt support (Firefox, Safari) and
-    // no standalone-install API, and that's exactly when this page still owes an answer.
+
+
     setTimeout(() => {
       const cta = document.querySelector('[data-install-cta]');
       if (cta && cta.hidden) {

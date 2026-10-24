@@ -90,8 +90,6 @@ def test_html_escapes_markup_but_keeps_changelog_formatting() -> None:
 
 
 def test_a_release_that_wrote_its_own_summary_is_taken_at_its_word() -> None:
-    """A "Highlights" section is the short version someone wrote deliberately; the long
-    entries below it are for the changelog, not for this window."""
     points, omitted = summarize(notes_for_version(parse_changelog(SAMPLE), "1.5.1"))
 
     assert [point.text for point in points] == ["The short version of 1.5.1."]
@@ -131,8 +129,6 @@ def test_only_the_first_few_points_are_shown_and_the_rest_are_counted() -> None:
 
 
 def test_no_kind_of_change_crowds_out_another() -> None:
-    """Taking the first four entries as written would describe a release that fixed four
-    things and changed three entirely in bug fixes."""
     mixed = ReleaseNotes(
         "9.9.9",
         "",
@@ -162,8 +158,6 @@ def test_the_catch_up_covers_every_version_missed() -> None:
 
 
 def test_the_catch_up_stops_at_the_version_being_run() -> None:
-    """The changelog ships inside the app, so an entry above the running version would be
-    describing a build the user does not have."""
     caught_up = catch_up_notes(parse_changelog(SAMPLE), current="1.5.1", since="1.5.0")
 
     assert [release.version for release in caught_up] == ["1.5.1"]
@@ -176,8 +170,6 @@ def test_the_catch_up_has_a_ceiling() -> None:
 
 
 def test_a_version_older_than_the_one_last_seen_still_says_what_it_is() -> None:
-    """Rolling back to an earlier build leaves nothing "missed" to report; the window
-    falls back to the release actually running rather than opening empty."""
     caught_up = catch_up_notes(parse_changelog(SAMPLE), current="1.5.1", since="1.5.3")
 
     assert [release.version for release in caught_up] == ["1.5.1"]
@@ -209,7 +201,6 @@ def test_missing_changelog_yields_no_notes(tmp_path: Path) -> None:
 
 
 def test_shipped_changelog_describes_the_current_version() -> None:
-    """The "What's new" window is empty for a release nobody wrote notes for."""
     changelog = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
     notes = notes_for_version(load_release_notes(changelog), __version__)
     assert notes is not None, f"CHANGELOG.md has no section for version {__version__}"

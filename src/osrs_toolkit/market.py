@@ -17,13 +17,8 @@ class MarketDataError(RuntimeError):
     pass
 
 
-# How long the item mapping (name, members, buy limit, high alch) is trusted before
-# refetching. It rarely changes, so there's no need to redownload ~900KB every 5-minute
-# price cycle just to learn nothing changed.
 MAPPING_TTL_SECONDS = 86_400
 
-# How many per-item price-history files the cache keeps. One per item whose details are
-# opened; a fallback for when the wiki is unreachable, not worth keeping forever.
 MAX_TIMESERIES_CACHE_FILES = 200
 
 
@@ -45,15 +40,6 @@ class WikiMarketClient:
     def _get(
         self, route: str, *, cache_key: str | None = None
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Fetch ``route`` from the API, caching the response under ``cache_key``.
-
-        ``cache_key`` defaults to ``route``, which is a safe filename for every existing
-        caller. Routes with query params (``fetch_timeseries``) must pass a filesystem-safe
-        key instead, since "?" isn't legal in a Windows filename.
-
-        A cache write failure (full disk, AV lock, etc.) must not throw away prices that
-        already downloaded fine — only the download/parse decide success.
-        """
         request = urllib.request.Request(
             f"{self.BASE_URL}/{route}",
             headers={
@@ -86,14 +72,9 @@ class WikiMarketClient:
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             cache_file.write_text(json.dumps(payload), encoding="utf-8")
         except OSError:
-            # Caller already has the fresh data; next run just falls back further if needed.
             pass
 
     def _fetch_mappings(self) -> dict[int, ItemMapping]:
-        """The item mapping, reused for ``MAPPING_TTL_SECONDS`` before it is fetched again.
-
-        Cached as the built dict, not the raw payload, so a reuse skips the parse too.
-        """
         cached = self._mappings
         if (
             cached is not None
@@ -164,10 +145,6 @@ class WikiMarketClient:
         return mappings, points
 
     def fetch_timeseries(self, item_id: int, timestep: str = "6h") -> list[TimeseriesPoint]:
-        """Historical average instant-buy/sell prices for one item, oldest first.
-
-        The wiki caps each response at 300 points, so "6h" covers roughly the last 75 days.
-        """
         payload = self._get(
             f"timeseries?timestep={timestep}&id={item_id}",
             cache_key=f"timeseries_{timestep}_{item_id}",
@@ -176,12 +153,6 @@ class WikiMarketClient:
         return _parse_timeseries(payload)
 
     def _prune_timeseries_cache(self) -> None:
-        """Keep the newest ``MAX_TIMESERIES_CACHE_FILES`` per-item history files.
-
-        Nothing else removes these (~45KB each, one per item page opened), so the directory
-        only grows otherwise. Pruned here rather than on a timer since this call just did a
-        network fetch anyway.
-        """
         try:
             files = sorted(
                 self.cache_dir.glob("timeseries_*.json"),
@@ -191,7 +162,6 @@ class WikiMarketClient:
             for stale in files[MAX_TIMESERIES_CACHE_FILES:]:
                 stale.unlink(missing_ok=True)
         except OSError:
-            # Housekeeping only; a cache dir that couldn't be tidied shouldn't fail the request.
             pass
 
 

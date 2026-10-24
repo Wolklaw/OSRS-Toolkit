@@ -52,10 +52,7 @@
       <p class="hint tight">The companion plugin sends your fills, live offer slots, bank and
         gear. Everything works without it; you just type more.</p>
     </div>
-    {#
-      Three states, not two. "A token is saved" is not "something is arriving", and showing
-      the first as the second is what let the dashboard claim a live plugin with the game shut.
-    #}
+
     {% set badge_labels = 'data-plugin-badge data-label-live="Sending now" data-label-idle="Idle, nothing arriving" data-label-unreachable="Sync service not answering"' %}
     {% if plugin_state == "live" %}<span class="badge ok" {{ badge_labels|safe }}>Sending now</span>
     {% elif plugin_state == "idle" %}<span class="badge" {{ badge_labels|safe }}>Idle, nothing arriving</span>
@@ -255,7 +252,7 @@
     try {
       if (choice === 'system') { localStorage.removeItem('runescope-theme'); }
       else { localStorage.setItem('runescope-theme', choice); }
-    } catch (e) { /* storage denied — the switch still applies to this page */ }
+    } catch (e) {  }
     if (choice === 'system') { document.documentElement.removeAttribute('data-theme'); }
     else { document.documentElement.setAttribute('data-theme', choice); }
     toast(choice === 'system' ? 'Theme follows your system setting.' : 'Theme set to ' + choice + '.', 'ok');
@@ -273,10 +270,8 @@
   }
 
   async function generatePairingToken() {
-    // Replacing retires the old token, which is what keeps exactly one working at a time --
-    // and it means the plugin stops syncing the moment this is pressed, until the new token
-    // is pasted in. Worth one confirm: pressing it and walking away used to look identical
-    // to it having worked.
+
+
     if ({{ 'true' if account.paired else 'false' }}) {
       const ok = confirm(
         'This replaces your current token and switches the old one off.\n\n'

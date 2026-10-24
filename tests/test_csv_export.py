@@ -1,5 +1,3 @@
-"""The CSV export is a data backup, so its content has to be exact and complete."""
-
 from __future__ import annotations
 
 import csv
@@ -60,7 +58,6 @@ def test_a_position_with_no_fills_exports_only_its_targets() -> None:
 
 
 def test_a_completed_position_exports_its_realized_profit() -> None:
-    """Buy 100 @ 2,000, sell @ 2,500 (50gp tax): 100 x 450 = 45,000 gp, and it is realized."""
     position = _position(
         status="Completed",
         actual_buy=2_000,

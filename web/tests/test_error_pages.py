@@ -6,8 +6,6 @@ BROWSER = {"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;
 
 
 def test_a_mistyped_address_renders_a_page_not_a_json_object(client: TestClient):
-    """A browser following a bad link used to get ``{"detail": "Not Found"}``, which the
-    browser's own JSON viewer then drew as if it were a working screen."""
     response = client.get("/fewqfwe", headers=BROWSER)
 
     assert response.status_code == 404
@@ -32,8 +30,6 @@ def test_a_client_that_did_not_ask_for_html_still_gets_json(client: TestClient):
 
 
 def test_a_signed_out_visitor_is_sent_to_the_landing_page(client: TestClient):
-    """401 on a page is a missing sign-in, so the useful answer is the sign-in button, not
-    an explanation of what 401 means."""
     response = client.get("/trades", headers=BROWSER, follow_redirects=False)
 
     assert response.status_code == 303

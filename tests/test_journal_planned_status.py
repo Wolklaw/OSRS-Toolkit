@@ -1,9 +1,3 @@
-"""Drives the real MainWindow._render_journal to check what the Status column actually says.
-
-The "Planned" label is decided from the plugin's own slot state, so this points
-window._sync_importer at a throwaway sync root the way test_ge_offers_render.py does.
-"""
-
 from __future__ import annotations
 
 import json
@@ -17,9 +11,6 @@ from osrs_toolkit.app import MainWindow
 
 
 class _CancellingDialog:
-    """Stands in for UpdateTrackedTradeDialog: accepted, with "Cancelled" chosen."""
-
-    # Matched to the real dialog: this is what tells a tracked position from a manual entry.
     STATUSES: ClassVar[list[str]] = [
         "Pending buy",
         "Bought",
@@ -86,8 +77,6 @@ def _status_cells(window: MainWindow) -> dict[str, str]:
 
 
 def test_a_plan_whose_offer_is_gone_reads_as_planned(window: MainWindow, tmp_path: Path) -> None:
-    """The case from the field: a cancelled buy leaves the plan behind on purpose, and the row
-    went on reading "Pending buy" with no offer anywhere on the Grand Exchange."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     window._journal.track(12_404, "Feldip hills teleport", 302, 650, 756)
     _connect(window, tmp_path, {"0": _offer(12_404)})
@@ -103,9 +92,6 @@ def test_a_plan_whose_offer_is_gone_reads_as_planned(window: MainWindow, tmp_pat
 def test_a_plan_reads_as_planned_with_the_grand_exchange_empty(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """Regression: every slot collected is the ordinary way to have no offers, and it is
-    exactly when every pending row is a plan — but an empty slot file read as "cannot say",
-    so the label never appeared in the case it exists for."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     _connect(window, tmp_path, {})
 
@@ -115,7 +101,6 @@ def test_a_plan_reads_as_planned_with_the_grand_exchange_empty(
 
 
 def test_unreadable_slot_state_relabels_nothing(window: MainWindow, tmp_path: Path) -> None:
-    """A state file that cannot be parsed is not a statement that the slots are empty."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     _connect(window, tmp_path, {})
     (tmp_path / "sync" / "state" / "abc123.json").write_text("{not json", encoding="utf-8")
@@ -126,7 +111,6 @@ def test_unreadable_slot_state_relabels_nothing(window: MainWindow, tmp_path: Pa
 
 
 def test_without_runelite_no_plan_is_relabelled(window: MainWindow, tmp_path: Path) -> None:
-    """No slot state to judge against: every plan would otherwise read as unplaced."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
 
     window._render_journal()
@@ -137,7 +121,6 @@ def test_without_runelite_no_plan_is_relabelled(window: MainWindow, tmp_path: Pa
 def test_a_planned_row_still_shows_under_the_pending_buy_filter(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """The label is display only. A planned row is still a pending buy to every filter."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     _connect(window, tmp_path, {"0": _offer(12_404)})
     window.journal_status_filter.setCurrentText("Pending buy")
@@ -160,9 +143,6 @@ def test_a_part_bought_position_keeps_reading_as_pending(
 
 
 class _AnsweredYes:
-    """QMessageBox with the delete confirmation already answered, and a note of anything it
-    was asked to tell the user — an unexpected information box is how the buttons refuse."""
-
     StandardButton = QMessageBox.StandardButton
 
     def __init__(self) -> None:
@@ -184,9 +164,6 @@ def _select_only_row(window: MainWindow) -> None:
 
 
 def test_a_planned_row_can_be_deleted(window: MainWindow, tmp_path: Path, monkeypatch) -> None:
-    """Regression: the Status cell carries the row's stored status for the buttons to act on,
-    and showing "Planned" there made Delete route the position id at the manual-entry table
-    instead — where it matched nothing, so the row could not be removed at all."""
     window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     _connect(window, tmp_path, {"0": _offer(12_404)})
     window._render_journal()
@@ -204,8 +181,6 @@ def test_a_planned_row_can_be_deleted(window: MainWindow, tmp_path: Path, monkey
 def test_a_planned_row_can_still_be_cancelled(
     window: MainWindow, tmp_path: Path, monkeypatch
 ) -> None:
-    """Regression: Update refused a planned row as a "manual completed entry", so there was no
-    way to cancel a flip you had given up on."""
     position_id = window._journal.track(32_360, "Yellow fin", 2_976, 210, 230)
     _connect(window, tmp_path, {"0": _offer(12_404)})
     window._render_journal()

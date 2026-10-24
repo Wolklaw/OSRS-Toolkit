@@ -1,6 +1,3 @@
-"""Deleting an account: the journal file, the accounts-db row, and the session all have to
-go together, or the disclaimer on /about promising this is possible would be lying."""
-
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -24,7 +21,6 @@ def test_deleting_removes_the_journal_file(signed_in: TestClient, settings: Sett
 def test_deleting_removes_the_account(signed_in: TestClient) -> None:
     signed_in.post("/api/account/delete")
 
-    # The session cookie is cleared, so the same client is now signed out.
     assert signed_in.get("/api/me").status_code == 401
 
 
@@ -35,8 +31,6 @@ def test_deleting_needs_a_session(client: TestClient) -> None:
 def test_a_desktop_token_cannot_delete_the_account(
     signed_in: TestClient, settings: Settings
 ) -> None:
-    """The one thing re-pairing could not undo, so it is browser-only -- the same line drawn
-    around minting and revoking desktop credentials themselves."""
     token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
     signed_in.post(
         "/api/trades",
@@ -56,7 +50,6 @@ def test_deleting_cascades_characters_and_desktop_tokens(signed_in: TestClient) 
 
     signed_in.post("/api/account/delete")
 
-    # Signing back in as the same discord id is a fresh account: nothing survived.
     signed_in.post("/auth/dev-login", json={"discord_user_id": "111", "username": "Wolklaw"})
     assert signed_in.get("/api/characters").json()["characters"] == []
     assert signed_in.get("/api/desktop-tokens").json()["tokens"] == []

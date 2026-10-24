@@ -1,11 +1,3 @@
-"""Drives the real MainWindow's attention blink: the yellow pulse that says "this is the
-one you just finished buying".
-
-The blink only plays for somebody who is looking, so most of these have to put the window
-on screen and give it focus first — the offscreen platform supports both. What is queued
-while nobody is looking is asserted through the pending sets and the sidebar dot.
-"""
-
 from __future__ import annotations
 
 import json
@@ -21,7 +13,6 @@ _JOURNAL_PAGE = MainWindow.NAV_ITEMS.index("Trade Journal")
 
 
 def _watching(window: MainWindow, qt_app: QApplication) -> None:
-    """Put the player in front of the Trade Journal, which is what lets a blink play."""
     window.show()
     window.activateWindow()
     window.nav.setCurrentRow(_JOURNAL_PAGE)
@@ -64,7 +55,6 @@ def _offer(slot: int, state: str, item_id: int = 4_151) -> dict[str, object]:
 
 
 def _lit_rows(window: MainWindow) -> set[str]:
-    """The item names whose row is washed yellow at this instant."""
     table = window.journal_table
     return {
         table.item(row, 2).text()
@@ -74,18 +64,13 @@ def _lit_rows(window: MainWindow) -> set[str]:
 
 
 def _finish_the_blink(window: MainWindow, qt_app: QApplication) -> None:
-    """Run the flasher's beats to the end without waiting out the real timer."""
     for _beat in range(window._journal_flasher.BEATS):
         window._journal_flasher._beat()
         window._slot_flasher._beat()
     qt_app.processEvents()
 
 
-# --- a finished buy ---------------------------------------------------------------------
-
-
 def test_a_finished_buy_lights_up_its_journal_row(window: MainWindow, qt_app: QApplication) -> None:
-    """The feature: the buy is done, and the row you now have to sell blinks yellow."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._render_journal()
     _watching(window, qt_app)
@@ -113,8 +98,6 @@ def test_the_blink_stops_by_itself_and_gives_the_row_back(
 
 
 def test_a_re_render_mid_blink_keeps_the_row_lit(window: MainWindow, qt_app: QApplication) -> None:
-    """The journal re-renders on every import that touches a position, which builds fresh
-    cells with nothing painted on them."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._render_journal()
     _watching(window, qt_app)
@@ -129,12 +112,6 @@ def test_a_re_render_mid_blink_keeps_the_row_lit(window: MainWindow, qt_app: QAp
 def test_start_up_does_not_blink_at_everything_already_bought(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """Positions left "Bought" overnight are where they were, not something that happened.
-
-    ``_journal_statuses`` is put back to None to reproduce the first render of a session
-    exactly: the real one happens inside ``__init__``, before a test can put anything in
-    the database for it to find.
-    """
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._journal_statuses = None
@@ -149,8 +126,6 @@ def test_start_up_does_not_blink_at_everything_already_bought(
 def test_an_untracked_buy_that_fills_in_one_go_still_blinks(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """The other side of the same rule: a position that arrives already "Bought" during a
-    session is news, because the offer behind it just finished."""
     window._render_journal()
     _watching(window, qt_app)
 
@@ -164,8 +139,6 @@ def test_an_untracked_buy_that_fills_in_one_go_still_blinks(
 def test_a_manual_entry_never_borrows_a_position_s_blink(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """Manual trade ids and position ids are numbered from different tables, so the two
-    can collide; only tracked rows carry a flash key."""
     trade_id = window._journal.add("Rune platebody", 5, 38_000, 39_500)
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     assert trade_id == position_id, "the collision this guards against did not occur"
@@ -178,11 +151,7 @@ def test_a_manual_entry_never_borrows_a_position_s_blink(
     assert _lit_rows(window) == {"Abyssal whip"}
 
 
-# --- holding the blink until somebody is looking -----------------------------------------
-
-
 def test_a_blink_waits_while_the_player_is_in_game(window: MainWindow) -> None:
-    """The window is not even shown: a two-second pulse now would be spent on nobody."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._render_journal()
 
@@ -216,7 +185,6 @@ def test_the_sidebar_says_something_is_waiting_and_stops_once_it_is_seen(
 def test_a_blink_waits_out_a_different_journal_tab(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """The slot cards sit above the tabs and blink anyway; the table does not."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._render_journal()
     _watching(window, qt_app)
@@ -230,9 +198,6 @@ def test_a_blink_waits_out_a_different_journal_tab(
 
     assert window._pending_journal_flash == set()
     assert window._journal_flasher.is_lit(position_id)
-
-
-# --- the Grand Exchange slots -------------------------------------------------------------
 
 
 def test_an_offer_that_just_finished_lights_up_its_slot(
@@ -267,8 +232,6 @@ def test_a_sale_that_filled_lights_up_its_slot(
 def test_a_cancelled_offer_does_not_blink_its_slot(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """The blink means "come and look, this filled". Cancelling is the player's own doing,
-    a second ago, in front of them — calling them back to see it says nothing."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"3": _offer(3, "BUYING")})
     window._render_ge_offers()
@@ -279,7 +242,6 @@ def test_a_cancelled_offer_does_not_blink_its_slot(
 
     assert window.ge_slot_cards[3].property("flash") == ""
     assert window._pending_slot_flash == set()
-    # Still shown as needing collecting, though: the part-filled goods are in the slot.
     assert window.ge_slot_cards[3].property("slotState") == "collect"
 
 
@@ -301,8 +263,6 @@ def test_a_cancelled_sale_does_not_blink_its_slot(
 def test_a_cancel_does_not_queue_a_dot_for_later(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """Nothing is queued while the player is in-game either, so no sidebar dot calls them
-    back to a slot they cancelled themselves."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"3": _offer(3, "BUYING")})
     window._render_ge_offers()
@@ -334,7 +294,6 @@ def test_the_slot_goes_back_to_its_collect_colours_afterwards(
 def test_re_reading_the_same_finished_offer_does_not_blink_again(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """An uncollected offer sits there, and the slots are re-read every three seconds."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"3": _offer(3, "BUYING")})
     window._render_ge_offers()
@@ -352,7 +311,6 @@ def test_re_reading_the_same_finished_offer_does_not_blink_again(
 def test_the_slots_reseed_when_the_character_disconnects(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """Whatever is on the slots when a character next connects is where they already were."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"3": _offer(3, "BUYING")})
     window._render_ge_offers()
@@ -367,9 +325,6 @@ def test_the_slots_reseed_when_the_character_disconnects(
     window._render_ge_offers()
 
     assert window._slot_flasher.is_lit(3) is False
-
-
-# --- finding a slot's row from the other direction -----------------------------------------
 
 
 def test_clicking_a_slot_finds_and_lights_its_journal_row(
@@ -410,8 +365,6 @@ def test_clicking_a_slot_widens_a_filter_that_was_hiding_the_row(
 def test_clicking_a_slot_widens_a_period_that_was_hiding_the_row(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """A finished flip whose coins are still in the slot can fall outside the period
-    window as easily as outside the status one."""
     position_id = window._journal.track(1_515, "Yew logs", 5_000, 320, 341)
     window._journal.update_tracked(
         position_id, "Completed", None, None, [(5_000, 341)], [(5_000, 320)]
@@ -420,7 +373,6 @@ def test_clicking_a_slot_widens_a_period_that_was_hiding_the_row(
     _write_slots(root, {"5": _offer(5, "SOLD", item_id=1_515)})
     _watching(window, qt_app)
     window.journal_period_filter.setCurrentText("This year")
-    # Backdate the completion out of every window but "All time".
     with window._journal._connect() as connection:
         connection.execute(
             "UPDATE tracked_trades SET completed_at = ? WHERE position_id = ?",
@@ -458,14 +410,9 @@ def test_an_empty_slot_is_not_clickable(
     assert window.ge_slot_cards[0]._item_id == 0
 
 
-# --- the whole chain, from a real plugin event ------------------------------------------------
-
-
 def test_a_real_fill_event_lights_the_row_and_the_slot_together(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """End to end, the way it happens in play: the plugin writes the fill that finishes a
-    buy and leaves the offer sitting in its slot, and both places say so at once."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"2": _offer(2, "BUYING")})
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
@@ -510,14 +457,9 @@ def test_a_real_fill_event_lights_the_row_and_the_slot_together(
     assert window.ge_slot_cards[2].property("flash") == "on"
 
 
-# --- tracking a flip points at the row it just made ------------------------------------------
-
-
 def test_tracking_a_flip_lights_the_row_it_created(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """Tracking throws the player onto a page they were not looking at, at a table that may
-    already hold fifty rows."""
     from osrs_toolkit.models import FlipCandidate
 
     window.show()
@@ -551,10 +493,6 @@ def test_tracking_a_flip_lights_the_row_it_created(
 def test_clicking_the_next_slot_drops_the_last_slot_s_row(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """Regression: the blink joined whatever was already blinking, which is right for two
-    offers finishing at once and wrong for a player clicking along their slots. Every row
-    asked about stayed lit, so the second click blinked the first click's row beside it and
-    working down all eight washed the whole table amber."""
     whip = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     bones = window._journal.track(1_234, "Dragon bones", 100, 2_000, 2_500)
     root = _connect(window, tmp_path)
@@ -580,8 +518,6 @@ def test_clicking_the_next_slot_drops_the_last_slot_s_row(
 def test_two_offers_finishing_together_still_share_one_blink(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """The behaviour ``focus`` must not have taken away: these are two things that both
-    happened, and the second must not cut the first one's blink short."""
     whip = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     bones = window._journal.track(1_234, "Dragon bones", 100, 2_000, 2_500)
     window._render_journal()
@@ -595,9 +531,6 @@ def test_two_offers_finishing_together_still_share_one_blink(
     assert _lit_rows(window) == {"Abyssal whip", "Dragon bones"}
 
 
-# --- ready to sell ----------------------------------------------------------------------
-
-
 def _ask_cell(window: MainWindow, item_name: str):
     table = window.journal_table
     row = next(row for row in range(table.rowCount()) if table.item(row, 2).text() == item_name)
@@ -605,8 +538,6 @@ def _ask_cell(window: MainWindow, item_name: str):
 
 
 def test_a_collected_buy_picks_out_the_price_to_ask(window: MainWindow) -> None:
-    """The blink is over in two seconds and the player is still in game. What they come back
-    for is the number to type into the sell offer, so it stays picked out until it is."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._render_journal()
@@ -648,11 +579,6 @@ def test_the_price_stops_shouting_once_the_offer_is_listed(window: MainWindow) -
 
 
 def _live_point(item_id: int, *, sell_target: int) -> MarketPoint:
-    """A market snapshot whose passive sell target is ``sell_target``.
-
-    Matches ``test_journal_needs_attention.py``'s helper: ``offer_targets`` takes the sell
-    side from ``point.high``, not ``point.low`` — ``low`` only feeds the buy side.
-    """
     return MarketPoint(
         item_id=item_id,
         high=sell_target,
@@ -667,9 +593,6 @@ def _live_point(item_id: int, *, sell_target: int) -> MarketPoint:
 def test_the_price_to_ask_prefers_the_live_market_over_a_frozen_plan(
     window: MainWindow,
 ) -> None:
-    """The bug this guards: the flip was planned at 1,700 hours before the buy filled, the
-    market has since dropped to 1,550 — and the frozen plan was what got highlighted,
-    confidently, as the number to type into the game."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._points = [_live_point(4_151, sell_target=1_550)]
@@ -683,11 +606,6 @@ def test_the_price_to_ask_prefers_the_live_market_over_a_frozen_plan(
 def test_a_price_that_does_not_clear_cost_is_never_dressed_up_as_sound(
     window: MainWindow,
 ) -> None:
-    """The concrete harm reported: a position with nothing better than its own buy price
-    to fall back on got that price highlighted in the same confident amber as a real
-    suggestion, and it read as advice to list at a guaranteed loss."""
-    # Mirrors what an auto-created position looks like: nothing beat the buy price at the
-    # moment it was tracked, so the sell target mirrors it exactly.
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_500)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._render_journal()
@@ -699,8 +617,6 @@ def test_a_price_that_does_not_clear_cost_is_never_dressed_up_as_sound(
 
 
 def test_a_live_price_below_cost_is_also_treated_as_unsound(window: MainWindow) -> None:
-    """Live data is preferred for being fresher, not for being flattering — a market that
-    has genuinely dropped below cost must still warn rather than reassure."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._points = [_live_point(4_151, sell_target=1_480)]
@@ -714,8 +630,6 @@ def test_a_live_price_below_cost_is_also_treated_as_unsound(window: MainWindow) 
 def test_a_price_that_clears_cost_only_barely_still_reads_as_sound(
     window: MainWindow,
 ) -> None:
-    """The GE tax has to actually be cleared, not just the raw buy price — but a number
-    that does clear it, even narrowly, is real advice and should read as such."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_540)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._render_journal()
@@ -724,16 +638,9 @@ def test_a_price_that_clears_cost_only_barely_still_reads_as_sound(
     assert ask.foreground().color().name() == window._warning_color
 
 
-# --- a flip that finishes behind the Active trades filter --------------------------------
-
-
 def test_completing_a_flip_under_active_trades_keeps_the_dot_lit(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """The bug this guards: Active trades is the default filter, and a sale finishing is
-    exactly the transition that drops a row out of it — the same instant the flip closes
-    out. Delivering the flash there marked it seen against a row nobody was ever shown,
-    so the dot went dark and the only trace of the completion vanished with it."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(
         position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
@@ -771,8 +678,6 @@ def test_widening_the_filter_delivers_the_flash_it_was_waiting_on(
 def test_a_second_flip_finishing_still_shows_while_the_first_stays_queued(
     window: MainWindow, qt_app: QApplication
 ) -> None:
-    """One position hidden by the filter must not swallow the flash of another the
-    filter is showing just fine."""
     hidden = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(hidden, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)])
     shown = window._journal.track(1_234, "Dragon bones", 100, 2_000, 2_500)
@@ -789,17 +694,9 @@ def test_a_second_flip_finishing_still_shows_while_the_first_stays_queued(
     assert window.nav.item(_JOURNAL_PAGE).text() == "Trade Journal  ●"
 
 
-# --- collecting answers a queued "Completed" flash before anyone sees it ----------------
-
-
 def test_collecting_a_finished_sale_cancels_the_flash_nobody_saw_yet(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """The scenario reported live: a sale finishes while the player is in-game, they
-    collect the coins straight off the Grand Exchange interface, and only afterwards open
-    the app. The flash was still queued behind the default "Active trades" filter — the
-    exact case ``_release_pending_flashes`` holds it for — but collecting already answered
-    the only thing it was going to say."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(
         position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
@@ -812,7 +709,7 @@ def test_collecting_a_finished_sale_cancels_the_flash_nobody_saw_yet(
     window._render_ge_offers()
     assert window._pending_journal_flash == {position_id}
 
-    _write_slots(root, {})  # the plugin drops a slot the instant it is collected
+    _write_slots(root, {})
     window._render_ge_offers()
 
     assert window._pending_journal_flash == set()
@@ -821,8 +718,6 @@ def test_collecting_a_finished_sale_cancels_the_flash_nobody_saw_yet(
 def test_the_sidebar_dot_goes_dark_the_moment_it_is_collected(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """The dot exists to say something is waiting; collecting is exactly what stops it
-    being true, so it should not linger a render behind the pending set clearing."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(
         position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
@@ -842,8 +737,6 @@ def test_the_sidebar_dot_goes_dark_the_moment_it_is_collected(
 def test_a_cancelled_flash_never_plays_even_if_the_filter_widens_later(
     window: MainWindow, qt_app: QApplication, tmp_path: Path
 ) -> None:
-    """Once collecting has answered it, widening the filter afterwards must not resurrect
-    it — the row already reads "Completed"; lighting it up now says nothing new."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(
         position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]
@@ -867,10 +760,6 @@ def test_a_cancelled_flash_never_plays_even_if_the_filter_widens_later(
 def test_collecting_a_bought_item_does_not_cancel_the_go_list_flash(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """A "Bought" flash means something different from a "Completed" one — go list this —
-    and collecting the goods from a finished buy is what makes listing possible, not what
-    answers it, so this reason must survive the same collection event that cancels the
-    other one."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(10, 1_500)])
     window._render_journal()
@@ -888,8 +777,6 @@ def test_collecting_a_bought_item_does_not_cancel_the_go_list_flash(
 def test_collecting_an_unrelated_item_leaves_the_queue_alone(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """The cancellation is keyed to the specific item collected, not "something on the
-    Grand Exchange changed" — a different position's flash must not be swept up with it."""
     position_id = window._journal.track(4_151, "Abyssal whip", 10, 1_500, 1_700)
     window._journal.update_tracked(
         position_id, "Completed", 1_500, 1_700, [(10, 1_700)], [(10, 1_500)]

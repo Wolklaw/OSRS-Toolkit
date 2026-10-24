@@ -1,12 +1,3 @@
-"""ItemDetailsDialog's Price history tab: lazy fetch and chart population.
-
-Fetching is triggered only by actually opening the tab, so constructing the dialog and
-inspecting the Overview tab never touches the network. Tests that do open the tab pass a
-stub client instead of a real ``WikiMarketClient``, so the real background thread this
-exercises completes against fabricated data rather than a genuine, possibly slow or
-unavailable, network call.
-"""
-
 from __future__ import annotations
 
 from PySide6.QtWidgets import QApplication
@@ -16,9 +7,6 @@ from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 
 
 class _StubClient:
-    """Answers instantly instead of making a real request, so the worker thread this
-    dialog spins up on opening the history tab finishes on its own without network I/O."""
-
     def __init__(self, points: list[TimeseriesPoint] | None = None) -> None:
         self.points = points or []
 

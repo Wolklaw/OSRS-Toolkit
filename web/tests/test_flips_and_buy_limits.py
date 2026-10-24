@@ -17,9 +17,6 @@ from osrs_toolkit.models import ItemMapping, MarketPoint
 
 from toolkit_web.config import Settings
 
-# A hand-picked point that clears every one of rank_flips' filters under the Balanced
-# strategy: fresh, two-sided liquidity, positive ROI well above the 0.5% floor, stable
-# (5m and 1h averages agree exactly, so drift is zero).
 _WHIP_ID = 4151
 
 
@@ -59,9 +56,6 @@ def _patched_market():
     )
 
 
-# -- watchlist --------------------------------------------------------------------------------
-
-
 def test_adding_a_watchlist_item_by_name_and_seeing_it_priced(signed_in: TestClient):
     with _patched_market():
         response = signed_in.post("/api/watchlist", json={"name": "Abyssal whip"})
@@ -99,9 +93,6 @@ def test_removing_a_watchlist_item(signed_in: TestClient):
     assert "Nothing on your watchlist yet" in page.text
 
 
-# -- flips ----------------------------------------------------------------------------------
-
-
 def test_the_flips_page_shows_a_candidate_that_clears_the_strategy(signed_in: TestClient):
     with _patched_market():
         response = signed_in.get("/flips")
@@ -132,9 +123,6 @@ def test_a_cash_stack_too_small_for_anything_shows_the_empty_state(signed_in: Te
     assert "Nothing clears this strategy's bar" in response.text
 
 
-# -- buy limits -------------------------------------------------------------------------------
-
-
 def test_buy_limits_shows_an_item_bought_within_the_window(
     signed_in: TestClient, settings: Settings
 ):
@@ -146,7 +134,6 @@ def test_buy_limits_shows_an_item_bought_within_the_window(
 
     assert response.status_code == 200
     assert "Abyssal whip" in response.text
-    # Bought 5 of a 70 limit -> 65 remaining.
     assert "65" in response.text
 
 
@@ -225,9 +212,6 @@ def test_a_zero_slot_count_is_clamped_up_rather_than_producing_no_offers(signed_
     assert '<option value="1" selected>' in response.text
 
 
-# -- prefilling from synced state --------------------------------------------------------------
-
-
 def test_flips_page_defaults_to_ten_million_with_no_synced_state(signed_in: TestClient):
     with _patched_market():
         response = signed_in.get("/flips")
@@ -289,13 +273,7 @@ def test_an_explicitly_typed_cash_stack_is_not_overridden_by_synced_coins(
     assert "from your synced coins" not in response.text
 
 
-# -- watching straight from a ranked row -----------------------------------------------------
-
-
 def test_an_item_can_be_watched_by_id_from_a_ranked_row(signed_in: TestClient):
-    """The toggles on the flip and alch tables are looking at a row the snapshot produced,
-    so they name the id. Matching on the name instead would add a way for the exact item on
-    screen to be misidentified."""
     with _patched_market():
         response = signed_in.post("/api/watchlist", json={"item_id": _WHIP_ID})
 
@@ -327,15 +305,7 @@ def test_the_flips_page_marks_an_item_already_watched(signed_in: TestClient):
     assert "Watching" in response.text
 
 
-# -- the planner respects the limit the Grand Exchange will actually enforce ------------------
-
-
 def test_a_flip_is_dropped_once_its_buy_limit_is_spent(signed_in: TestClient, settings: Settings):
-    """Buying the whole 70-whip limit inside the window leaves nothing to suggest.
-
-    Before the planner was told about the 4-hour window it kept recommending the item at
-    full size, which the game would simply refuse to fill.
-    """
     repository = JournalRepository(settings.journal_path("111"))
     repository.add_synced_trade(_ge_fill(quantity=70))
 

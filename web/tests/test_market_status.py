@@ -1,7 +1,3 @@
-"""How fresh the shared price snapshot is, refreshing it on demand, and what a stale ask
-looks like once the market has moved past a listing.
-"""
-
 from __future__ import annotations
 
 import time
@@ -53,9 +49,6 @@ def _patched_market(**kwargs):
     )
 
 
-# -- freshness ------------------------------------------------------------------------------
-
-
 def test_the_market_age_is_unknown_until_something_has_been_fetched(client: TestClient):
     assert client.get("/api/market").json()["age_seconds"] is None
 
@@ -80,8 +73,6 @@ def test_refreshing_fetches_again_rather_than_waiting_out_the_window(signed_in: 
 
 
 def test_refreshing_reports_an_unreachable_wiki_rather_than_pretending(client: TestClient):
-    """Signed in, but the very first fetch fails — there is no held snapshot to fall back on,
-    so the honest answer is that it could not be done."""
     client.post("/auth/dev-login", json={"discord_user_id": "111", "username": "Wolklaw"})
 
     with patch(
@@ -94,12 +85,7 @@ def test_refreshing_reports_an_unreachable_wiki_rather_than_pretending(client: T
 
 
 def test_refreshing_needs_a_session(client: TestClient):
-    """Not because prices are private — because an endpoint anyone can hit is a way to make
-    this server call the wiki over and over."""
     assert client.post("/api/market/refresh").status_code == 401
-
-
-# -- stale asks -----------------------------------------------------------------------------
 
 
 def test_a_listing_the_market_has_moved_past_is_flagged(signed_in: TestClient, settings: Settings):
@@ -109,8 +95,6 @@ def test_a_listing_the_market_has_moved_past_is_flagged(signed_in: TestClient, s
     )
     repository.update_tracked(position_id, "Listed for sale", 1_400_000, None)
 
-    # The market's own passive sell target is now the 1h/5m instant-buy average of
-    # 1,500,000 — over 6% below the 1,600,000 this position is still asking.
     with _patched_market(high=1_500_000, low=1_400_000):
         response = signed_in.get("/")
 
@@ -133,7 +117,6 @@ def test_a_listing_still_at_the_market_price_is_not_flagged(
 
 
 def test_the_dashboard_still_renders_with_no_prices_to_grade_against(signed_in: TestClient):
-    """Nothing gets flagged, rather than the page failing over a market it could not reach."""
     with patch(
         "toolkit_web.market_cache.WikiMarketClient.fetch_snapshot",
         side_effect=MarketDataError("offline"),

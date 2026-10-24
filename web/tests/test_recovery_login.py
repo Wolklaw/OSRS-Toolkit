@@ -21,8 +21,6 @@ def test_a_blank_display_name_falls_back_to_a_generic_one(client: TestClient):
 
 
 def test_the_code_never_appears_anywhere_but_the_creation_response(client: TestClient):
-    """Nothing server-side should ever be able to show this code again — that is the whole
-    point of it working with no email address behind it."""
     response = client.post("/auth/recovery/create", json={})
     code = response.json()["code"]
 
@@ -97,8 +95,6 @@ def test_two_created_accounts_never_collide(client: TestClient):
 
 
 def test_a_recovery_account_never_collides_with_a_discord_id(client: TestClient):
-    """Discord ids are bare numeric snowflakes; a recovery account's id is namespaced so a
-    coincidence at that layer can never sign one person in as someone else."""
     from toolkit_web.app import _recovery_account_id
 
     assert not _recovery_account_id("anything").removeprefix("local:").isdigit()

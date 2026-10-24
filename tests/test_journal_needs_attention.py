@@ -1,13 +1,3 @@
-"""The Needs attention flag has to answer for itself, and let go.
-
-Two regressions live here. The row tooltip described the flag in words but never showed the
-asking price or the live market suggestion it was comparing — both numbers a user needs to
-tell a real stale ask apart from a mistaken flag, and neither of which appears anywhere else
-in the Trade Journal table. And the price it graded was the app's own sell target rather than
-the one really on the Grand Exchange, so relisting could not clear the flag: the row stayed
-warning about a price the player had already stopped asking.
-"""
-
 from __future__ import annotations
 
 from dataclasses import replace
@@ -19,7 +9,6 @@ from osrs_toolkit.models import MarketPoint
 
 
 def _stale_position(window: MainWindow) -> int:
-    """Asking 8,180; live suggestion will be set well below that."""
     position_id = window._journal.track(1234, "Antidote++(3)", 70, 7_125, 8_180)
     window._journal.update_tracked(
         position_id, "Partially sold", None, None, [(1, 8_180)], [(70, 7_125)]
@@ -36,11 +25,6 @@ def _row_of(window: MainWindow, position_id: int) -> int:
 
 
 def _set_live_point(window: MainWindow, item_id: int, *, sell_target: int) -> None:
-    """A market snapshot whose passive sell target is ``sell_target``.
-
-    ``offer_targets`` takes the sell side from ``point.high`` (and the 5m/1h averages,
-    unset here), not ``point.low`` — ``low`` only feeds the buy side.
-    """
     window._points = [
         MarketPoint(
             item_id=item_id,
@@ -78,9 +62,6 @@ def test_a_position_that_is_not_flagged_gets_no_attention_tooltip(window: MainWi
 
 
 def test_relisting_at_the_live_suggestion_clears_the_flag(window: MainWindow) -> None:
-    """The bug this file now guards: the flag graded the app's own sell target rather than
-    the price on the Grand Exchange, so relisting at exactly what the market suggested left
-    the row flagged, and no price the player chose could ever clear it."""
     position_id = _stale_position(window)
     _set_live_point(window, 1234, sell_target=7_600)
     window._render_journal()
@@ -114,14 +95,11 @@ def test_the_flag_survives_a_relist_that_is_still_above_the_market(window: MainW
     assert window.journal_attention.text() == "Needs attention\n1"
     row = _row_of(window, window._journal.list_tracked()[0].position_id)
     tooltip = window.journal_table.item(row, 2).toolTip()
-    # The real ask, not the 8,180 the position was planned to sell at.
     assert "8,000 gp" in tooltip
     assert "8,180 gp" not in tooltip
 
 
 def test_every_cell_on_a_flagged_row_explains_the_flag(window: MainWindow) -> None:
-    """The warning is about the row, so it must not hide in the one cell carrying the ⚠ —
-    the cells beside it used to answer a hover with their own text instead."""
     position_id = _stale_position(window)
     _set_live_point(window, 1234, sell_target=7_600)
     window._render_journal()
@@ -144,8 +122,6 @@ def test_the_flagged_row_keeps_its_own_profit_explanation(window: MainWindow) ->
 
 
 def test_the_tooltip_is_broken_into_short_lines(window: MainWindow) -> None:
-    """Qt lays a plain-text tooltip out on one line however long it is, and this one ran
-    the width of the window, over the rows the eye was reading."""
     position_id = _stale_position(window)
     _set_live_point(window, 1234, sell_target=7_600)
     window._render_journal()
@@ -157,7 +133,6 @@ def test_the_tooltip_is_broken_into_short_lines(window: MainWindow) -> None:
 
 
 def _stale_position_for(window: MainWindow, item_id: int, name: str) -> int:
-    """Another position asking 8,180, on its own item so it gets its own row."""
     position_id = window._journal.track(item_id, name, 70, 7_125, 8_180)
     window._journal.update_tracked(
         position_id, "Partially sold", None, None, [(1, 8_180)], [(70, 7_125)]
@@ -166,9 +141,6 @@ def _stale_position_for(window: MainWindow, item_id: int, name: str) -> int:
 
 
 def test_clicking_the_card_reveals_the_newest_flagged_row(window: MainWindow) -> None:
-    """The card says it selects the newest of what it is counting. It kept the set of them,
-    which has no order at all, and then took whichever one came out first — reliably the
-    lowest position id, which is the oldest row on the table."""
     oldest = _stale_position(window)
     newest = _stale_position_for(window, 5678, "Antidote++(4)")
     _set_live_point(window, 1234, sell_target=7_600)
@@ -182,6 +154,5 @@ def test_clicking_the_card_reveals_the_newest_flagged_row(window: MainWindow) ->
     selected = window.journal_table.selectionModel().selectedRows()
     assert [index.row() for index in selected] == [_row_of(window, newest)]
     assert _row_of(window, newest) != _row_of(window, oldest)
-    # The whole count blinks, though — pointing at one would only answer half of it.
     assert window._journal_flasher.is_lit(oldest)
     assert window._journal_flasher.is_lit(newest)

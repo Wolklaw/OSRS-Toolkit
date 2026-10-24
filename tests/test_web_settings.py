@@ -1,13 +1,3 @@
-"""Which source the app reads from, and how a token entered in Settings changes it.
-
-The Plugin Hub refused a plugin that feeds an app on the same machine, so this app reads the
-website -- always, whether or not a desktop token has been entered for it yet. It used to fall
-back to the ``.runelite`` folder the moment a credential was missing, which meant a fresh
-install with an empty Settings dialog was silently in exactly the arrangement the Hub refused.
-These pin down that an unconfigured client is still a website source, just one with nothing to
-say yet, never a reason to read a local file instead.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,9 +17,6 @@ from osrs_toolkit.web_source import WebAppSource
 
 
 class StubSettings:
-    """The same shape as conftest's, kept local because these tests are the ones that need
-    settings without also needing a whole window built around them."""
-
     _values: ClassVar[dict[str, object]] = {}
 
     def value(self, key: str, default: object = None) -> object:
@@ -44,11 +31,6 @@ class StubSettings:
 
 @pytest.fixture
 def settings(monkeypatch):
-    """Settings with nothing in them, for the tests that do not build a window.
-
-    The ``window`` fixture already installs its own stub, so a test taking that one reads and
-    writes through ``osrs_toolkit.app.QSettings()`` instead of asking for this.
-    """
     StubSettings._values.clear()
     monkeypatch.setattr("osrs_toolkit.app.QSettings", StubSettings)
     yield StubSettings()
@@ -56,8 +38,6 @@ def settings(monkeypatch):
 
 
 def test_without_a_token_the_source_is_still_the_website_not_the_folder(settings):
-    """The whole point: an empty Settings dialog must never fall back to a local file, which
-    is the exact arrangement the Plugin Hub refused a plugin for feeding."""
     importer = build_sync_importer()
     assert isinstance(importer.source, WebAppSource)
     assert importer.configured is False
@@ -78,7 +58,6 @@ def test_the_address_defaults_to_the_real_site(settings):
 def test_a_self_hosted_address_is_honoured(settings):
     settings.setValue(WEB_BASE_URL_KEY, "https://toolkit.example.test/")
     settings.setValue(WEB_TOKEN_KEY, "a-desktop-token")
-    # The trailing slash is normalised away so paths do not end up doubled.
     assert configured_web_client().base_url == "https://toolkit.example.test"
 
 
@@ -91,7 +70,6 @@ def test_an_address_with_no_token_is_not_configured(settings):
 
 
 def test_saving_a_token_rebuilds_the_importer(window):
-    """A token pasted into Settings has to take effect now, not at the next restart."""
     assert isinstance(window._sync_importer.source, WebAppSource)
     assert window._sync_importer.configured is False
 
@@ -103,8 +81,6 @@ def test_saving_a_token_rebuilds_the_importer(window):
 
 
 def test_clearing_the_token_leaves_the_source_unconfigured_not_reading_the_folder(window):
-    """Removing a token has to stop the website source from answering, not swap in a local
-    file that would silently start answering instead."""
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     assert window._sync_importer.configured is True
 
@@ -115,7 +91,6 @@ def test_clearing_the_token_leaves_the_source_unconfigured_not_reading_the_folde
 
 
 def test_saving_the_same_values_leaves_the_importer_alone(window):
-    """Reopening Settings and pressing OK should not quietly drop a warmed-up source."""
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     before = window._sync_importer
 
@@ -135,18 +110,12 @@ def test_the_settings_dialog_shows_what_is_saved(qt_app, tmp_path, settings):
     try:
         assert dialog.web_base_url_field.text() == "https://toolkit.example.test"
         assert dialog.web_token_field.text() == "a-desktop-token"
-        # The token is a credential: it should not be readable over somebody's shoulder.
         assert dialog.web_token_field.echoMode() == dialog.web_token_field.EchoMode.Password
     finally:
         dialog.deleteLater()
 
 
-# -- the journal mirror, as the window drives it -------------------------------------------
-
-
 def test_no_token_means_the_mirror_never_reaches_out(window):
-    """Signed out, the app is still a working offline journal — it must not be quietly
-    talking to a website nobody pointed it at."""
     calls = []
     window._journal_mirror.client.get = lambda path, **params: calls.append(path)
 
@@ -156,8 +125,6 @@ def test_no_token_means_the_mirror_never_reaches_out(window):
 
 
 def test_saving_a_token_starts_the_mirror_over(window):
-    """A new credential may be a different account. Carrying watermarks across would skip
-    everything below them, on a journal this one has never seen."""
     before = window._journal_mirror
     window._journal_mirror.remote_version = "2026-08-22T00:00:00+00:00"
 
@@ -169,8 +136,6 @@ def test_saving_a_token_starts_the_mirror_over(window):
 
 
 def test_a_failing_sync_does_not_break_the_ui_loop(window):
-    """This runs on a timer. An exception escaping it would take the window with it."""
-
     def explode(*_args, **_kwargs):
         raise RuntimeError("the website fell over")
 
@@ -207,8 +172,6 @@ def test_a_sync_that_changed_something_redraws_the_journal(window):
 
 
 def test_a_quiet_sync_redraws_nothing(window):
-    """Nearly every pass is quiet. Redrawing tables on each one would be a minute-by-minute
-    flicker in exchange for nothing."""
     from osrs_toolkit.journal_mirror import MirrorResult
 
     redrawn = []
@@ -220,9 +183,6 @@ def test_a_quiet_sync_redraws_nothing(window):
     window._mirror_journal()
 
     assert redrawn == []
-
-
-# -- what the status line says --------------------------------------------------------------
 
 
 def test_a_sync_shows_up_beside_the_connection_status(window):
@@ -237,7 +197,6 @@ def test_a_sync_shows_up_beside_the_connection_status(window):
 
 
 def test_a_quiet_pass_leaves_the_line_clean(window):
-    """Nearly every pass is quiet. A line that changed every minute would be noise."""
     from osrs_toolkit.journal_mirror import MirrorResult
 
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
@@ -249,8 +208,6 @@ def test_a_quiet_pass_leaves_the_line_clean(window):
 
 
 def test_an_unreachable_website_is_not_reported_as_the_plugin_being_offline(window):
-    """Different problems, different fixes. Saying "RuneLite offline" would send somebody off
-    to restart a plugin that is running perfectly well."""
     from osrs_toolkit.sync_source import RuneLiteConnectionStatus
 
     window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
@@ -266,8 +223,6 @@ def test_an_unreachable_website_is_not_reported_as_the_plugin_being_offline(wind
 
 
 def test_the_unreachable_reason_is_shown_when_known(window):
-    """ "Website unreachable" alone is a symptom; the reason is what makes a recurring one
-    something to actually diagnose rather than guess at again."""
     from osrs_toolkit.sync_source import RuneLiteConnectionStatus
 
     window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
@@ -280,7 +235,6 @@ def test_the_unreachable_reason_is_shown_when_known(window):
 
 
 def test_the_local_folder_is_never_called_unreachable(window):
-    """A directory that exists has already answered, so this path must keep its old wording."""
     from osrs_toolkit.sync_source import RuneLiteConnectionStatus
 
     window._sync_importer.connection_status = lambda: RuneLiteConnectionStatus(
@@ -293,8 +247,6 @@ def test_the_local_folder_is_never_called_unreachable(window):
 
 
 def test_the_unreachable_line_does_not_say_it_twice(window):
-    """Both halves of the line describe the same outage. Reading it twice in one sentence
-    only makes it harder to scan."""
     from osrs_toolkit.sync_source import RuneLiteConnectionStatus
 
     window._last_mirror_message = " • Could not reach the website"

@@ -32,7 +32,6 @@ def _completed(completed_at: str, profit: int, *, status: str = "Completed") -> 
 
 
 def _still_open(profit: int) -> TrackedTrade:
-    """Partially sold: has realized profit, but no completed_at yet."""
     return TrackedTrade(
         position_id=2,
         created_at="2026-08-01T00:00:00+00:00",
@@ -54,9 +53,6 @@ def _supplies(completed_at: str, profit: int) -> TrackedTrade:
     return _completed(completed_at, profit, status="Supplies")
 
 
-# --- SavingsProgress -----------------------------------------------------------------
-
-
 def test_percent_is_clamped_at_100() -> None:
     progress = SavingsProgress("Twisted bow", target=1_000, saved=5_000)
     assert progress.percent == 100.0
@@ -71,9 +67,6 @@ def test_percent_reflects_partial_progress() -> None:
     assert progress.is_reached is False
 
 
-# --- realized_profit_since -------------------------------------------------------------
-
-
 def test_a_completed_position_before_since_is_excluded() -> None:
     tracked = [_completed("2026-08-05T00:00:00+00:00", 1_000)]
     assert realized_profit_since(tracked, [], SINCE) == 0
@@ -85,8 +78,6 @@ def test_a_completed_position_after_since_counts() -> None:
 
 
 def test_a_still_open_position_always_counts_its_realized_part() -> None:
-    """Mirrors the Journal/Performance rule: a position with no completed_at yet stays in
-    scope so its already-realized partial profit is never silently dropped."""
     position = _still_open(500)
     assert realized_profit_since([position], [], SINCE) == position.realized_profit
 
@@ -100,9 +91,6 @@ def test_manual_trades_scope_by_recorded_at() -> None:
     before = TradeRecord(1, "2026-08-05T00:00:00+00:00", "Yew logs", 10, 300, 400)
     after = TradeRecord(2, "2026-08-12T00:00:00+00:00", "Yew logs", 10, 300, 400)
     assert realized_profit_since([], [before, after], SINCE) == after.profit
-
-
-# --- daily_profit_rate / estimate_days_remaining ----------------------------------------
 
 
 def test_daily_profit_rate_averages_over_the_window() -> None:

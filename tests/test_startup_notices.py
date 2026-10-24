@@ -1,5 +1,3 @@
-"""The start-up "What's new" and update-available windows."""
-
 from __future__ import annotations
 
 import osrs_toolkit.app as app_module
@@ -31,9 +29,6 @@ def _release(version: str) -> ReleaseInfo:
 
 
 class RecordingDialog:
-    """Stands in for a modal dialog, counting the times it would have opened and keeping
-    what it was asked to show."""
-
     opened: int = 0
     shown: object = None
 
@@ -54,7 +49,6 @@ def _patch_dialogs(monkeypatch) -> tuple[type[RecordingDialog], type[RecordingDi
 
 
 def _patch_notes(monkeypatch, notes: list[ReleaseNotes]) -> list[dict[str, object]]:
-    """Stand in for the bundled changelog, recording how it was asked for."""
     asked: list[dict[str, object]] = []
 
     def read(**kwargs: object) -> list[ReleaseNotes]:
@@ -90,8 +84,6 @@ def test_whats_new_shows_again_after_an_upgrade(window: MainWindow, monkeypatch)
 
 
 def test_a_first_run_announces_itself_without_a_history(window: MainWindow, monkeypatch) -> None:
-    """Nothing was missed on a fresh install, so it opens on this version alone rather
-    than on releases the machine never ran."""
     _whats_new, _update = _patch_dialogs(monkeypatch)
     asked = _patch_notes(monkeypatch, [NOTES])
 
@@ -106,7 +98,6 @@ def test_whats_new_stays_closed_without_notes(window: MainWindow, monkeypatch) -
 
     window._show_whats_new_if_updated()
     assert whats_new.opened == 0
-    # The version still counts as seen, so a build without notes does not retry forever.
     assert app_module.QSettings().value(LAST_SEEN_VERSION_KEY) == __version__
 
 
@@ -127,6 +118,5 @@ def test_skipped_version_does_not_reopen(window: MainWindow, monkeypatch) -> Non
     window._startup_update_check_finished(_release("99.0.0"))
     assert update.opened == 0
 
-    # A different release is still offered.
     window._startup_update_check_finished(_release("99.1.0"))
     assert update.opened == 1

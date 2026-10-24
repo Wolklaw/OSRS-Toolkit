@@ -1,13 +1,3 @@
-"""Drives the real MainWindow's answer to "what am I supposed to type in here?".
-
-While the Grand Exchange is buying or selling something, the journal picks out the one figure
-that trade is working towards — the buy price for a buy, the ask for a sale — on every row for
-that item, and nothing else. It holds for the whole trade: from the "Set up offer" box opening
-to the slot being collected, whether or not the player is still standing at the Grand Exchange
-while it fills. These tests drive it from the plugin's own files outwards, the way
-``test_ge_offers_render.py`` does, so what is asserted is what the table would really show.
-"""
-
 from __future__ import annotations
 
 import json
@@ -23,7 +13,6 @@ from osrs_toolkit.runelite_sync import RuneLiteSyncImporter
 _REVENANT = 21_802
 _WHIP = 4_151
 
-# Journal columns: the price each side of a trade is working towards.
 _BUY_PRICE = 4
 _SELL_PRICE = 6
 
@@ -68,12 +57,10 @@ def _open_offer_box(
 
 
 def _stand_at_the_grand_exchange(root: Path) -> None:
-    """The interface open with no box up: watching an offer fill, or collecting one."""
     _open_offer_box(root, item_id=0, item_name=None, side=None)
 
 
 def _walk_away(root: Path) -> None:
-    """What the plugin does when the interface closes: the file goes away."""
     (root / "state" / "abc123-screen.json").unlink()
 
 
@@ -105,7 +92,6 @@ def _collect_everything(root: Path) -> None:
 
 
 def _marked(window: MainWindow, column: int) -> set[str]:
-    """The item names whose ``column`` cell is picked out in the live-offer colour."""
     table = window.journal_table
     return {
         table.item(row, 2).text()
@@ -129,9 +115,6 @@ def _list_for_sale(window: MainWindow, position_id: int) -> None:
     window._journal.update_tracked(position_id, "Listed for sale", None, None, None, [])
 
 
-# --- the price, and only the price ---------------------------------------------------------
-
-
 def test_an_open_buy_box_picks_out_the_buy_price(window: MainWindow, tmp_path: Path) -> None:
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
@@ -144,8 +127,6 @@ def test_an_open_buy_box_picks_out_the_buy_price(window: MainWindow, tmp_path: P
 
 
 def test_nothing_but_the_price_is_marked(window: MainWindow, tmp_path: Path) -> None:
-    """The mark answers "what do I type", so it goes on that one number. The Status cell is
-    bold on every row already and is not what this is about."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _open_offer_box(root)
@@ -156,7 +137,6 @@ def test_nothing_but_the_price_is_marked(window: MainWindow, tmp_path: Path) -> 
 
 
 def test_the_row_itself_is_left_unwashed(window: MainWindow, tmp_path: Path) -> None:
-    """The background belongs to the blink, which is a different thing being said."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _open_offer_box(root)
@@ -164,7 +144,6 @@ def test_the_row_itself_is_left_unwashed(window: MainWindow, tmp_path: Path) -> 
     window._refresh_live_offers()
 
     table = window.journal_table
-    # A null brush is what leaves the row to the table's own alternating colours.
     assert all(
         table.item(0, column).background() == QBrush() for column in range(table.columnCount())
     )
@@ -195,7 +174,6 @@ def test_a_row_for_a_different_item_is_left_alone(window: MainWindow, tmp_path: 
 
 
 def test_both_rows_for_one_item_are_marked(window: MainWindow, tmp_path: Path) -> None:
-    """Two pending buys for the same item is ordinary, and picking one would be a guess."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     window._journal.track(_REVENANT, "Revenant cave teleport", 4_807, 624, 673)
@@ -215,7 +193,6 @@ def test_both_rows_for_one_item_are_marked(window: MainWindow, tmp_path: Path) -
 def test_a_box_the_plugin_stopped_stamping_stops_being_believed(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """A client killed with the interface up deletes nothing on its way out."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _open_offer_box(root, age=timedelta(minutes=10))
@@ -225,11 +202,7 @@ def test_a_box_the_plugin_stopped_stamping_stops_being_believed(
     assert _marked(window, _BUY_PRICE) == set()
 
 
-# --- for the whole trade, not just while you are looking at it -----------------------------
-
-
 def test_the_mark_holds_after_the_offer_is_confirmed(window: MainWindow, tmp_path: Path) -> None:
-    """Confirming closes the box but not the trade: the offer is now filling in front of you."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _open_offer_box(root)
@@ -245,8 +218,6 @@ def test_the_mark_holds_after_the_offer_is_confirmed(window: MainWindow, tmp_pat
 def test_the_mark_holds_after_walking_away_from_the_grand_exchange(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """The trade is still happening while the player is off doing something else, and the
-    row is still the answer to "what did I place this at?" when they check the app."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _place_offer(root)
@@ -260,7 +231,6 @@ def test_the_mark_holds_after_walking_away_from_the_grand_exchange(
 
 
 def test_collecting_the_offer_puts_the_mark_out(window: MainWindow, tmp_path: Path) -> None:
-    """Collecting empties a slot without producing an event, so the poll has to notice it."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     _place_offer(root, state="BOUGHT")
@@ -287,8 +257,6 @@ def test_a_plan_that_was_never_placed_is_left_alone(window: MainWindow, tmp_path
 
 
 def test_opening_a_box_does_not_drop_the_other_slots(window: MainWindow, tmp_path: Path) -> None:
-    """The old highlight jumped to whichever screen was up, so opening a box on one item
-    dropped every other offer that was still filling. They are all still happening."""
     root = _connect(window, tmp_path)
     window._journal.track(_REVENANT, "Revenant cave teleport", 7_788, 642, 672)
     whip = window._journal.track(_WHIP, "Abyssal whip", 1, 1_500, 1_700)
@@ -315,7 +283,6 @@ def test_opening_a_box_does_not_drop_the_other_slots(window: MainWindow, tmp_pat
 
 
 def test_a_ready_to_list_row_keeps_its_own_ask_colour(window: MainWindow, tmp_path: Path) -> None:
-    """That colour says whether the ask clears what was paid, which this mark cannot."""
     root = _connect(window, tmp_path)
     position_id = window._journal.track(_REVENANT, "Revenant cave teleport", 500, 642, 672)
     window._journal.update_tracked(position_id, "Bought", 642, None, None, [])
@@ -327,9 +294,6 @@ def test_a_ready_to_list_row_keeps_its_own_ask_colour(window: MainWindow, tmp_pa
     assert ask.font().bold()
     assert ask.foreground().color().name() != window._live_offer_color
     assert "selling this item right now" in ask.toolTip()
-
-
-# --- which price an offer is about ---------------------------------------------------------
 
 
 def test_next_move_is_the_side_a_position_still_owes() -> None:
@@ -357,7 +321,6 @@ def test_an_unsided_box_gives_each_row_whatever_it_still_owes() -> None:
 
 
 def test_both_sides_at_once_mark_both_prices() -> None:
-    """One item bought on one slot and sold on another is a flip in both directions."""
     candidates = [(1, _REVENANT, "Partially sold")]
 
     assert live_price_highlights([(_REVENANT, "buy"), (_REVENANT, "sell")], candidates) == {
@@ -366,7 +329,6 @@ def test_both_sides_at_once_mark_both_prices() -> None:
 
 
 def test_a_row_with_no_side_left_still_takes_the_offer_rather_than_nothing() -> None:
-    """A Supplies row is a likelier answer for "which row is this?" than no row at all."""
     candidates = [(1, _REVENANT, "Supplies")]
 
     assert live_price_highlights([(_REVENANT, "buy")], candidates) == {1: frozenset({"buy"})}

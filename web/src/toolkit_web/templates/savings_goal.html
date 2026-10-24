@@ -28,12 +28,7 @@
     <div class="grow">
       <h2>{{ progress.label }}</h2>
       <p class="hint tight">
-        {#
-          Days are the honest unit only while there are few enough of them to picture. Past
-          a few months "about 17,240 days to go" stops being an estimate anyone reads and
-          starts being a number they scroll past, so the same figure is said in the unit that
-          still means something at that distance.
-        #}
+
         {% if progress.is_reached %}
         <span class="positive">Goal reached.</span>
         {% elif eta_days is none %}

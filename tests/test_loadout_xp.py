@@ -1,10 +1,3 @@
-"""Skill experience alongside skill levels in loadout snapshots.
-
-A level alone can't say whether a session did anything -- level 99 covers a 13M-xp range.
-The plugin now sends an optional ``xp`` map beside ``skills``; these cover it parsing, an
-older plugin build that still doesn't send it, and a journal that predates the column.
-"""
-
 from __future__ import annotations
 
 import json
@@ -63,7 +56,6 @@ def test_a_snapshot_with_xp_carries_it_through_to_the_journal(tmp_path: Path) ->
 
 
 def test_a_snapshot_from_a_plugin_build_that_predates_xp_still_parses(tmp_path: Path) -> None:
-    """No ``xp`` key at all -- not ``null``, not ``{}`` -- is what an older plugin build sends."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     _write_event(root, _event(_base_payload()))
@@ -78,9 +70,6 @@ def test_a_snapshot_from_a_plugin_build_that_predates_xp_still_parses(tmp_path: 
 
 
 def test_the_xp_column_is_added_to_a_journal_that_predates_it(tmp_path: Path) -> None:
-    """A journal written before this migration existed has ``loadout_snapshots`` and
-    ``skills_history`` without ``xp_json`` at all -- opening it must add the column and
-    leave the existing row readable, defaulting to no recorded experience."""
     db_path = tmp_path / "journal.db"
     with sqlite3.connect(db_path) as connection:
         connection.execute(
@@ -133,16 +122,10 @@ def test_the_xp_column_is_added_to_a_journal_that_predates_it(tmp_path: Path) ->
 def test_downgrading_the_plugin_after_it_has_sent_xp_does_not_break_the_session_page(
     tmp_path: Path,
 ) -> None:
-    """The real scenario this guards: someone tries the build that sends ``xp``, then goes
-    back to one that doesn't. The later, xp-less snapshot becomes the newest one on file --
-    ``session_summary`` (see ``JournalRepository.session_summary``) always diffs against the
-    newest snapshot, so it must not crash, and it must fall back to levels rather than report
-    a false zero as if the earlier xp gain never happened."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
     importer = RuneLiteSyncImporter(root)
 
-    # 1.0.3-style: a loadout snapshot with xp, then a kill.
     _write_event(
         root,
         {
@@ -173,7 +156,6 @@ def test_downgrading_the_plugin_after_it_has_sent_xp_does_not_break_the_session_
     )
     importer.import_pending(repository)
 
-    # 1.0.2-style: downgraded, no "xp" key at all -- the next snapshot after the kill.
     _write_event(
         root,
         {
@@ -191,8 +173,5 @@ def test_downgrading_the_plugin_after_it_has_sent_xp_does_not_break_the_session_
 
     assert summary is not None
     assert summary.loot_value == 300_000
-    # The newest snapshot (post-downgrade) has no xp, so there is nothing to diff -- this
-    # must read as "no experience recorded", not raise, and not report a stale number.
     assert summary.xp_gained == {}
-    # Levels still moved (75 -> 76 on Attack) and that's still worth showing.
     assert summary.levels_gained == {"Attack": 1}

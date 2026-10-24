@@ -96,7 +96,6 @@ SKILL_GUIDES = {
 
 
 SKILL_METHODS = [
-    # Cooking. Assumes no burns (UI notes this).
     SkillMethod(
         "Cook trout",
         "Cooking",
@@ -187,7 +186,6 @@ SKILL_METHODS = [
         (_item(3144, "Cooked karambwan"),),
         notes="Assumes no burns",
     ),
-    # Crafting and item processing.
     SkillMethod(
         "Spin bow strings",
         "Crafting",
@@ -363,7 +361,6 @@ SKILL_METHODS = [
         (_item(1775, "Molten glass"),),
         (_item(567, "Unpowered orb"),),
     ),
-    # Fletching.
     SkillMethod(
         "Fletch headless arrows",
         "Fletching",
@@ -405,7 +402,6 @@ SKILL_METHODS = [
         (_item(1601, "Diamond"),),
         (_item(9192, "Diamond bolt tips", 12),),
     ),
-    # Smithing. IDs pinned to dodge the Cannonball -> Steel cannonball rename.
     SkillMethod(
         "Smith steel cannonballs",
         "Smithing",
@@ -471,7 +467,6 @@ SKILL_METHODS = [
         (_item(2363, "Runite bar"),),
         (_item(824, "Rune dart tip", 10),),
     ),
-    # Herblore.
     SkillMethod(
         "Clean ranarr weed",
         "Herblore",
@@ -584,7 +579,6 @@ SKILL_METHODS = [
         (_item(3002, "Toadflax potion (unf)"), _item(6693, "Crushed nest")),
         (_item(6687, "Saradomin brew(3)"),),
     ),
-    # Magic jewellery enchants. Elemental-rune costs assume the appropriate elemental staff.
     SkillMethod(
         "Enchant sapphire rings",
         "Magic",
@@ -621,7 +615,6 @@ SKILL_METHODS = [
         (_item(1731, "Amulet of power"),),
         notes="Assumes elemental staff",
     ),
-    # Gathering activities. Rates are conservative baselines and vary with route, gear, and focus.
     SkillMethod(
         "Mine iron ore",
         "Mining",
@@ -815,13 +808,11 @@ SKILL_METHODS = [
 
 
 def conservative_buy_price(point: MarketPoint) -> int:
-    """Use the highest recent buyer-paid observation to avoid optimistic input costs."""
     observations = [point.high, point.average_high_5m, point.average_high_1h]
     return max(value for value in observations if value is not None and value > 0)
 
 
 def conservative_sell_price(point: MarketPoint) -> int:
-    """Use the lowest recent seller-received observation for cautious output values."""
     observations = [point.low, point.average_low_5m, point.average_low_1h]
     return min(value for value in observations if value is not None and value > 0)
 
@@ -894,7 +885,7 @@ def skill_results(
     *,
     now: int | None = None,
 ) -> list[SkillResult]:
-    del mappings  # Recipes key on item_id, not display name.
+    del mappings
     point_by_id = {point.item_id: point for point in points}
     current_time = int(time.time()) if now is None else now
     results = []
@@ -911,8 +902,6 @@ def skill_results(
         gross_output = sum(
             conservative_sell_price(point) * item.quantity for item, point in resolved_outputs
         )
-        # Cooking's outputs are most of the tax-exempt food list, so charging them tax
-        # would rank every cooking method below where the game actually puts it.
         output_tax = sum(
             ge_tax(
                 conservative_sell_price(point),

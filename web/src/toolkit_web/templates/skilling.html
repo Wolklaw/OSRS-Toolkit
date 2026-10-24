@@ -46,8 +46,7 @@
     {% endif %}
   </div>
   {% if results %}
-  {# Scaled to the best method on the page: the useful comparison here is against the other
-     thing you could be doing with the hour, not against an absolute number. #}
+
   {% set best_hourly = results | map(attribute="profit_hour") | max %}
   <div class="table-wrap">
     <table id="skilling-table" class="table-dense">

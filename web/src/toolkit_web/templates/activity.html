@@ -43,9 +43,7 @@
             {{ "{:+,}".format(event.estimated_difference) }}
           </td>
           <td class="row-actions">
-            {# tojson, not a quoted interpolation: an event id arrives from the plugin's own
-               payload, so it is external input and has no business being pasted raw into a
-               JavaScript string literal. #}
+
             <a href="#" class="link-danger" onclick="deleteActivity({{ event.event_id | tojson }}); return false;">Remove</a>
           </td>
         </tr>

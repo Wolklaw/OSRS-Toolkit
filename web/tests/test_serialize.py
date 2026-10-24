@@ -34,17 +34,12 @@ def test_stored_fields_come_through():
 
 
 def test_a_top_level_property_is_included_even_though_it_is_not_a_field():
-    """dataclasses.asdict on its own would drop total_value entirely — it only knows about
-    stored fields, and a property is not one."""
     result = serialize(_Item(quantity=3, unit_value=10))
 
     assert result["total_value"] == 30
 
 
 def test_a_property_on_a_nested_dataclass_is_not_lost():
-    """The failure mode plain asdict() has: it flattens nested dataclasses to bare dicts
-    before this code would ever get a chance to add their properties. This has to recurse
-    itself rather than delegate to asdict for exactly that reason."""
     bundle = _Bundle(name="loadout", items=(_Item(2, 5), _Item(1, 100)))
 
     result = serialize(bundle)

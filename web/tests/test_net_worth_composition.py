@@ -46,7 +46,7 @@ def test_the_dashboard_shows_composition_from_a_snapshot(signed_in: TestClient, 
     assert "Cash: 2,000,000 gp" in response.text
     assert "Carried gear: 1,500,000 gp" in response.text
     assert "Bank: 40,000,000 gp" in response.text
-    assert "GE in-flight" not in response.text  # nothing open, so the bucket is omitted
+    assert "GE in-flight" not in response.text
 
 
 def test_ge_in_flight_shows_up_even_without_a_snapshot(signed_in: TestClient, settings: Settings):

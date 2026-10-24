@@ -1,14 +1,3 @@
-"""Drives the real MainWindow._render_performance / savings-goal widgets, the way
-test_journal_summary.py drives _render_journal — the goal is persisted in QSettings
-(StubSettings in these tests, via the `window` fixture's monkeypatch), not the journal
-database, so tests read/write it directly rather than driving the modal SavingsGoalDialog.
-
-Settings are written through ``app_module.QSettings()`` rather than importing StubSettings
-directly from conftest — pytest loads conftest.py itself under a different module identity
-than a plain ``import tests.conftest`` would, so the two would otherwise be separate classes
-with separate backing dicts and silently never see each other's writes.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -48,8 +37,6 @@ def test_a_goal_shows_progress_from_realized_profit_after_it_started(
     window._render_performance()
 
     assert "Twisted bow" in window.savings_goal_label.text()
-    # Locks down the exact rendering: _gp() already appends " gp", so a naive f-string
-    # that also appends " gp" after it would silently double up as "... gp gp ...".
     assert "gp gp" not in window.savings_goal_label.text()
     assert "45,000 gp / 1,000,000 gp" in window.savings_goal_label.text()
     assert window.savings_goal_progress.isHidden() is False
@@ -117,12 +104,7 @@ def test_declining_the_clear_confirmation_leaves_the_goal_alone(
     assert "Twisted bow" in window.savings_goal_label.text()
 
 
-# --- Formatting helpers -----------------------------------------------------------------
-
-
 def test_a_tiny_but_real_sliver_of_progress_does_not_read_as_zero() -> None:
-    """Regression: 426,880 / 1,200,000,000 gp rounded straight to "0%", which reads as no
-    progress at all against a large target rather than a genuine (if tiny) amount."""
     assert _format_goal_percent(0.0356) == "<1%"
 
 
@@ -147,8 +129,6 @@ def test_eta_under_a_year_reads_in_days() -> None:
 
 
 def test_eta_over_a_year_reads_in_years() -> None:
-    """Regression: a huge target against a modest profit rate produced "~19671 days left",
-    which doesn't parse at a glance the way a years figure does."""
     assert _format_eta(19_671) == "~54 years"
 
 

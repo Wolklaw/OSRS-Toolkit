@@ -47,9 +47,6 @@ def _patched_market(**kwargs):
     )
 
 
-# -- Discord webhook on profile --------------------------------------------------------------
-
-
 def test_saving_a_non_discord_url_is_refused(signed_in: TestClient):
     response = signed_in.put("/api/discord-webhook", json={"url": "https://evil.example/steal"})
 
@@ -64,9 +61,6 @@ def test_saving_a_real_discord_webhook_url_works(signed_in: TestClient):
 
 
 def test_a_desktop_token_cannot_repoint_the_webhook(signed_in: TestClient):
-    """A desktop token can already read this journal, so this is not a widening of what it
-    can see -- but it is a way to make the account narrate what its owner is watching, and at
-    what price, into somebody else's Discord. Set from the profile page, so browser-only."""
     token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
     bare = TestClient(signed_in.app, base_url="https://testserver")
     headers = {"Authorization": f"Bearer {token}"}
@@ -84,9 +78,6 @@ def test_clearing_the_webhook_removes_it(signed_in: TestClient):
 
     assert response.status_code == 200
     assert _VALID_WEBHOOK not in signed_in.get("/profile").text
-
-
-# -- arming an alert on a watchlist item ------------------------------------------------------
 
 
 def test_setting_an_alert_without_a_webhook_is_refused(signed_in: TestClient):
@@ -139,9 +130,6 @@ def test_clearing_an_alert_leaves_the_item_watched(signed_in: TestClient):
 
     assert "Abyssal whip" in page
     assert 'value="1400000"' not in page
-
-
-# -- /internal/check-alerts -------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -227,9 +215,6 @@ def test_check_alerts_respects_the_cooldown_after_firing(alerting_client: TestCl
 def test_check_alerts_does_not_touch_the_market_when_nothing_is_armed(
     alerting_client: TestClient,
 ):
-    """The scheduler runs on a longer interval than the market cache's TTL, so a tick that
-    reached for prices would find the cache stale and pay for a real fetch every time —
-    to then discover there was nothing to check."""
     with patch("toolkit_web.market_cache.WikiMarketClient.fetch_snapshot") as fetch:
         response = alerting_client.post(
             "/internal/check-alerts", headers={"X-Internal-Token": "test-internal-token"}

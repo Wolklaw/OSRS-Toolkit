@@ -12,8 +12,6 @@ from osrs_toolkit.journal import (
 
 from toolkit_web.config import Settings
 
-# -- auth ----------------------------------------------------------------------------------
-
 
 def test_reading_your_own_journal_needs_a_session(client: TestClient):
     assert client.get("/api/positions").status_code == 401
@@ -118,16 +116,10 @@ def test_a_successful_callback_signs_the_user_in(client: TestClient):
     assert "toolkit_session" in response.cookies
     assert client.get("/api/me").json()["username"] == "Wolklaw"
 
-    # The state cookie was deleted on the way out, so replaying the same callback URL — the
-    # browser now carrying no oauth_state cookie at all — cannot be mistaken for a fresh
-    # attempt and is refused rather than silently accepted.
     replay = client.get(
         "/auth/discord/callback", params={"code": "abc", "state": state}, follow_redirects=False
     )
     assert replay.status_code == 400
-
-
-# -- pairing token ---------------------------------------------------------------------------
 
 
 def test_setting_a_pairing_token_that_the_service_accepts(signed_in: TestClient):
@@ -147,8 +139,6 @@ def test_setting_a_pairing_token_the_service_rejects(signed_in: TestClient):
 
 
 def test_a_token_saved_while_the_service_cannot_be_reached_is_still_kept(signed_in: TestClient):
-    """A network hiccup at the exact moment of saving is not evidence the token was wrong —
-    rejecting it here would lose a token that works fine as soon as the outage clears."""
     with patch("toolkit_web.app.probe_token", return_value=None):
         response = signed_in.put("/api/pairing-token", json={"token": "some-token"})
 
@@ -170,9 +160,6 @@ def test_pairing_token_needs_a_session(client: TestClient):
     assert client.put("/api/pairing-token", json={"token": "x"}).status_code == 401
 
 
-# -- journal reads -----------------------------------------------------------------------
-
-
 def test_a_fresh_account_has_an_empty_journal(signed_in: TestClient):
     assert signed_in.get("/api/positions").json() == {"positions": []}
     assert signed_in.get("/api/trades").json() == {"trades": []}
@@ -191,17 +178,12 @@ def test_a_tracked_position_appears_with_its_computed_fields(
     [position] = response.json()["positions"]
     assert position["item_name"] == "Abyssal whip"
     assert position["status"] == "Pending buy"
-    # A computed property, not a stored column — proof the serializer is not just asdict().
     assert "estimated_profit" in position
 
 
 def test_positions_can_be_filtered_to_one_synced_character(
     signed_in: TestClient, settings: Settings
 ):
-    """Two characters sharing one pairing token must not merge into one undifferentiated list
-    once a character is actually selected — the bug the switcher exists to fix. An untagged
-    position (no account_hash at all) is kept in every filtered view rather than hidden by it,
-    since nothing about it says which character it does or doesn't belong to."""
     repository = JournalRepository(settings.journal_path("111"))
     repository.track(1, "Item A", 1, target_buy=100, target_sell=200, account_hash="hash-a")
     repository.track(2, "Item B", 1, target_buy=100, target_sell=200, account_hash="hash-b")
@@ -223,7 +205,6 @@ def test_two_different_accounts_see_two_different_journals(client: TestClient):
 
     client.post("/auth/dev-login", json={"discord_user_id": "bbb", "username": "Second"})
 
-    # Signed in as the second account now — its journal must be empty, not the first one's.
     assert client.get("/api/positions").json() == {"positions": []}
 
 
@@ -235,7 +216,6 @@ def test_a_manual_trade_appears_in_trades(signed_in: TestClient, settings: Setti
 
     assert trade["item_name"] == "Dragon bones"
     assert trade["quantity"] == 100
-    # A computed property (profit accounts for GE tax) rather than a raw stored field.
     assert "profit" in trade
 
 
@@ -278,9 +258,6 @@ def test_journal_reads_need_a_session(client: TestClient):
         assert client.get(path).status_code == 401
 
 
-# -- character list ---------------------------------------------------------------------
-
-
 def test_characters_is_empty_without_a_pairing_token(signed_in: TestClient):
     assert signed_in.get("/api/accounts").json() == {"accounts": []}
 
@@ -297,9 +274,6 @@ def test_characters_delegates_to_the_sync_service_once_paired(signed_in: TestCli
 
 
 def test_a_live_ge_offer_shows_on_the_dashboard(signed_in: TestClient):
-    """The sync service has carried live offer-slot state since before this app existed to
-    read it — the dashboard just never asked. Pins that asking for it, and rendering what
-    comes back, actually works end to end."""
     with patch("toolkit_web.app.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
@@ -329,10 +303,6 @@ def test_a_live_ge_offer_shows_on_the_dashboard(signed_in: TestClient):
 
 
 def test_a_signed_in_account_with_a_real_avatar_renders_it(client: TestClient):
-    """Pins the field name the header reads. It previously read account.avatar_url, which
-    does not exist on the Account dataclass (the field is named avatar) — every existing
-    test happened to use no avatar at all, so a broken attribute access and a correctly
-    empty one were indistinguishable until one was checked with a real value."""
     client.post(
         "/auth/dev-login",
         json={

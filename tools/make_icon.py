@@ -1,11 +1,3 @@
-"""Generate the Windows application icon (multi-size .ico) using the existing Qt build
-dependency.
-
-Windows picks the closest available size from the .ico, so each size is drawn at its own
-scale rather than resampled down from one big image — a single 256x256 entry renders as a
-blank square in the taskbar and other small views.
-"""
-
 from __future__ import annotations
 
 import struct
@@ -14,14 +6,10 @@ from pathlib import Path
 from PySide6.QtCore import QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPen
 
-# Sizes Windows actually uses: 16 (taskbar/Explorer list), 32 (shell), 48 (medium icons),
-# 256 (preview pane); the rest fill gaps to avoid wide resampling jumps.
 SIZES = (16, 24, 32, 48, 64, 128, 256)
 
 
 def render(size: int) -> QImage:
-    """The mark at one size, drawn at that size (proportional stroke so it doesn't vanish
-    at small sizes)."""
     scale = size / 256
     image = QImage(size, size, QImage.Format.Format_ARGB32)
     image.fill(QColor("#11151b"))
@@ -44,8 +32,6 @@ def render(size: int) -> QImage:
 
 
 def as_png(image: QImage) -> bytes:
-    # QBuffer() owns its storage; a QByteArray built inline could be GC'd while Qt still
-    # holds the pointer, causing a segfault.
     buffer = QBuffer()
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
     if not image.save(buffer, "PNG"):
@@ -55,13 +41,10 @@ def as_png(image: QImage) -> bytes:
 
 
 def build_ico(frames: list[bytes], sizes: tuple[int, ...]) -> bytes:
-    """Assemble the .ico container by hand, since Qt can only write one size per .ico.
-    Format: six-byte header, one sixteen-byte directory entry per image, then payloads."""
     header = struct.pack("<HHH", 0, 1, len(frames))
     offset = len(header) + 16 * len(frames)
     directory = b""
     for size, payload in zip(sizes, frames):
-        # 256 is stored as 0 — the field is one byte and predates the larger size.
         directory += struct.pack(
             "<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(payload), offset
         )

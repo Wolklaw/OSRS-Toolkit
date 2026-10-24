@@ -1,11 +1,3 @@
-"""Grade the trade journal's recorded history against the plans that produced it.
-
-Pure functions, kept free of Qt so they can be tested directly. Every figure is **realized**
-— from recorded sale fills, never a current suggestion. Manually entered trades are included
-in totals (to match the Trade Journal's summary cards) but excluded from ``calibration``,
-since they have no plan to grade.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,19 +14,11 @@ from osrs_toolkit.ranking import ge_tax
 
 MANUAL_STRATEGY = "Manual entry"
 
-# Ranking a one-off flip beside a hundred of them says nothing useful about the item, so
-# the per-item table hides anything below this until the user asks to see everything.
 DEFAULT_MINIMUM_ITEM_POSITIONS = 2
 
 
 @dataclass(frozen=True, slots=True)
 class RealizedResult:
-    """One finished piece of trading, normalized so every aggregate reads the same shape.
-
-    ``basis`` is the cost of the quantity *actually sold*, not the whole position — a
-    half-sold position should only be charged for the capital that produced its result.
-    """
-
     item_name: str
     strategy: str
     profit: int
@@ -58,8 +42,6 @@ class PerformanceSummary:
 
 @dataclass(frozen=True, slots=True)
 class GroupPerformance:
-    """Aggregated results for one strategy or one item."""
-
     label: str
     positions: int
     realized_profit: int
@@ -71,17 +53,14 @@ class GroupPerformance:
 
 @dataclass(frozen=True, slots=True)
 class CalibrationRow:
-    """One plan-versus-reality comparison, weighted by the quantity behind it."""
-
     label: str
     planned: int
     actual: int
     positions: int
     favourable_direction: int
-    # note: fits in a table column. detail: caveats, shown as the row's tooltip.
     note: str
     detail: str
-    signed: bool = False  # Profit can be negative and needs its sign; prices don't.
+    signed: bool = False
 
     @property
     def drift(self) -> float | None:
@@ -94,7 +73,6 @@ class CalibrationRow:
         drift = self.drift
         if drift is None:
             return "neutral"
-        # Rounding noise on large weighted sums should not paint a row red.
         if abs(drift) < 0.05:
             return "neutral"
         favourable = (drift > 0) == (self.favourable_direction > 0)
@@ -112,13 +90,6 @@ def _parse_timestamp(timestamp: str | None) -> datetime | None:
 
 
 def _hold_hours(trade: TrackedTrade) -> float | None:
-    """Hours from opening a position to finishing it, where that is known.
-
-    Uses the position's own timestamps, not individual fills — ``update_tracked`` rewrites
-    fills wholesale on every edit, which would reset a per-fill timestamp to "now". A
-    zero-length hold is treated as unknown rather than a same-instant flip, since positions
-    saved before ``completed_at`` existed were backfilled with their creation time.
-    """
     started = _parse_timestamp(trade.created_at)
     finished = _parse_timestamp(trade.completed_at)
     if started is None or finished is None:
@@ -133,11 +104,6 @@ def realized_results(
     period: str,
     now: datetime,
 ) -> list[RealizedResult]:
-    """Every position and manual trade that has actually produced a result, in ``period``.
-
-    Period scoping uses the same two helpers as the Trade Journal, so the two pages agree
-    on which history is in view.
-    """
     results: list[RealizedResult] = []
     for trade in tracked:
         profit = trade.realized_profit
@@ -163,7 +129,6 @@ def realized_results(
                 strategy=MANUAL_STRATEGY,
                 profit=record.profit,
                 basis=record.invested,
-                # A manual entry records the outcome, not when the position was opened.
                 hold_hours=None,
             )
         )
@@ -171,8 +136,6 @@ def realized_results(
 
 
 def _return_on_capital(results: list[RealizedResult]) -> float | None:
-    """Capital-weighted return, not the mean of each position's ROI (a 400gp flip at 60%
-    and a 40m flip at 1% shouldn't average to 30.5%)."""
     basis = sum(result.basis for result in results)
     if basis <= 0:
         return None
@@ -220,14 +183,11 @@ def _grouped(
         for label, bucket in buckets.items()
         if len(bucket) >= minimum_positions
     ]
-    # Most profitable first, and a stable label tiebreak so equal rows do not shuffle
-    # between renders of the same data.
     groups.sort(key=lambda group: (-group.realized_profit, group.label))
     return groups
 
 
 def by_strategy(results: list[RealizedResult]) -> list[GroupPerformance]:
-    """One row per strategy the user actually traded under."""
     return _grouped(results, "strategy", minimum_positions=1)
 
 
@@ -235,17 +195,10 @@ def by_item(
     results: list[RealizedResult],
     minimum_positions: int = DEFAULT_MINIMUM_ITEM_POSITIONS,
 ) -> list[GroupPerformance]:
-    """One row per item, hiding items too rarely traded to say anything about."""
     return _grouped(results, "item_name", minimum_positions=max(1, minimum_positions))
 
 
 def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list[CalibrationRow]:
-    """Compare the plan each position was opened with against what it really did.
-
-    Plan is ``target_buy``/``target_sell`` (the original, preserved suggestion), never
-    ``current_*_suggestion`` which refreshes against a later market. Prices are weighted by
-    quantity, so a 5,000-unit position counts for more than a single-unit one.
-    """
     planned_buy = actual_buy = bought = 0
     buy_positions = 0
     planned_sell = actual_sell = sold = 0
@@ -257,9 +210,6 @@ def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list
         in_period = tracked_position_within_period(trade.completed_at, period, now)
         if not in_period:
             continue
-        # Fills where there are any, else the stored weighted average (same fallback as
-        # TrackedTrade.invested) — positions predating per-fill prices only gain fill rows
-        # at the next migration, and shouldn't drop out of the buy comparison until then.
         average_buy = trade.average_buy_price if trade.buy_fills else trade.actual_buy
         buy_quantity = trade.bought_quantity if trade.buy_fills else trade.quantity
         if average_buy is not None and trade.target_buy > 0 and buy_quantity > 0:
@@ -275,9 +225,6 @@ def calibration(tracked: list[TrackedTrade], period: str, now: datetime) -> list
             sell_positions += 1
         realized = trade.realized_profit
         if realized is not None and trade.sold_quantity > 0:
-            # What the original targets promised, for the quantity that actually sold.
-            # Taxed on the same terms as the realized side, or an exempt item's plan would
-            # be graded against a tax it never paid.
             per_unit = (
                 trade.target_sell
                 - trade.target_buy

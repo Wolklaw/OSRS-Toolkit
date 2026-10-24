@@ -1,10 +1,3 @@
-"""The keyboard is the other way around this app.
-
-Someone alt-tabbing in from the game to check one page and going straight back should not
-have to find it with the mouse first, so every sidebar page has a Ctrl+number of its own
-and the market refresh answers to F5.
-"""
-
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -32,7 +25,6 @@ def test_the_market_refresh_answers_to_the_usual_key(window: MainWindow) -> None
 
 
 def test_the_shortcuts_are_advertised_where_the_pages_are(window: MainWindow) -> None:
-    """A shortcut nobody is told about is a shortcut nobody uses."""
     for index, title in enumerate(MainWindow.NAV_ITEMS):
         assert window.nav.item(index).toolTip() == f"{title}  (Ctrl+{index + 1})"
 

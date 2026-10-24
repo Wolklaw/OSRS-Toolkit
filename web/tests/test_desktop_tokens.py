@@ -1,10 +1,3 @@
-"""Desktop credentials: minting them, signing in with them, and what they may not do.
-
-The desktop window has no browser and so no session cookie. It presents a token minted here
-instead. These cover the two halves that matter: that the token really does stand in for the
-account on the read API, and that it deliberately does not stand in for it everywhere.
-"""
-
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -23,13 +16,11 @@ def test_token_is_returned_once_and_never_again(signed_in: TestClient) -> None:
     listed = signed_in.get("/api/desktop-tokens").json()["tokens"]
     assert len(listed) == 1
     assert listed[0]["label"] == "Desktop on wolkpc"
-    # The secret itself must not survive anywhere it could be read back out.
     assert token not in str(listed)
 
 
 def test_bearer_token_reaches_the_journal_api(client: TestClient, signed_in: TestClient) -> None:
     token = _mint(signed_in)
-    # A brand new client: no cookie jar, nothing but the header, the way the desktop arrives.
     with TestClient(signed_in.app, base_url="https://testserver") as bare:
         response = bare.get("/api/trades", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
@@ -37,7 +28,6 @@ def test_bearer_token_reaches_the_journal_api(client: TestClient, signed_in: Tes
 
 
 def test_bearer_token_resolves_to_its_own_account(signed_in: TestClient) -> None:
-    """The token must name the account that minted it, not merely *an* account."""
     token = _mint(signed_in)
     signed_in.post(
         "/api/trades",
@@ -53,7 +43,6 @@ def test_bearer_token_resolves_to_its_own_account(signed_in: TestClient) -> None
 
 
 def test_desktop_token_can_write_a_trade_back(signed_in: TestClient) -> None:
-    """Read-write, not read-only: a trade recorded in the desktop window has to land here."""
     token = _mint(signed_in)
     with TestClient(signed_in.app, base_url="https://testserver") as bare:
         created = bare.post(
@@ -68,7 +57,6 @@ def test_desktop_token_can_write_a_trade_back(signed_in: TestClient) -> None:
         )
         assert created.status_code == 201
 
-    # and the browser session sees it, because it is the same journal
     trades = signed_in.get("/api/trades").json()["trades"]
     assert any(trade["item_name"] == "Dragon bones" for trade in trades)
 
@@ -80,8 +68,6 @@ def test_garbage_and_malformed_headers_are_refused(client: TestClient) -> None:
 
 
 def test_desktop_token_cannot_manage_desktop_tokens(signed_in: TestClient) -> None:
-    """A leaked desktop credential must not be able to outlive its own revocation by
-    minting a second one, nor sign the real desktop out."""
     token = _mint(signed_in)
     existing = signed_in.get("/api/desktop-tokens").json()["tokens"][0]["id"]
 

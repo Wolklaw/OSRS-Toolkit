@@ -1,11 +1,3 @@
-"""The migration that gives journal rows a name other machines can recognise.
-
-``trades`` and ``tracked_trades`` are the only two tables without a global identity of their
-own -- everything the plugin produces already carries an ``event_id``, and a loadout is keyed
-by character. These cover the migration that adds one, on the two things that matter about it:
-that an existing journal survives it intact, and that running it twice changes nothing.
-"""
-
 from __future__ import annotations
 
 import sqlite3
@@ -22,8 +14,6 @@ def _columns(path: Path, table: str) -> set[str]:
 
 
 def _legacy_journal(path: Path) -> None:
-    """A journal shaped the way one was before any of this existed: the two tables at their
-    original columns, with rows in them."""
     with sqlite3.connect(path) as connection:
         connection.execute(
             "CREATE TABLE trades (trade_id INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -87,8 +77,6 @@ def test_every_existing_row_gets_its_own_identity(tmp_path):
 
 
 def test_updated_at_starts_from_when_the_row_happened(tmp_path):
-    """Not "now". Stamping every existing row with the migration time would make all of them
-    look freshly edited and win every conflict on first contact with the other side."""
     path = tmp_path / "toolkit.db"
     _legacy_journal(path)
 
@@ -126,8 +114,6 @@ def test_nothing_is_deleted_by_default(tmp_path):
 
 
 def test_reopening_does_not_re_mint_identities(tmp_path):
-    """A migration that ran already is not one anybody needs run again -- and re-minting would
-    make every row look like a brand new one to the other side."""
     path = tmp_path / "toolkit.db"
     _legacy_journal(path)
 
@@ -156,8 +142,6 @@ def test_a_fresh_journal_has_the_columns_from_the_start(tmp_path):
 
 
 def test_a_newly_recorded_trade_is_named_at_birth(tmp_path):
-    """A trade recorded with no network has to already own the identity it will later be
-    recognised by -- waiting until first sync would leave it unsyncable until then."""
     path = tmp_path / "toolkit.db"
     repository = JournalRepository(path)
     repository.add("Abyssal whip", 1, 1_500_000, 1_650_000)
@@ -182,13 +166,10 @@ def test_a_newly_tracked_position_is_named_at_birth(tmp_path):
             "SELECT sync_uid, updated_at, created_at FROM tracked_trades"
         ).fetchone()
     assert uid
-    # Not equal to created_at: the edit stamp is microsecond-precise so that two changes in
-    # one second can still be ordered against each other. It must not predate the row.
     assert updated_at > created_at
 
 
 def test_two_rows_cannot_share_an_identity(tmp_path):
-    """The unique index is what stops a bad merge quietly collapsing two trades into one."""
     path = tmp_path / "toolkit.db"
     repository = JournalRepository(path)
     repository.add("Abyssal whip", 1, 1_500_000, 1_650_000)
@@ -207,13 +188,6 @@ def test_two_rows_cannot_share_an_identity(tmp_path):
 
 
 def test_opening_the_app_does_not_make_every_row_look_edited(tmp_path):
-    """Schema maintenance runs on every launch, and some of it rewrites every row -- the
-    suggestion backfill has no WHERE clause at all.
-
-    With the touch trigger live during that, a launch would restamp the whole table, and the
-    next sync would see every position as freshly edited: it would win every conflict against
-    the other side and re-push the entire journal, on every single start.
-    """
     path = tmp_path / "toolkit.db"
     repository = JournalRepository(path)
     repository.track(
@@ -236,7 +210,6 @@ def test_opening_the_app_does_not_make_every_row_look_edited(tmp_path):
 
 
 def test_an_ordinary_edit_still_moves_the_stamp(tmp_path):
-    """The other half of it: maintenance must not stamp, but a real edit must."""
     path = tmp_path / "toolkit.db"
     repository = JournalRepository(path)
     position_id = repository.track(

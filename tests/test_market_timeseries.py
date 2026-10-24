@@ -1,5 +1,3 @@
-"""Parsing the wiki's /timeseries response, independent of the network call itself."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +16,6 @@ def test_a_normal_entry_parses_both_prices() -> None:
 
 
 def test_an_interval_with_no_trades_keeps_its_timestamp_with_null_prices() -> None:
-    """A gap in trading is real information — dropping the point would hide it."""
     payload = {"data": [{"timestamp": 1_700_000_000, "avgHighPrice": None, "avgLowPrice": None}]}
 
     (point,) = _parse_timeseries(payload)
@@ -96,7 +93,6 @@ def test_points_preserve_the_response_order() -> None:
 
 
 def test_fetch_timeseries_caches_under_a_filesystem_safe_key(tmp_path: Path) -> None:
-    """The route itself contains "?" and "&", which are not legal in a Windows filename."""
     client = WikiMarketClient(cache_dir=tmp_path)
     seen_routes: list[str] = []
 

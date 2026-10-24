@@ -1,9 +1,3 @@
-"""Turning domain objects into what a template reads.
-
-Nothing here touches a request, a session or the database. Keeping it apart from the
-routing module is what makes it testable without an app, and keeps that module about HTTP.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -17,19 +11,10 @@ from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
 from osrs_toolkit.ranking import ge_tax, is_tax_exempt, offer_targets
 
-#: Excludes 0/O and 1/I/L — characters easy to mistype or misread on a phone screen or a
-#: scrap of paper, which is where a code with no Discord app or email behind it has to
-#: survive. 32 characters ^ 16 positions is comfortably beyond brute-forcing regardless.
 _RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
-#: Marks an account id that came from a recovery code rather than from Discord. The profile
-#: page is the one place that has to tell the two apart — a Discord name is Discord's to
-#: change, so only a code account is offered a rename it would actually keep.
 _RECOVERY_ID_PREFIX = "local:"
 
-# What each status says to someone who arrived by clicking a link, rather than the bare
-# ``detail`` a JSON client reads. Anything not here is a generic failure, which is honest:
-# guessing at a friendly name for an unexpected code just invents reassurance.
 ERROR_PAGES: dict[int, tuple[str, str]] = {
     400: ("That request didn't make sense", "Something about the address or form was off."),
     403: ("Not yours to open", "This belongs to a different account."),
@@ -44,11 +29,6 @@ ERROR_PAGES: dict[int, tuple[str, str]] = {
 
 
 def _useful_detail(status_code: int, detail: object) -> str:
-    """The route's own message, when it has one worth reading.
-
-    Starlette fills ``detail`` with the status's reason phrase when a route gave none, and
-    printing "Not Found" underneath "There is no page at that address" says it twice.
-    """
     text = str(detail or "").strip()
     try:
         generic = HTTPStatus(status_code).phrase
@@ -63,22 +43,11 @@ def _generate_recovery_code() -> str:
 
 
 def _recovery_account_id(code: str) -> str:
-    """The account id a recovery code maps to — never the code itself.
-
-    Prefixed so it can never collide with a real Discord id, which is always a bare numeric
-    snowflake. Normalized before hashing so a code pasted back without its dashes, in the
-    wrong case, or with stray whitespace still finds the same account it was issued for.
-    """
     normalized = "".join(ch for ch in code.upper() if ch.isalnum())
     return _RECOVERY_ID_PREFIX + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _optional_int(value: object, field: str) -> int | None:
-    """A whole number, or ``None`` for a field the caller left out or deliberately cleared.
-
-    JSON has no way to say "leave this alone" other than omitting it, and an empty form input
-    arrives as an empty string rather than as nothing at all — both mean the same thing here.
-    """
     if value is None or value == "":
         return None
     try:
@@ -88,13 +57,6 @@ def _optional_int(value: object, field: str) -> int | None:
 
 
 def _fill_list(value: object, field: str) -> list[tuple[int, int]] | None:
-    """A list of (quantity, price) fills, or ``None`` when the caller sent none at all.
-
-    ``None`` and ``[]`` are deliberately different: an absent list leaves whatever fills are
-    already recorded untouched, while an empty one is an explicit "this position has no fills"
-    that clears them. The journal draws the same distinction, so passing it straight through
-    is what keeps a synced position's history from being erased by an unrelated edit.
-    """
     if value is None:
         return None
     if not isinstance(value, list):
@@ -114,20 +76,10 @@ def _fill_list(value: object, field: str) -> list[tuple[int, int]] | None:
     return fills
 
 
-#: How long after a desktop token was last used the desktop app still counts as connected.
-#: It polls once a minute and ``last_used_at`` is only rewritten once a minute, so the window
-#: has to be several times that or a perfectly healthy app would blink out between writes.
 DESKTOP_CONNECTED_SECONDS = 5 * 60
 
 
 def _desktop_activity(tokens: list) -> tuple[str, str | None]:
-    """(state, last_seen) for the desktop app, from the tokens issued to this account.
-
-    The same distinction the plugin gets: a token that exists is not an app that is running.
-    ``"waiting"`` is a token that was minted and never used — almost always somebody who
-    copied it and has not pasted it in yet, which is worth saying rather than showing them a
-    connected badge for an app that has never once called.
-    """
     if not tokens:
         return "none", None
     seen = [token.last_used_at for token in tokens if token.last_used_at]
@@ -142,11 +94,6 @@ def _desktop_activity(tokens: list) -> tuple[str, str | None]:
 
 
 def _net_worth_composition(snapshot: object, total_invested: int) -> list[dict]:
-    """What the dashboard's net-worth figure is actually made of, right now — not history,
-    just the latest snapshot split into cash, carried gear, bank, and capital tied up in open
-    Grand Exchange positions. Rows with nothing in them are dropped rather than shown at 0%,
-    since an account with no bank snapshot yet still has open positions worth showing alone.
-    """
     cash = equipment_value = inventory_value = bank_value = 0
     if snapshot is not None:
         cash = snapshot.quantity_owned(995)
@@ -184,12 +131,6 @@ def _buy_limit_room(
     account_hash: str | None,
     now: datetime,
 ) -> dict[int, int]:
-    """How much of each item's 4-hour buy limit this character still has free.
-
-    Only items actually bought inside the window appear, which is exactly the shape
-    ``rank_flips`` wants: an item nobody has touched is absent and stays unconstrained,
-    rather than needing a row saying "all of it".
-    """
     limits = {item.item_id: item.buy_limit for item in mappings.values() if item.buy_limit}
     recent_fills = repository.list_synced_trades(
         event_type="ge_fill",
@@ -202,12 +143,6 @@ def _buy_limit_room(
 
 
 def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
-    """Every number the desktop window's item-details dialog shows, for one item.
-
-    Assembled here rather than in the template so the page stays a list of already-decided
-    values — the arithmetic that turns a raw market point into a margin belongs next to the
-    ranking code that uses the same rules, not inside a Jinja expression.
-    """
     buy_price, sell_price = offer_targets(point)
     tax = ge_tax(sell_price, exempt=is_tax_exempt(item.item_id, item.name))
     profit = sell_price - buy_price - tax
@@ -236,9 +171,6 @@ _WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 
 
 def _history_stats(history: list[TimeseriesPoint]) -> tuple[dict | None, list[dict]]:
-    """Two views of the same timeseries the price chart already has: average spread and
-    volume across the window, and average volume by day of week — a seasonality flag, not
-    a forecast. Both empty for too little history to say anything from."""
     if not history:
         return None, []
     spreads = [

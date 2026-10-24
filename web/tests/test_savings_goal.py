@@ -37,8 +37,6 @@ def test_a_non_positive_target_is_refused(signed_in: TestClient):
 def test_profit_realized_before_the_goal_existed_does_not_count(
     signed_in: TestClient, settings: Settings
 ):
-    """Trading results from before the goal existed were not earned toward it — the same
-    rule savings_goal.realized_profit_since documents."""
     repository = JournalRepository(settings.journal_path("111"))
     repository.add("Dragon bones", quantity=100, buy_price=2_000, sell_price=2_200)
 
@@ -46,8 +44,6 @@ def test_profit_realized_before_the_goal_existed_does_not_count(
 
     response = signed_in.get("/savings-goal")
 
-    # profit from that trade is > 0 but predates the goal, so saved must read 0, not a
-    # positive figure that was never actually earned toward this goal.
     assert ">0 gp<" in response.text or "0 gp" in response.text
 
 
@@ -60,7 +56,6 @@ def test_profit_realized_after_the_goal_counts_toward_it(signed_in: TestClient, 
     response = signed_in.get("/savings-goal")
 
     assert response.status_code == 200
-    # profit = (2200 - 2000 - ge_tax(2200)) * 100 = (200 - 44) * 100 = 15,600
     assert "15,600" in response.text
 
 

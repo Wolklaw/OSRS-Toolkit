@@ -1,5 +1,3 @@
-"""The profile, about and help pages, and the account-level things only they can do."""
-
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -9,12 +7,8 @@ from osrs_toolkit.journal import JournalRepository
 
 from toolkit_web.config import Settings
 
-# -- readable before signing in ---------------------------------------------------------------
-
 
 def test_about_is_readable_without_signing_in(client: TestClient):
-    """What this is and what it does with your data are questions asked before signing in,
-    not after — so neither page may be behind the session."""
     response = client.get("/about")
 
     assert response.status_code == 200
@@ -32,7 +26,6 @@ def test_a_signed_out_visitor_is_offered_a_way_back_to_signing_in(client: TestCl
     response = client.get("/about")
 
     assert ">Sign in</a>" in response.text
-    # No signed-in furniture leaks onto a page rendered for nobody in particular.
     assert 'class="sidebar"' not in response.text
 
 
@@ -41,9 +34,6 @@ def test_about_still_renders_for_a_signed_in_account(signed_in: TestClient):
 
     assert response.status_code == 200
     assert 'class="sidebar"' in response.text
-
-
-# -- profile ------------------------------------------------------------------------------
 
 
 def test_the_profile_page_needs_a_session(client: TestClient):
@@ -84,15 +74,12 @@ def test_named_characters_are_managed_from_the_profile(signed_in: TestClient):
 
 
 def test_desktop_tokens_are_shown_and_reachable_from_the_profile(signed_in: TestClient):
-    """The only way to get a credential the desktop app can use -- if this page cannot mint
-    one, nothing else about the desktop mirror is reachable at all."""
     minted = signed_in.post("/api/desktop-tokens", json={"label": "This PC"})
     assert minted.status_code == 201
 
     response = signed_in.get("/profile")
 
     assert "This PC" in response.text
-    # The secret itself must never come back out of a page render.
     assert minted.json()["token"] not in response.text
 
 
@@ -105,12 +92,7 @@ def test_a_revoked_desktop_token_drops_off_the_profile(signed_in: TestClient):
     assert "This PC" not in signed_in.get("/profile").text
 
 
-# -- display name ----------------------------------------------------------------------------
-
-
 def test_a_discord_account_cannot_rename_itself_here(signed_in: TestClient):
-    """Discord hands back a username on every sign-in, so a name set here would silently
-    revert at the next one. Being told so beats being quietly overwritten later."""
     response = signed_in.patch("/api/me", json={"username": "Someone Else"})
 
     assert response.status_code == 409

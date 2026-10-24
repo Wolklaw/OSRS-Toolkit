@@ -64,9 +64,6 @@ def test_an_unknown_account_reads_as_none(tmp_path: Path):
 
 
 def test_an_existing_database_without_the_goal_columns_gets_them_added(tmp_path: Path):
-    """The laptop's real accounts.db predates the savings-goal columns and holds one real
-    login and pairing token. Opening it again must add the new columns in place rather than
-    recreating the table, which would lose both."""
     import sqlite3
 
     path = tmp_path / "accounts.db"
@@ -100,10 +97,6 @@ def test_an_existing_database_without_the_goal_columns_gets_them_added(tmp_path:
 def test_an_existing_database_without_the_webhook_or_alert_columns_gets_them_added(
     tmp_path: Path,
 ):
-    """Same story as the goal-columns migration above, for the columns price alerts added
-    later: a real ``account`` row and a real ``watchlist_item`` row must survive opening an
-    older database, with the new columns simply appearing NULL rather than the tables being
-    recreated out from under them."""
     import sqlite3
 
     path = tmp_path / "accounts.db"
@@ -145,9 +138,6 @@ def test_an_existing_database_without_the_webhook_or_alert_columns_gets_them_add
     assert db.get("111").discord_webhook_url == "https://discord.com/api/webhooks/1/abc"
 
 
-# -- watchlist alerts --------------------------------------------------------------------------
-
-
 def test_setting_an_alert_on_an_unwatched_item_fails(tmp_path: Path):
     db = AccountsDB(tmp_path / "accounts.db")
     db.upsert_login("111", "Wolklaw", None)
@@ -177,7 +167,7 @@ def test_list_armed_alerts_needs_both_a_webhook_and_an_armed_alert(tmp_path: Pat
     assert db.list_armed_alerts() == []
 
     db.set_watchlist_alert("111", 4151, 1_000_000, "above")
-    assert db.list_armed_alerts() == []  # armed, but no webhook to send to yet
+    assert db.list_armed_alerts() == []
 
     db.set_discord_webhook("111", "https://discord.com/api/webhooks/1/abc")
     [armed] = db.list_armed_alerts()
@@ -195,9 +185,6 @@ def test_stamp_alert_sent_records_when_it_last_fired(tmp_path: Path):
 
     [alert] = db.list_watchlist_alerts("111")
     assert alert.last_alerted_at is not None
-
-
-# -- deleting an account ------------------------------------------------------------------------
 
 
 def test_deleting_an_account_removes_it(tmp_path: Path):

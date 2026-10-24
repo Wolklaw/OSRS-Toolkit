@@ -1,7 +1,3 @@
-"""Item history, Alch Finder and Skilling Profit render usefully signed out — they are pure
-market-data calculators with no journal dependency, unlike the plugin-fed pages next to them.
-"""
-
 from __future__ import annotations
 
 import time
@@ -79,14 +75,10 @@ def test_the_skilling_page_reads_signed_out(client: TestClient):
 
 
 def test_the_buy_limits_page_still_needs_a_session(client: TestClient):
-    """Unlike the three above, this one reads a personal purchase history — there is no
-    signed-out version of "what have you bought in the last four hours"."""
     assert client.get("/buy-limits").status_code == 401
 
 
 def test_a_signed_in_page_is_marked_uncacheable(signed_in: TestClient):
-    """Every signed-in page is account-specific. Without this header nothing in the response
-    would stop a cache rule covering HTML from serving one account's dashboard to another."""
     with _patched_market():
         response = signed_in.get("/")
 

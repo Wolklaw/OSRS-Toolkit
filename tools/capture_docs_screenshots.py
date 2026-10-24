@@ -29,8 +29,6 @@ WINDOW_SIZE = (1_920, 1_000)
 
 
 def save_widget(widget: object, path: Path, app: QApplication) -> None:
-    """Render a real Qt widget after layout/paint settle, normalized to a 1.0 device pixel
-    ratio so screenshots come out the same size regardless of the capturing monitor's scaling."""
     if isinstance(widget, MainWindow):
         widget.resize(*WINDOW_SIZE)
     app.processEvents()
@@ -50,12 +48,10 @@ def save_widget(widget: object, path: Path, app: QApplication) -> None:
 
 
 def show_page(window: MainWindow, name: str) -> None:
-    """Select a sidebar page by name, not a hardcoded row index."""
     window.nav.setCurrentRow(MainWindow.NAV_ITEMS.index(name))
 
 
 def show_journal_tab(window: MainWindow, name: str) -> None:
-    """Select a Trade Journal tab by its visible label, not a hardcoded index."""
     tabs = window.journal_tabs
     index = next(i for i in range(tabs.count()) if tabs.tabText(i) == name)
     tabs.setCurrentIndex(index)
@@ -64,7 +60,6 @@ def show_journal_tab(window: MainWindow, name: str) -> None:
 def backdate(
     window: MainWindow, position_id: int, *, opened_hours_ago: float, held_hours: float | None
 ) -> None:
-    """Give a demo position a believable lifetime instead of an instantaneous one."""
     opened = datetime.now(UTC) - timedelta(hours=opened_hours_ago)
     finished = (
         None
@@ -84,7 +79,6 @@ def backdate(
 
 
 def add_performance_examples(window: MainWindow) -> None:
-    """Finished flips across all three strategies for the Performance page to compare."""
     quick_id = window._journal.track(1515, "Yew logs", 9_000, 320, 345, "Quick (up to 1h)")
     window._journal.update_tracked(
         quick_id, "Completed", None, None, [(9_000, 344)], [(9_000, 318)]
@@ -107,7 +101,6 @@ def add_performance_examples(window: MainWindow) -> None:
 
 
 def add_journal_examples(window: MainWindow) -> int:
-    """Populate a private demo journal that shows every important trade state."""
     strategy = window.strategy.currentText()
 
     listed_id = window._journal.track(1519, "Willow branch", 1_333, 117, 127, strategy)
@@ -161,7 +154,6 @@ def add_journal_examples(window: MainWindow) -> int:
 
     window._journal.add("Rune platebody", 12, 37_500, 39_250)
 
-    # Spread the demo history over a few days so it reads like a real account.
     backdate(window, listed_id, opened_hours_ago=5, held_hours=None)
     backdate(window, cancelled_id, opened_hours_ago=52, held_hours=1.5)
     backdate(window, loss_id, opened_hours_ago=27, held_hours=3.8)
@@ -171,7 +163,6 @@ def add_journal_examples(window: MainWindow) -> int:
 
 
 def add_supplies_examples(window: MainWindow) -> None:
-    """Quest and skilling buys marked Supplies, so Supplies spend has real totals."""
     lobster_id = window._journal.track(379, "Lobster", 9_000, 152, 152, "Balanced (1–4h)")
     window._journal.update_tracked(lobster_id, "Supplies", None, None, None, [(9_000, 152)])
     backdate(window, lobster_id, opened_hours_ago=18, held_hours=None)
@@ -184,8 +175,6 @@ def add_supplies_examples(window: MainWindow) -> None:
 
 
 def add_buy_limit_example(window: MainWindow) -> int | None:
-    """A recent synced buy so the Buy limits tab has something to show. Returns the
-    item_id used, or None if the top flip candidate has no known buy limit."""
     candidate = window._flips[0]
     limit = window._mappings[candidate.item_id].buy_limit
     if not limit:
@@ -212,8 +201,6 @@ def add_buy_limit_example(window: MainWindow) -> int | None:
 
 
 def add_ge_offer_state(window: MainWindow, sync_root: Path) -> None:
-    """A live-looking Grand Exchange: two offers filling, one bought and uncollected.
-    Written straight to the files the real plugin writes, not through a mock."""
     account_hash = "abc123"
     sync_root.mkdir(parents=True, exist_ok=True)
     (sync_root / "status.json").write_text(
@@ -269,8 +256,6 @@ def add_ge_offer_state(window: MainWindow, sync_root: Path) -> None:
 
 
 def add_savings_goal_example() -> None:
-    """A goal a little over a week old, so add_performance_examples' profit counts
-    toward visible progress."""
     settings = QSettings()
     settings.setValue("savings_goal/label", "Bandos chestplate")
     settings.setValue("savings_goal/target", 5_000_000)
@@ -331,8 +316,6 @@ def add_runelite_examples(window: MainWindow) -> None:
 
 
 def add_pvm_example(window: MainWindow) -> None:
-    """A loadout ready for mid-tier bosses but missing Vorkath/Zulrah/Cerberus requirements,
-    for a realistic mix of Ready and Not ready rows."""
     equipment = (
         LoadoutItem(4_151, "Abyssal whip", 1, 1_500_000),
         LoadoutItem(12_926, "Toxic blowpipe", 1, 4_000_000),
@@ -369,7 +352,6 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     profile_dir = Path(tempfile.mkdtemp(prefix="osrs-toolkit-docs-"))
 
-    # Isolate journal/settings locations so screenshots never pick up a real dev profile.
     os.environ["LOCALAPPDATA"] = str(profile_dir)
     os.environ["APPDATA"] = str(profile_dir)
     os.environ.setdefault("QT_SCALE_FACTOR", "1")
@@ -439,7 +421,6 @@ def main() -> int:
         window._render_journal()
         show_page(window, "Trade Journal")
         show_journal_tab(window, "Plans && completed")
-        # GE slots live on the Trade Journal page, so seed them before this shot.
         add_ge_offer_state(window, window._sync_importer.sync_root)
         window._render_ge_offers()
         save_widget(window, output_dir / "trade-journal.png", app)
@@ -493,7 +474,6 @@ def main() -> int:
             "RuneLite connected as Example Player • syncing automatically • player trades on"
         )
         window._render_synced_trades()
-        # The sidebar still points at Performance from the capture above; reset it first.
         show_page(window, "Trade Journal")
         window.journal_tabs.setCurrentIndex(1)
         save_widget(window, output_dir / "runelite-activity.png", app)

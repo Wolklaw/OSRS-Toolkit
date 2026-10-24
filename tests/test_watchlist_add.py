@@ -1,10 +1,3 @@
-"""Adding an item to the Watchlist directly from its own tab.
-
-Previously the only way onto the watchlist was double-clicking a row in GE Flipper or Alch
-Finder and toggling "watched" in the item details dialog — these tests cover the Watchlist
-tab's own add-by-name field instead.
-"""
-
 from __future__ import annotations
 
 from osrs_toolkit.app import MainWindow

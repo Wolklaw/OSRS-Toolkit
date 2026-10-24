@@ -1,8 +1,3 @@
-"""Drives the real MainWindow._render_ge_offers, the way test_buy_limits_render.py drives
-_render_buy_limits. Unlike buy limits, this reads the plugin's own state file rather than
-journal data, so window._sync_importer is pointed at a throwaway sync root.
-"""
-
 from __future__ import annotations
 
 import json
@@ -77,8 +72,6 @@ def test_an_open_offer_shows_up_in_its_real_slot(window: MainWindow, tmp_path: P
 
     window._render_ge_offers()
 
-    # Slot indices from the plugin are 0-based; the dashboard displays them 1-based to
-    # match the in-game Grand Exchange window.
     card = window.ge_slot_cards[3]
     assert card.property("slotState") == "buy"
     assert card._number.text() == "4  Buy"
@@ -86,15 +79,12 @@ def test_an_open_offer_shows_up_in_its_real_slot(window: MainWindow, tmp_path: P
     assert card._status.text() == "Buying"
     assert card._filled.text() == "4 / 10 · 40%"
     assert card._progress.value() == 40
-    # Every other slot is still empty.
     assert window.ge_slot_cards[0].property("slotState") == "empty"
 
 
 def test_a_finished_offer_reads_as_waiting_to_be_collected(
     window: MainWindow, tmp_path: Path
 ) -> None:
-    """An offer sitting in its slot until collected is the state worth spotting, so it gets
-    its own tone rather than reading as one more offer still in progress."""
     root = _connect(window, tmp_path)
     _write_slots(root, {"0": _offer(0, state="BOUGHT", filled=10)})
 
@@ -109,8 +99,6 @@ def test_a_finished_offer_reads_as_waiting_to_be_collected(
 def test_a_long_item_name_does_not_stretch_its_slot(
     qt_app: QApplication, window: MainWindow, tmp_path: Path
 ) -> None:
-    """Regression: a plain QLabel refuses to shrink below its text, so one long name would
-    widen its own column and leave the other seven slots narrower than it."""
     root = _connect(window, tmp_path)
     long_name = "Ancient ceremonial legs of considerable length"
     slot = _offer(2)
@@ -118,8 +106,6 @@ def test_a_long_item_name_does_not_stretch_its_slot(
     _write_slots(root, {"2": slot})
     window._render_ge_offers()
 
-    # Shown and sized, because Qt holds back resize events for hidden widgets and the
-    # label only re-elides when it is told how much room it actually got.
     window.nav.setCurrentRow(MainWindow.NAV_ITEMS.index("Trade Journal"))
     window.show()
     window.resize(1100, 800)
@@ -131,21 +117,13 @@ def test_a_long_item_name_does_not_stretch_its_slot(
     assert card.width() <= window.ge_slot_cards[0].width() + 2, "the long name widened its own slot"
 
 
-# -- holding the panel through a moment offline ------------------------------------------------
-
-
 class _FlakySource:
-    """A source that answers normally, then goes unreachable, the way the website does when a
-    request loses a race with a home connection."""
-
     def __init__(self, account_hash: str = "abc123") -> None:
         self.account_hash = account_hash
         self.reachable = True
 
     def status_payload(self) -> tuple[bool, dict | None, bool]:
         if not self.reachable:
-            # Detected, but nothing came back -- exactly what WebAppSource returns for a
-            # failed fetch, and what it then serves from its own cache for a second or two.
             return (True, None, False)
         return (
             True,
@@ -180,8 +158,6 @@ class _FlakySource:
 def test_the_panel_survives_the_website_being_unreachable_for_a_moment(
     window: MainWindow,
 ) -> None:
-    """The reported bug: the Grand Exchange panel vanished repeatedly during a buying
-    session. Every failed poll reported no character, and the panel took that literally."""
     source = _FlakySource()
     window._sync_importer = RuneLiteSyncImporter(source=source)
     window._render_ge_offers()
@@ -197,8 +173,6 @@ def test_the_panel_survives_the_website_being_unreachable_for_a_moment(
 def test_the_panel_empties_once_the_source_really_says_there_is_nobody(
     window: MainWindow,
 ) -> None:
-    """The other half: a reachable source naming no character is a real answer -- the token
-    was cleared, or nobody has played this pairing -- and must still empty the panel."""
     source = _FlakySource()
     window._sync_importer = RuneLiteSyncImporter(source=source)
     window._render_ge_offers()

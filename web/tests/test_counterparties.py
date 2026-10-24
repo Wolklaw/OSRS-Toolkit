@@ -62,7 +62,6 @@ def test_trades_with_the_same_person_are_grouped_and_netted(
 
     assert response.status_code == 200
     assert "Zezima" in response.text
-    # 2 trades, given 1500, received 1700, net +200
     assert "1,500" in response.text
     assert "1,700" in response.text
     assert "+200" in response.text
@@ -83,8 +82,8 @@ def test_different_counterparties_are_kept_separate(signed_in: TestClient, setti
 
     assert "Alice" in response.text
     assert "Bob" in response.text
-    assert "+100" in response.text  # Alice: net gain
-    assert "-200" in response.text  # Bob: net loss
+    assert "+100" in response.text
+    assert "-200" in response.text
 
 
 def test_the_page_needs_a_session(client: TestClient):

@@ -1,10 +1,3 @@
-"""Regression tests for row identity surviving a user-applied column sort.
-
-``_fill_table`` re-enables sorting once it has populated a table, which makes Qt sort
-immediately by whatever indicator the user last clicked. Anything that pairs a table row
-with its source record must therefore key off the cell, not the visual row index.
-"""
-
 from __future__ import annotations
 
 import time
@@ -18,7 +11,6 @@ from osrs_toolkit.pvm import PVM_ACTIVITIES
 
 
 def _price_every_skilling_input(window: MainWindow) -> None:
-    """Give every recipe item a fresh price so all skilling methods render."""
     now = int(time.time())
     item_ids = {
         item.item_id for method in SKILL_METHODS for item in (*method.inputs, *method.outputs)
@@ -41,16 +33,13 @@ def _price_every_skilling_input(window: MainWindow) -> None:
 
 
 def test_skilling_guide_links_follow_their_row_after_a_user_sort(window: MainWindow) -> None:
-    """Regression: sorting by Method then re-rendering must not shuffle guide URLs."""
     _price_every_skilling_input(window)
     window.skill_profitable.setChecked(False)
     window._render_skilling()
     table = window.skill_table
     assert table.rowCount() == len(SKILL_METHODS)
 
-    # The user sorts by Method (A–Z) instead of the default GP/hr ordering.
     table.sortItems(0, Qt.SortOrder.AscendingOrder)
-    # Any re-render — typing in the search box does this on every keystroke.
     window._render_skilling()
 
     mismatched = [
@@ -63,12 +52,10 @@ def test_skilling_guide_links_follow_their_row_after_a_user_sort(window: MainWin
 
 
 def test_pvm_readiness_colour_follows_its_row_after_a_user_sort(window: MainWindow) -> None:
-    """Regression: a sorted PvM table must not paint 'Ready' rows with the loss colour."""
     window._render_pvm()
     table = window.pvm_table
     assert table.rowCount() >= 2
 
-    # The user sorts by Activity name, breaking the ready-first source ordering.
     table.sortItems(0, Qt.SortOrder.AscendingOrder)
     window._render_pvm()
 
@@ -76,7 +63,6 @@ def test_pvm_readiness_colour_follows_its_row_after_a_user_sort(window: MainWind
     colours = {
         "Ready": window._profit_color.casefold(),
         "Not ready": window._loss_color.casefold(),
-        # No gear has been synced in this fixture, so nothing has been checked either way.
         "Unknown": window._muted_color.casefold(),
     }
     for row in range(table.rowCount()):
@@ -92,13 +78,6 @@ def test_pvm_readiness_colour_follows_its_row_after_a_user_sort(window: MainWind
 
 
 def test_a_selected_row_survives_a_user_sort(window: MainWindow) -> None:
-    """Regression: the row a delete acts on must be the row on screen, not whatever sat at
-    that index before the user clicked a column header.
-
-    Written originally against the RuneLite activity table, which no longer exists -- the
-    plugin feeds the website now, so nothing populated it. Retargeted rather than dropped:
-    the row_ids mechanism it guards still carries every other table on the page.
-    """
     from osrs_toolkit.journal import LoadoutItem, NpcLootRecord
 
     def kill(event_id: str, occurred_at: str, npc_name: str) -> NpcLootRecord:
@@ -120,10 +99,8 @@ def test_a_selected_row_survives_a_user_sort(window: MainWindow) -> None:
     table = window.loot_log_table
     assert table.rowCount() == 2
 
-    # Newest-first by default puts Vorkath (Jan 2) on row 0; sorting by Time ascending swaps.
     table.sortItems(0, Qt.SortOrder.AscendingOrder)
     table.setCurrentCell(0, 0)
 
-    # Row 0 now displays the older Jan 1 kill; the selection must agree with the screen.
     assert table.item(0, 1).text() == "Zulrah"
     assert window._selected_loot_log_event_id() == "11111111-1111-4111-8111-111111111111"

@@ -1,11 +1,3 @@
-"""Run the service.
-
-    python -m toolkit_web
-
-Binds to localhost by default and speaks plain HTTP. Put a tunnel or a reverse proxy in front
-of it for anything reachable from outside the machine, same as the sync service it sits beside.
-"""
-
 from __future__ import annotations
 
 import os

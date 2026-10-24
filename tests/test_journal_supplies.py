@@ -1,12 +1,3 @@
-"""Supplies (quest/skilling buys that aren't flips) must not pollute flip totals.
-
-'Supplies' is set the same way as any other status — the Update dialog's Status dropdown,
-which drives ``JournalRepository.update_tracked`` — not a separate mechanism. Once a
-position is Supplies it has to disappear from the summary cards, the needs-attention flag,
-and the Performance page, everywhere the app claims to be reporting trading results,
-without disturbing positions still bought and sold as flips.
-"""
-
 from __future__ import annotations
 
 from osrs_toolkit.app import MainWindow, UpdateTrackedTradeDialog
@@ -23,9 +14,6 @@ def _flip(window: MainWindow, *, realized: bool = True) -> int:
 
 
 def _supplies(window: MainWindow) -> int:
-    """Buying lobsters for a quest, then marking the position Supplies via the same
-    update_tracked call the Update dialog makes — 'Completed' with a same-price sale fill
-    purely so it has a realized result to test the summary cards against."""
     position_id = window._journal.track(379, "Lobster", 5_000, 150, 150)
     window._journal.update_tracked(
         position_id, "Supplies", None, None, [(5_000, 150)], [(5_000, 150)]
@@ -76,8 +64,6 @@ def test_active_trades_filter_excludes_supplies(window: MainWindow) -> None:
 def test_supplies_are_excluded_from_the_summary_cards_under_all_statuses(
     window: MainWindow,
 ) -> None:
-    """The 750,000 gp spent on lobsters must not show up as capital traded on a page whose
-    whole point is grading flip profit — regardless of which status filter is selected."""
     _flip(window)
     _supplies(window)
     window._render_journal()
@@ -88,8 +74,6 @@ def test_supplies_are_excluded_from_the_summary_cards_under_all_statuses(
 def test_the_cards_stay_flip_only_even_when_the_supplies_filter_is_selected(
     window: MainWindow,
 ) -> None:
-    """The summary cards were never scoped by the status filter (only by period) — picking
-    'Supplies' changes which rows are listed below, not what the cards above report."""
     _flip(window)
     _supplies(window)
     window.journal_status_filter.setCurrentText("Supplies")
@@ -99,8 +83,6 @@ def test_the_cards_stay_flip_only_even_when_the_supplies_filter_is_selected(
 
 
 def test_a_stale_supplies_ask_never_raises_needs_attention(window: MainWindow) -> None:
-    """A supplies buy sitting well below the live sell suggestion is not a stale flip ask —
-    it was never listed for sale on purpose, so it must never trip the flag."""
     position_id = window._journal.track(379, "Lobster", 5_000, 150, 150)
     window._journal.update_tracked(position_id, "Supplies", None, None, None, [(5_000, 150)])
     window._points = [
@@ -152,9 +134,6 @@ def test_supplies_spend_tab_reports_total_and_per_item_rows(window: MainWindow) 
     assert window.supplies_spend_total.text().splitlines()[1] == "750,000 gp"
     assert window.supplies_spend_table.rowCount() == 1
     assert window.supplies_spend_table.item(0, 0).text() == "Lobster"
-    # isHidden() reflects the widget's own explicit hide/show state; isVisible() would also
-    # depend on the tab being the active one and the window actually being shown on screen,
-    # neither of which this offscreen test does.
     assert window.supplies_spend_empty.isHidden() is True
 
 

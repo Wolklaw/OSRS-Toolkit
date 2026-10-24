@@ -58,9 +58,6 @@ def test_ranker_expands_position_budget_when_only_one_slot_is_available() -> Non
 
 
 def test_a_stack_above_the_old_cash_cap_stays_exact() -> None:
-    """The Grand Exchange no longer stops a cash stack at 2,147,483,647, and none of this
-    ever modelled that cap -- so what matters is that the arithmetic stays exact and the
-    buy limit, not the size of the stack, is still what sizes the position."""
     now = 2_000_000
     mappings = {1: ItemMapping(1, "Big stack item", True, 10_000, None)}
     point = MarketPoint(
@@ -108,8 +105,6 @@ def test_ranker_expands_liquidity_allowance_for_one_slot() -> None:
 
     one_slot = rank_flips(mappings, [point], cash_stack=1_000_000, slot_count=1, now=now)
 
-    # The previous fixed 25% hourly-volume cap stopped at 3,353 arrows / 643,776 gp.
-    # With one GE slot available, liquidity may expand enough to use the cash stack.
     assert one_slot[0].suggested_quantity == 5_208
     assert one_slot[0].capital_required == 999_936
 
@@ -289,7 +284,6 @@ def test_portfolio_leaves_cash_unallocated_when_all_safe_caps_are_reached() -> N
 def test_tax_exempt_items_are_recognised_by_id_or_name() -> None:
     assert is_tax_exempt(13190) is True
     assert is_tax_exempt(item_name="Old school bond") is True
-    # Journal rows are filed under whatever case the user typed.
     assert is_tax_exempt(item_name="  old school BOND  ") is True
     assert is_tax_exempt(1434, "Dragon mace") is False
     assert is_tax_exempt() is False
@@ -330,7 +324,6 @@ def test_ranker_charges_no_tax_on_an_exempt_item() -> None:
 
     assert exempt[0].tax == 0
     assert exempt[0].profit_each == 300_000
-    # The same spread on a taxed item keeps 2% of the sale price back.
     assert normal[0].tax == 206_000
     assert normal[0].profit_each == 94_000
 
@@ -357,6 +350,5 @@ def test_ranker_drops_an_item_whose_buy_limit_is_already_spent() -> None:
     point = MarketPoint(1, 1_200, 1_000, now - 60, now - 90, 50, 600, 1_090, 1_080)
 
     assert rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={1: 0}, now=now) == []
-    # An item nobody has bought lately simply isn't in the mapping, and stays unconstrained.
     untouched = rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={}, now=now)
     assert untouched[0].suggested_quantity == 25

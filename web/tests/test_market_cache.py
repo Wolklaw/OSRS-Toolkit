@@ -71,7 +71,6 @@ def test_a_failed_refresh_falls_back_to_the_last_good_snapshot(cache: MarketCach
     ):
         mappings, points = cache.snapshot()
 
-    # Still the old data — a transient outage should not blank a page that was working.
     assert mappings == _MAPPING
     assert points == _POINTS
 
@@ -88,9 +87,6 @@ def test_a_failure_before_any_successful_fetch_has_nothing_to_fall_back_to(cache
 
 
 def test_a_failure_does_not_prevent_the_very_next_read_from_retrying(cache: MarketCache):
-    """No cooldown after a failure — at this traffic scale a request is never frequent
-    enough to risk hammering the wiki, and delaying recovery would only cost the first
-    person to load a page after the outage clears."""
     with (
         patch(
             "toolkit_web.market_cache.WikiMarketClient.fetch_snapshot",

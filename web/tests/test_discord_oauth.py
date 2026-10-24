@@ -15,10 +15,6 @@ def _response(body: bytes) -> MagicMock:
 
 
 def test_every_discord_request_carries_a_real_user_agent():
-    """Discord's API sits behind Cloudflare, which turns away the standard library's default
-    User-Agent outright — the same block sync.runescope.app applies to its own callers, hit
-    from the other direction here. A request with no identifying header never reaches Discord
-    at all; this is the regression that shipped once already."""
     from toolkit_web.discord_oauth import USER_AGENT
 
     with patch(

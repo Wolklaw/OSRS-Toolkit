@@ -8,17 +8,7 @@
 
 {% block content %}
 
-{#
-  Two connections, each reporting what is actually happening rather than what has been
-  configured. "A token is saved" and "something is arriving" are different facts, and the old
-  panel showed the first while claiming the second -- so a dashboard read "Plugin connected"
-  with the game shut. `plugin_state` and `desktop_state` are the honest versions.
 
-  Drawn as a macro because where it belongs depends on what it says. With something still to
-  set up it is the first thing on the page, because that is the thing standing between this
-  visitor and a dashboard worth reading. Once both are running it is reference, not work, and
-  goes to the bottom under the money it was only ever there to collect.
-#}
 {% macro connections() %}
 <div class="panel">
   <div class="panel-head">
@@ -96,10 +86,7 @@
 {% set setup_pending = plugin_state == "none" or desktop_state in ("none", "waiting") %}
 {% if setup_pending %}{{ connections() }}{% endif %}
 
-{#
-  The money, first. Net worth and what this trading has done to it are the two numbers worth
-  reading from across the room; the rest are the working detail behind them.
-#}
+
 <div class="stats">
   {% if net_worth %}
   <div class="stat hero">
@@ -138,13 +125,7 @@
   </div>
 </div>
 
-{#
-  Whether a Grand Exchange buy counts as a flip or as supplies. Off by default, because most
-  of what anyone buys is a consumable -- treating every purchase as a flip filed a trip's
-  worth of brews and runes as losing trades and dragged the performance pages down with them.
-  The toggle is on the dashboard rather than in settings because it is a thing you do, like
-  starting a stopwatch, not a thing you configure once.
-#}
+
 {% if flip_tracking_mode == "session" %}
 <div class="panel session-bar {{ 'is-live' if trading_session else '' }}">
   <div class="panel-head">
@@ -210,10 +191,7 @@
       Setting up {{ offer_screen.side or 'an' }} offer on <strong>{{ offer_screen.item_name }}</strong>.
     </div>
     {% endif %}
-    {#
-      Eight cards, always: the game gives you eight slots whether or not they hold anything,
-      and drawing the empty ones is how "two free" is answered without counting rows.
-    #}
+
     <div class="slot-grid">
       {% for index in range(8) %}
       {% set slot = offer_rows | selectattr("slot", "equalto", index) | first %}
@@ -292,10 +270,7 @@
             <span class="badge bad" title="Your ask is at least 2% above what the market now suggests. Relist nearer the suggestion to clear this.">Stale ask</span>
             {% endif %}
           </td>
-          {#
-            How far through the position is, as a number and as a shape. The quantity alone
-            never said whether a row was finished or had not started.
-          #}
+
           <td class="num cell-meter">
             {{ "{:,}".format(position.sold_quantity) }} / {{ "{:,}".format(position.quantity) }}
             <div class="meter good">
@@ -379,11 +354,7 @@
 
 {% if not setup_pending %}{{ connections() }}{% endif %}
 
-{#
-  No <form> around any of this on purpose: every control here is driven by its own click
-  handler, and a form would only add a default submit for Enter and for each button to fight
-  with. Escape still closes the dialog — that is the element's own behaviour, not a form's.
-#}
+
 <dialog class="modal" id="position-modal">
   <div>
     <div class="modal-head">

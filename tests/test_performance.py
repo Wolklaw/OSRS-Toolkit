@@ -1,10 +1,3 @@
-"""The Performance page grades plans against outcomes, so its arithmetic has to be exact.
-
-The pure aggregations are tested directly against hand-built positions. The last group
-drives the real ``MainWindow`` instead, because the one thing a user will notice instantly
-is the Performance page and the Trade Journal disagreeing about the same trades.
-"""
-
 from __future__ import annotations
 
 from dataclasses import replace
@@ -38,7 +31,6 @@ def _position(
     created_at: datetime = NOW - timedelta(hours=3),
     completed_at: datetime | None = NOW,
 ) -> TrackedTrade:
-    """A tracked position with the weighted-average buy price the repository would store."""
     bought = sum(fill_quantity for fill_quantity, _price in buys)
     actual_buy = round(sum(q * p for q, p in buys) / bought) if bought else None
     return TrackedTrade(
@@ -65,16 +57,11 @@ def _results(*positions: TrackedTrade, period: str = "All time"):
     return realized_results(list(positions), [], period, NOW)
 
 
-# --- what counts as a result -------------------------------------------------------
-
-
 def test_a_position_with_no_sale_fills_is_not_a_result() -> None:
-    """Bought and waiting is not an outcome; only recorded proceeds are."""
     assert _results(_position(sales=(), status="Bought", completed_at=None)) == []
 
 
 def test_a_partial_sale_counts_only_the_part_that_sold() -> None:
-    """Sell 4 of 10 at 1,200 bought at 1,000: 4 x (1200 - 1000 - 24 tax) = 704 gp on 4,000."""
     (result,) = _results(_position(sales=((4, 1_200),), status="Partially sold", completed_at=None))
 
     assert result.profit == 704
@@ -82,7 +69,6 @@ def test_a_partial_sale_counts_only_the_part_that_sold() -> None:
 
 
 def test_the_period_filter_scopes_finished_history_only() -> None:
-    """Same rule as the Journal: a position still in progress never drops out of view."""
     old = _position(1, completed_at=NOW - timedelta(days=90))
     live = _position(2, sales=((5, 1_200),), status="Partially sold", completed_at=None)
 
@@ -91,10 +77,6 @@ def test_the_period_filter_scopes_finished_history_only() -> None:
 
 
 def test_manual_trades_count_under_their_own_strategy() -> None:
-    """They have no plan to grade, but excluding them would contradict the Journal.
-
-    Buy 10 @ 300, sell @ 400 with 8 gp tax each: 10 x 92 = 920 gp on 3,000 invested.
-    """
     record = TradeRecord(
         trade_id=1,
         recorded_at=(NOW - timedelta(hours=1)).isoformat(timespec="seconds"),
@@ -111,16 +93,7 @@ def test_manual_trades_count_under_their_own_strategy() -> None:
     assert calibration([], "All time", NOW) == [], "there is no plan to grade"
 
 
-# --- aggregation -------------------------------------------------------------------
-
-
 def test_return_on_capital_is_weighted_not_averaged() -> None:
-    """A tiny high-ROI flip must not drag the headline number up.
-
-    Small: buy 1 @ 100, sell 1 @ 200 -> 96 gp on 100 (96%).
-    Large: buy 1,000 @ 1,000, sell @ 1,010 -> 1,000 x (10 - 20 tax) = -10,000 gp on 1,000,000.
-    Weighted return is (96 - 10,000) / 1,000,100, nowhere near the 48% naive mean.
-    """
     small = _position(1, quantity=1, target_buy=100, buys=((1, 100),), sales=((1, 200),))
     large = _position(
         2, quantity=1_000, target_buy=1_000, buys=((1_000, 1_000),), sales=((1_000, 1_010),)
@@ -136,7 +109,6 @@ def test_return_on_capital_is_weighted_not_averaged() -> None:
 
 
 def test_median_hold_ignores_positions_with_no_known_duration() -> None:
-    """Backfilled history has completed_at == created_at; that is unknown, not instant."""
     real = _position(1, created_at=NOW - timedelta(hours=5), completed_at=NOW)
     backfilled = _position(2, created_at=NOW, completed_at=NOW)
 
@@ -165,11 +137,7 @@ def test_items_traded_once_are_hidden_until_asked_for() -> None:
     assert len(by_item(_results(*repeated, one_off), minimum_positions=1)) == 2
 
 
-# --- plan vs. actual ---------------------------------------------------------------
-
-
 def test_buy_drift_is_favourable_when_the_fill_beat_the_target() -> None:
-    """Planned 1,000, paid 950: 5% under, and under is good on the buy side."""
     position = _position(buys=((10, 950),), sales=())
 
     (buy_row,) = calibration([position], "All time", NOW)
@@ -191,23 +159,16 @@ def test_sell_drift_is_unfavourable_when_the_fill_missed_the_target() -> None:
 
 
 def test_price_drift_is_weighted_by_quantity() -> None:
-    """One 1,000-unit position must outweigh a single-unit one, not tie with it."""
     big = _position(1, quantity=1_000, buys=((1_000, 1_100),), sales=())
     small = _position(2, quantity=1, buys=((1, 500),), sales=())
 
     (buy_row,) = calibration([big, small], "All time", NOW)
 
     assert buy_row.positions == 2
-    # (1,000 x 1,100 + 1 x 500) / 1,001 = 1,099.4, not the 800 an unweighted mean gives.
     assert buy_row.actual == 1_099
 
 
 def test_planned_profit_is_compared_over_the_quantity_that_actually_sold() -> None:
-    """Half sold: the plan's promise is halved too, so both sides cover the same goods.
-
-    Plan is 1,000 -> 1,200 (24 gp tax), so 176 gp per unit; 5 sold promises 880 gp.
-    Reality sold 5 @ 1,150 (23 gp tax) for 5 x 127 = 635 gp.
-    """
     position = _position(sales=((5, 1_150),), status="Partially sold", completed_at=None)
 
     rows = {row.label: row for row in calibration([position], "All time", NOW)}
@@ -219,11 +180,6 @@ def test_planned_profit_is_compared_over_the_quantity_that_actually_sold() -> No
 
 
 def test_a_bought_position_with_no_fill_rows_still_grades_its_buy() -> None:
-    """History predating per-fill prices only gains fill rows at the next start-up.
-
-    Until then it has an ``actual_buy`` and no ``buy_fills``, and dropping it would leave
-    the buy row covering fewer positions than the sell row beside it for no visible reason.
-    """
     position = replace(_position(buys=(), sales=((10, 1_200),)), actual_buy=980)
 
     rows = {row.label: row for row in calibration([position], "All time", NOW)}
@@ -233,12 +189,8 @@ def test_a_bought_position_with_no_fill_rows_still_grades_its_buy() -> None:
 
 
 def test_a_position_with_no_fills_is_not_graded() -> None:
-    """A Pending buy has a plan but no reality to compare it against."""
     pending = _position(buys=(), sales=(), status="Pending buy", completed_at=None)
     assert calibration([pending], "All time", NOW) == []
-
-
-# --- the page itself ---------------------------------------------------------------
 
 
 def _card(label) -> str:
@@ -246,7 +198,6 @@ def _card(label) -> str:
 
 
 def test_performance_and_journal_report_the_same_realized_profit(window: MainWindow) -> None:
-    """The two pages read the same database; disagreeing cards would read as a bug."""
     tracked = window._journal.track(1234, "Dragon bones", 100, 2_000, 2_500)
     window._journal.update_tracked(
         tracked, "Partially sold", None, None, [(50, 2_500)], [(100, 2_000)]
@@ -265,8 +216,6 @@ def test_manual_entries_appear_as_their_own_strategy_row(window: MainWindow) -> 
     table = window.performance_strategy_table
     labels = [table.item(row, 0).text() for row in range(table.rowCount())]
     assert labels == [MANUAL_STRATEGY]
-    # isHidden, not isVisible: the window itself is never shown offscreen, so isVisible is
-    # False for every widget and would assert nothing.
     assert window.performance_strategy_empty.isHidden(), "the empty state should give way"
 
 
@@ -282,7 +231,6 @@ def test_an_empty_journal_shows_empty_states_and_no_rows(window: MainWindow) -> 
 
 
 def test_the_item_checkbox_reveals_one_off_trades(window: MainWindow) -> None:
-    """Off by default so the table ranks items actually traded more than once."""
     for _ in range(2):
         window._journal.add("Yew logs", 10, 300, 400)
     window._journal.add("Rune platebody", 1, 38_000, 39_600)
@@ -300,7 +248,6 @@ def test_the_item_checkbox_reveals_one_off_trades(window: MainWindow) -> None:
 
 
 def test_the_page_refreshes_when_a_trade_is_recorded(window: MainWindow) -> None:
-    """_render_journal is the single hook; a mutation must reach this page through it."""
     position_id = window._journal.track(1234, "Dragon bones", 10, 2_000, 2_500)
     window._render_journal()
     assert window.performance_strategy_table.rowCount() == 0, "a plan alone is not a result"

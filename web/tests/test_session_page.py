@@ -24,8 +24,6 @@ def _loot_event(event_id: str = "loot-1", occurred_at: str | None = None) -> Npc
 
 
 def _with_active_character(client: TestClient) -> TestClient:
-    """The switcher only fixes the fixture's account to one character over a real pairing
-    token; tests fake the same choice directly via the cookie it ends up writing."""
     client.cookies.set("active_character", ACCOUNT_HASH)
     return client
 

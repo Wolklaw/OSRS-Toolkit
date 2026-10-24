@@ -1,10 +1,3 @@
-"""Backups of the journals, which stopped being only Wolklaw's data on 2026-08-25.
-
-The one that matters is ``test_a_snapshot_includes_rows_still_in_the_wal``: these databases are
-WAL-mode and live, so a plain file copy silently drops whatever has not been checkpointed yet
-and still restores without complaint.
-"""
-
 from __future__ import annotations
 
 import sqlite3
@@ -28,11 +21,8 @@ def _names(archive: Path) -> set[str]:
 
 
 def test_a_snapshot_includes_rows_still_in_the_wal(tmp_path: Path):
-    """A live WAL database keeps its newest rows in a sidecar until a checkpoint. Copying the
-    .db file alone loses them, which is the failure this whole module exists to avoid."""
     source = tmp_path / "live.db"
     _make_db(source)
-    # Held open and uncheckpointed, exactly as the running service leaves it.
     connection = sqlite3.connect(source)
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("INSERT INTO thing (label) VALUES ('only-in-wal')")
@@ -74,7 +64,6 @@ def test_it_includes_the_sync_database_when_there_is_one(tmp_path: Path):
 
 
 def test_a_missing_sync_database_is_skipped_rather_than_fatal(tmp_path: Path):
-    """Journals are worth keeping whether or not an unrelated service is installed."""
     data_dir = tmp_path / "data"
     _make_db(data_dir / "accounts.db")
 
@@ -85,7 +74,6 @@ def test_a_missing_sync_database_is_skipped_rather_than_fatal(tmp_path: Path):
 
 
 def test_it_leaves_the_market_cache_out(tmp_path: Path):
-    """Regenerable from the wiki within a minute, and the largest thing in the directory."""
     data_dir = tmp_path / "data"
     _make_db(data_dir / "accounts.db")
     (data_dir / "market-cache").mkdir()
@@ -97,7 +85,6 @@ def test_it_leaves_the_market_cache_out(tmp_path: Path):
 
 
 def test_nothing_to_back_up_writes_no_archive(tmp_path: Path):
-    """An empty archive would still count towards `keep` and push a real one out."""
     backup_dir = tmp_path / "backups"
 
     assert run(tmp_path / "empty", backup_dir, None, keep=14) is None
@@ -120,7 +107,6 @@ def test_it_keeps_only_the_newest_archives(tmp_path: Path):
 
 
 def test_pruning_leaves_anything_that_is_not_one_of_ours_alone(tmp_path: Path):
-    """That directory is a person's own folder, not this script's exclusive property."""
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
     (backup_dir / "runescope-20260801-000000.tar.gz").write_text("x")
@@ -133,7 +119,6 @@ def test_pruning_leaves_anything_that_is_not_one_of_ours_alone(tmp_path: Path):
 
 
 def test_a_restored_journal_still_reads(tmp_path: Path):
-    """The point of all of it: what comes back out has to open."""
     data_dir = tmp_path / "data"
     _make_db(data_dir / "journals" / "111" / "toolkit.db", rows=5)
 

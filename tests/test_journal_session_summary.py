@@ -1,7 +1,3 @@
-"""``session_summary`` infers a session from the gaps between companion events -- loot,
-deaths, and player trades -- rather than being told where one starts or ends.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -106,9 +102,7 @@ def test_a_single_event_is_its_own_session(tmp_path: Path) -> None:
 
 def test_a_gap_past_the_threshold_splits_two_sessions(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
-    # An old session, well outside the 20-minute gap from what follows.
     repository.add_npc_loot_event(_loot("old", "2026-08-25T10:00:00Z", "Zulrah", 500_000))
-    # The real session: three kills each 10 minutes apart.
     repository.add_npc_loot_event(_loot("k1", "2026-08-25T18:00:00Z", "Vorkath", 200_000))
     repository.add_npc_loot_event(_loot("k2", "2026-08-25T18:10:00Z", "Vorkath", 250_000))
     repository.add_npc_loot_event(_loot("k3", "2026-08-25T18:20:00Z", "Vorkath", 300_000))
@@ -159,8 +153,6 @@ def test_xp_gained_diffs_the_snapshot_before_the_session_against_the_one_after(
 
 
 def test_pre_xp_history_falls_back_to_diffing_levels(tmp_path: Path) -> None:
-    """Both snapshots predate the plugin sending experience -- xp is empty on both, so the
-    diff is empty too, but levels still tell a story."""
     repository = _repository(tmp_path)
     repository.save_loadout_snapshot(_snapshot("2026-08-25T17:00:00Z", {"Attack": 75}, {}))
     repository.add_npc_loot_event(_loot("k1", "2026-08-25T18:00:00Z", "Vorkath", 200_000))
@@ -213,9 +205,6 @@ def test_no_snapshot_history_at_all_leaves_the_progress_fields_empty(tmp_path: P
 def test_a_pure_skilling_session_with_no_loot_death_or_trade_is_still_a_session(
     tmp_path: Path,
 ) -> None:
-    """The bug this guards: woodcutting (or any pure skilling) produces none of loot, deaths
-    or player trades -- only bank-visit snapshots -- and used to be entirely invisible to
-    session detection, no matter how recently it happened."""
     repository = _repository(tmp_path)
     repository.save_loadout_snapshot(
         _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
@@ -235,8 +224,6 @@ def test_a_pure_skilling_session_with_no_loot_death_or_trade_is_still_a_session(
 
 
 def test_a_skilling_session_is_not_shadowed_by_an_old_combat_session(tmp_path: Path) -> None:
-    """Exactly the reported scenario: a kill from a week ago must not make today's tree run
-    invisible just because loot happened to be the only thing session detection looked at."""
     repository = _repository(tmp_path)
     repository.add_npc_loot_event(_loot("old", "2026-08-25T10:00:00Z", "Zulrah", 500_000))
     repository.save_loadout_snapshot(
@@ -260,8 +247,6 @@ def test_a_skilling_session_is_not_shadowed_by_an_old_combat_session(tmp_path: P
 
 
 def test_two_identical_snapshots_in_a_row_are_not_a_touchpoint(tmp_path: Path) -> None:
-    """A snapshot that matches the one before it is evidence nothing happened, not evidence
-    of activity -- it must not, on its own, create or extend a session."""
     repository = _repository(tmp_path)
     repository.save_loadout_snapshot(
         _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 831_979})
@@ -274,8 +259,6 @@ def test_two_identical_snapshots_in_a_row_are_not_a_touchpoint(tmp_path: Path) -
 
 
 def test_a_wide_skilling_gap_still_reads_as_two_separate_sessions(tmp_path: Path) -> None:
-    """Widening the threshold for skilling must not stretch so far that a session from days
-    ago reads as still going, once the newest touchpoint has actually moved on from it."""
     repository = _repository(tmp_path)
     repository.save_loadout_snapshot(
         _snapshot("2026-08-25T18:00:00Z", {"Woodcutting": 71}, {"Woodcutting": 800_000})

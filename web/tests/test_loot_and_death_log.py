@@ -35,9 +35,6 @@ def _death_event(event_id: str = "death-1", skulled: bool = True) -> PlayerDeath
     )
 
 
-# -- Loot Log --------------------------------------------------------------------------------
-
-
 def test_the_loot_log_page_shows_a_loot_event(signed_in: TestClient, settings: Settings):
     repository = JournalRepository(settings.journal_path("111"))
     repository.add_npc_loot_event(_loot_event())
@@ -61,7 +58,6 @@ def test_the_loot_log_page_shows_a_per_npc_rollup(signed_in: TestClient, setting
 
     assert response.status_code == 200
     assert "By NPC" in response.text
-    # Two deliveries of 100,000 each over one hour -> 200,000 observed gp/hr.
     assert "200,000" in response.text
 
 
@@ -87,9 +83,6 @@ def test_an_imported_loot_event_can_be_deleted(signed_in: TestClient, settings: 
 
 def test_deleting_a_loot_event_needs_a_session(client: TestClient):
     assert client.delete("/api/loot-log/loot-1").status_code == 401
-
-
-# -- Death Log -------------------------------------------------------------------------------
 
 
 def test_the_death_log_page_shows_a_death_event(signed_in: TestClient, settings: Settings):

@@ -1,10 +1,5 @@
 <!doctype html>
-{#
-  The shell every page renders inside: sidebar navigation when signed in, a plain centred
-  column when not. A page sets `page_title` / `page_sub` with {% set %} rather than passing
-  them through its route, so the heading and the browser tab title can never disagree, and a
-  page with nothing to head (the landing page) simply sets neither.
-#}
+
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -20,33 +15,21 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="RuneScope">
   <script>
-    // Applied before the first paint so a light-theme visitor never sees a dark flash on
-    // every navigation. No stored value means "follow the system", which is the default.
+
+
     (function () {
       try {
         var saved = localStorage.getItem('runescope-theme');
         if (saved === 'light' || saved === 'dark') {
           document.documentElement.setAttribute('data-theme', saved);
         }
-      } catch (error) { /* storage denied — the default theme still works */ }
+      } catch (error) {  }
     })();
   </script>
   <style>
-    /* ==================================================================================
-       RuneScope design system.
 
-       One stylesheet, inlined: the whole app is server-rendered HTML and this arrives with
-       it, so there is no second request, no flash of unstyled text, and the PWA keeps
-       working with no network at all. No web font for the same reason — the type below is
-       a system stack used deliberately rather than a download that fails offline.
-
-       Colour is defined once as tokens and redefined for light mode. Templates and
-       charting code reference a handful of these by name (`--accent`, `--good`, `--info`,
-       `--border-strong`), so those names are load-bearing: change a value freely, rename
-       one only by following it through the templates.
-       ================================================================================== */
     :root {
-      /* -- surfaces: a warm near-black, stepping up as things come forward -- */
+
       --bg: #0d0f13;
       --bg-sunken: #090a0d;
       --bg-elev: #14171d;
@@ -60,21 +43,20 @@
       --text-dim: #aab3c1;
       --muted: #79828f;
 
-      /* -- brand gold -- */
+
       --accent: #e0b64f;
       --accent-hot: #f3ce76;
       --accent-ink: #15120a;
       --accent-soft: rgba(224, 182, 79, 0.14);
       --accent-line: rgba(224, 182, 79, 0.32);
 
-      /* -- market sides. A flip is a bid and an ask; colouring them apart means the
-            direction of a number is readable before the label is. -- */
+
       --buy: #63c7d8;
       --buy-soft: rgba(99, 199, 216, 0.14);
       --sell: #f0a362;
       --sell-soft: rgba(240, 163, 98, 0.14);
 
-      /* -- outcome -- */
+
       --good: #5fd39a;
       --good-soft: rgba(95, 211, 154, 0.14);
       --bad: #ef6f64;
@@ -84,9 +66,7 @@
       --warn: #e8c26a;
       --warn-soft: rgba(232, 194, 106, 0.14);
 
-      /* A hairline of light along the top of a raised surface. Dark panels on a dark page
-         need it to read as something sitting above the background rather than a hole in it;
-         on paper it would be grime, so light mode sets it to nothing. */
+
       --sheen: inset 0 1px 0 rgba(255, 255, 255, 0.045);
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
       --shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 26px rgba(0, 0, 0, 0.3);
@@ -108,8 +88,7 @@
       color-scheme: dark;
     }
 
-    /* Light mode is warm paper rather than white: the same palette lit from the other side,
-       so a screenshot of either reads as the same product. */
+
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]) { --light: 1; }
     }
@@ -197,9 +176,7 @@
       font-family: var(--font-ui);
       font-size: 15px;
       line-height: 1.55;
-      /* Every figure in this app sits above or below another figure in a column. Lining
-         figures by default means they actually line up, everywhere, without each table
-         having to remember to ask. */
+
       font-variant-numeric: tabular-nums;
       -webkit-font-smoothing: antialiased;
     }
@@ -217,7 +194,7 @@
     }
     .skip-link:focus { left: 0; }
 
-    /* -- shell ------------------------------------------------------------------------ */
+
     .shell { display: flex; min-height: 100vh; }
     .sidebar {
       width: var(--sidebar-width);
@@ -247,9 +224,7 @@
       color: var(--accent-ink); font-size: 0.8rem; font-weight: 800; letter-spacing: -0.03em;
       box-shadow: var(--shadow-sm);
     }
-    /* One flex item, not two. Left bare, "Rune" and <em>Scope</em> are separate flex items
-       and the 0.6rem gap meant for the icon opens up between them, so the wordmark reads
-       "Rune Scope". */
+
     .brand .wordmark { white-space: nowrap; }
     .brand em { font-style: normal; color: var(--accent); }
 
@@ -260,8 +235,7 @@
       color: var(--muted); font-weight: 700;
       padding: 0.4rem 0.65rem 0.25rem;
     }
-    /* The active item carries a gold rail rather than only a tint: at a glance down a list
-       of twenty links, an edge is findable and a background wash is not. */
+
     .nav a {
       position: relative;
       display: flex; align-items: center; gap: 0.62rem;
@@ -370,7 +344,7 @@
     .site-footer .links { margin-bottom: 0.35rem; }
     .site-footer .links a { margin: 0 0.5rem; }
 
-    /* -- page furniture --------------------------------------------------------------- */
+
     .page-head {
       display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
       margin-bottom: 1.35rem;
@@ -401,8 +375,7 @@
     }
     .panel-head > .grow { flex: 1; min-width: 10rem; }
     .panel-head h2 { margin: 0; }
-    /* A panel whose body is one full-bleed table: the heading keeps its padding, the table
-       runs edge to edge so its rules meet the panel's own border. */
+
     .panel.flush { padding: 1.15rem 0 0; overflow: hidden; }
     .panel.flush > .panel-head, .panel.flush > .hint, .panel.flush > .empty,
     .panel.flush > h2, .panel.flush > .panel-note { padding-left: 1.25rem; padding-right: 1.25rem; }
@@ -410,7 +383,7 @@
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1.1rem; }
     .grid-2 > .panel { margin-bottom: 0; }
 
-    /* -- stat tiles -------------------------------------------------------------------- */
+
     .stats {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
       gap: 0.75rem; margin-bottom: 1.1rem;
@@ -425,9 +398,7 @@
       color: var(--muted); font-size: 0.68rem; font-weight: 700;
       text-transform: uppercase; letter-spacing: 0.09em;
     }
-    /* The number and its unit are one line, always. Left to wrap, "89,592,000 gp" breaks
-       after the digits and drops a lonely "gp" onto a second line, which is what this tile
-       used to do at every width narrow enough to matter. */
+
     .stat .value {
       display: flex; align-items: baseline; gap: 0.22em;
       font-size: clamp(1.18rem, 2.3vw, 1.45rem); font-weight: 700;
@@ -441,7 +412,7 @@
     .stat .foot { color: var(--muted); font-size: 0.755rem; margin-top: 0.15rem; line-height: 1.4; }
     .stat .meter { margin-top: 0.6rem; }
 
-    /* The money that answers "how am I doing" gets its own weight class. */
+
     .stat.hero { padding: 1rem 1.15rem 1.05rem; background: var(--bg-elev); }
     .stat.hero .value { font-size: clamp(1.45rem, 3.1vw, 1.95rem); }
     .stat.hero::after {
@@ -455,9 +426,7 @@
     .value.negative, .negative { color: var(--bad); }
     .value.flat { color: var(--text-dim); }
 
-    /* -- meter: one number's size, drawn --------------------------------------------- */
-    /* Set `--fill` as a percentage. A column of these turns a table of digits into a shape
-       you can read down without comparing numbers one pair at a time. */
+
     .meter {
       display: block; height: 4px; width: 100%;
       background: var(--panel-3); border-radius: var(--radius-pill); overflow: hidden;
@@ -473,11 +442,11 @@
     .meter.sell > span { background: var(--sell); }
     .meter.thick { height: 7px; }
 
-    /* A numeric cell with its magnitude underneath. */
+
     .cell-meter { min-width: 5.5rem; }
     .cell-meter .meter { margin-top: 0.3rem; }
 
-    /* -- tables ----------------------------------------------------------------------- */
+
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.865rem; }
     th, td {
@@ -508,15 +477,14 @@
     .link-danger { color: var(--muted); font-size: 0.81rem; }
     .link-danger:hover { color: var(--bad); }
     .table-note { color: var(--muted); font-size: 0.765rem; font-weight: 500; }
-    /* Compact density for the long reference tables (skilling, alch) where the point is to
-       get as many rows in front of you as will fit. */
+
     .table-dense { --row-pad-y: 0.34rem; }
 
     .empty { color: var(--muted); padding: 2rem 0.25rem; text-align: center; font-size: 0.87rem; }
     .empty strong { display: block; color: var(--text-dim); font-size: 0.97rem; margin-bottom: 0.3rem; }
     .empty a { font-weight: 600; }
 
-    /* -- controls --------------------------------------------------------------------- */
+
     .button {
       display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
       background: var(--accent); color: var(--accent-ink);
@@ -554,10 +522,7 @@
       font-size: 0.69rem; font-weight: 700; color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.08em;
     }
-    /* A parenthetical inside a field label is an aside, not a second heading: left as a
-       plain .hint it rendered larger than the label it qualifies.
-       (Careful with wording here — this stylesheet is inlined, so every word of it ships
-       inside the page and a test asserting some phrase is absent will read it.) */
+
     .field > label .hint {
       font-size: inherit; font-weight: 500; text-transform: none;
       letter-spacing: 0.02em; margin: 0;
@@ -567,7 +532,7 @@
     .filter-input { max-width: 230px; }
     select.character-switcher { max-width: 185px; font-size: 0.81rem; padding: 0.31rem 0.5rem; }
 
-    /* -- segmented control: a handful of exclusive options, all visible at once -------- */
+
     .seg { display: inline-flex; background: var(--panel-3); border-radius: var(--radius-sm); padding: 3px; gap: 2px; }
     .seg label { position: relative; display: block; }
     .seg input { position: absolute; opacity: 0; pointer-events: none; }
@@ -623,9 +588,7 @@
     .callout strong { color: var(--text); }
     .callout p { margin: 0.4rem 0 0; }
 
-    /* -- Grand Exchange slots ---------------------------------------------------------- */
-    /* The game gives you eight slots and a plan is a way to spend them, so the plan is drawn
-       as slots rather than as a table of rows that happens to be eight long. */
+
     .slot-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
       gap: 0.75rem;
@@ -649,8 +612,7 @@
     }
     .slot-name a { color: var(--text); }
     .slot-name a:hover { color: var(--accent); }
-    /* buy price → sell price, with the arrow carrying the direction so neither number needs
-       a word in front of it. */
+
     .slot-prices {
       display: flex; align-items: center; gap: 0.45rem;
       font-size: 0.895rem; font-weight: 600;
@@ -676,9 +638,7 @@
       color: var(--muted); font-size: 0.82rem; text-align: center;
     }
 
-    /* -- composition bar --------------------------------------------------------------- */
-    /* One stacked bar plus a legend that carries each share's own number, so the bar does
-       not have to be measured by eye against a key somewhere else. */
+
     .composition-bar {
       display: flex; height: 1.7rem; border-radius: var(--radius-sm); overflow: hidden;
       margin-top: 0.85rem; border: 1px solid var(--border);
@@ -693,8 +653,7 @@
     .legend-item .swatch { width: 0.7rem; height: 0.7rem; border-radius: 3px; flex: none; }
     .legend-item strong { color: var(--text-dim); font-weight: 650; }
 
-    /* One row per connection: badge, what it means, what to do about it. Wraps rather
-       than truncates, because the middle column is the part worth reading. */
+
     .conn-row {
       display: flex; align-items: flex-start; gap: 0.75rem; flex-wrap: wrap;
       padding: 0.8rem 0; border-top: 1px solid var(--border);
@@ -716,8 +675,7 @@
       border-radius: var(--radius-sm); padding: 0.65rem 0.9rem; margin-top: 0.7rem;
     }
     .code-box code { font-size: 0.88rem; word-break: break-all; }
-    /* A command is copied and pasted, not read a character at a time -- breaking one mid-token
-       to make it fit reads as a typo. These scroll inside the box instead. */
+
     .code-box.cmd code { word-break: normal; white-space: pre; overflow-x: auto; }
 
     .progress {
@@ -730,7 +688,11 @@
     .kv dt { color: var(--muted); }
     .kv dd { margin: 0; }
 
-    /* -- long-form copy ----------------------------------------------------------------- */
+
+    .error-code {
+      font-size: 2.6rem; font-weight: 700; letter-spacing: -0.04em;
+      color: var(--text-dim); margin: 0 0 0.4rem; line-height: 1;
+    }
     .session-bar .panel-head { margin-bottom: 0; }
     .session-bar.is-live { border-color: var(--good); }
     .prose { max-width: 72ch; color: var(--text-dim); }
@@ -738,9 +700,7 @@
     .prose h3 { color: var(--text); font-size: 0.95rem; margin: 1.2rem 0 0.3rem; }
     .prose > :first-child { margin-top: 0; }
     .prose p, .prose li { font-size: 0.9rem; }
-    /* A file path or a flag written inline is one long unbreakable token; without this it
-       runs off the side of the panel on a phone instead of wrapping. The command boxes are
-       unaffected -- they set `white-space: pre` and scroll on purpose. */
+
     .prose code { overflow-wrap: anywhere; }
     .prose ul, .prose ol { padding-left: 1.2rem; }
     .prose li { margin-bottom: 0.3rem; }
@@ -760,10 +720,7 @@
     details.faq[open] > summary::before { content: "\2212 "; }
     details.faq > p { margin: 0.5rem 0 0.2rem; color: var(--text-dim); font-size: 0.88rem; max-width: 70ch; }
 
-    /* -- landing ------------------------------------------------------------------------ */
-    /* A single warm glow behind the wordmark. It is the only decorative flourish in the
-       whole stylesheet, and it is here because this is the one page whose job is to make an
-       impression rather than to report a number. */
+
     .hero { text-align: center; padding: 3.2rem 0 1.5rem; position: relative; }
     .hero::before {
       content: ""; position: absolute; left: 50%; top: 0;
@@ -791,7 +748,7 @@
     .divider-text { display: flex; align-items: center; gap: 0.9rem; color: var(--muted); font-size: 0.79rem; margin: 2rem 0 1.2rem; }
     .divider-text::before, .divider-text::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
-    /* -- modal --------------------------------------------------------------------------- */
+
     dialog.modal {
       border: 1px solid var(--border-strong);
       border-radius: var(--radius);
@@ -826,7 +783,7 @@
       margin: 1rem 0 0.2rem;
     }
 
-    /* -- toast --------------------------------------------------------------------------- */
+
     #toasts { position: fixed; bottom: 1.2rem; right: 1.2rem; z-index: 60; display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end; }
     #toasts .toast {
       background: var(--panel); border: 1px solid var(--border-strong); border-left: 3px solid var(--accent);
@@ -838,7 +795,7 @@
 
     .scrim { display: none; }
 
-    /* -- responsive ----------------------------------------------------------------------- */
+
     @media (max-width: 900px) {
       .sidebar {
         position: fixed; z-index: 40; top: 0; left: 0;
@@ -854,15 +811,13 @@
       .market-pill .text { display: none; }
     }
     @media (max-width: 560px) {
-      /* The signed-out header runs brand + two links + theme + Sign in, which is one item too
-         many for a phone. Help is in the footer of every page, so it is the one that goes. */
+
       .hide-sm { display: none; }
       .stats { grid-template-columns: repeat(auto-fit, minmax(144px, 1fr)); }
       .slot-grid { grid-template-columns: 1fr; }
       select.character-switcher { max-width: 118px; }
       .page-actions { margin-left: 0; }
-      /* A sticky header inside a horizontally scrolling table is more trouble than it is
-         worth on a phone, where the table scrolls sideways under your thumb. */
+
       thead th { position: static; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -1034,11 +989,7 @@
     document.body.classList.toggle('nav-open', open);
   }
 
-  // The plugin badge is rendered server-side, so without this it is a snapshot of whenever
-  // the page loaded: someone watching it while the plugin reconnects sees "idle" for as long
-  // as they leave the tab open, next to a desktop app that noticed within seconds. Each page
-  // carries its own wording on the element, since "idle" reads differently on a dashboard
-  // than on the profile page that explains what to do about it.
+
   (function () {
     const badge = document.querySelector('[data-plugin-badge]');
     if (!badge) { return; }
@@ -1049,19 +1000,17 @@
         if (!response.ok) { return; }
         const state = (await response.json()).state;
         const label = badge.getAttribute('data-label-' + state);
-        // No label for this state means the page does not draw it -- "none" has its own
-        // panel rather than a badge -- so leave what is there rather than blanking it.
+
+
         if (!label) { return; }
         badge.textContent = label;
         badge.className = CLASSES[state] || 'badge';
-      } catch (e) { /* offline or navigating away; the next tick tries again */ }
+      } catch (e) {  }
     }
     setInterval(refresh, 20000);
   })();
 
-  // Three states, in the order someone actually wants to click through them: whatever the
-  // operating system says, then the two explicit overrides. Stored rather than inferred so a
-  // choice survives the next page load — the <head> script is what reads it back.
+
   function cycleTheme() {
     const order = ['system', 'dark', 'light'];
     let current;
@@ -1070,7 +1019,7 @@
     try {
       if (next === 'system') { localStorage.removeItem('runescope-theme'); }
       else { localStorage.setItem('runescope-theme', next); }
-    } catch (e) { /* storage denied — the switch still applies to this page */ }
+    } catch (e) {  }
     if (next === 'system') { document.documentElement.removeAttribute('data-theme'); }
     else { document.documentElement.setAttribute('data-theme', next); }
     toast(next === 'system' ? 'Theme follows your system setting.' : 'Theme set to ' + next + '.');
@@ -1085,8 +1034,7 @@
     setTimeout(() => node.remove(), 4000);
   }
 
-  /** One place that knows how this app's JSON endpoints report a failure, so no caller has to
-   *  re-derive "read .detail, fall back to something readable" for the fifth time. */
+
   async function api(method, url, body) {
     try {
       const response = await fetch(url, {
@@ -1112,9 +1060,7 @@
     node.className = 'status-msg' + (kind ? ' ' + kind : '');
   }
 
-  /** Filters a table's rows by substring, in the browser. Every table here is already capped
-   *  at a size worth rendering in one go, so searching one is a text match over rows already
-   *  present — not a reason to round-trip to the server and re-render the whole page. */
+
   function filterTable(input, tableId) {
     const needle = input.value.trim().toLowerCase();
     const table = document.getElementById(tableId);
@@ -1129,17 +1075,13 @@
     if (note) { note.textContent = needle ? shown + ' shown' : ''; }
   }
 
-  // Not signed — it names nothing but an account_hash the caller's own pairing token can
-  // already read in full, so there is no session-forging concern in letting the browser set
-  // this one directly instead of round-tripping through a server endpoint just to write it.
+
   function switchCharacter(accountHash) {
     document.cookie = `active_character=${accountHash}; path=/; max-age=31536000; samesite=lax`;
     location.reload();
   }
 
-  // Swaps a copy button's own label for "Copied!" for a moment rather than relying on a
-  // separate status line, so the confirmation sits right where the click happened instead of
-  // needing your eyes to jump somewhere else to notice it changed at all.
+
   function flashCopied(button) {
     const original = button.textContent;
     button.textContent = 'Copied!';
@@ -1195,11 +1137,7 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
   }
 
-  // A browser that supports installing this as an app fires beforeinstallprompt once, and
-  // only if the manifest/worker checks already passed -- so its absence (Firefox, or Chrome
-  // before the criteria are met) is what "hidden" defaults to below, not a bug to work around.
-  // iOS Safari never fires it at all and has no programmatic install API, so it gets static
-  // instructions instead of a button that would silently do nothing when tapped.
+
   (function () {
     const DISMISS_KEY = 'installPromptDismissed';
     let deferredPrompt = null;
@@ -1244,7 +1182,7 @@
       render();
     };
     window.dismissInstallPrompt = function () {
-      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) { /* private browsing, etc. */ }
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {  }
       render();
     };
     document.addEventListener('DOMContentLoaded', render);

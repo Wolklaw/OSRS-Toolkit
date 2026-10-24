@@ -127,9 +127,13 @@ stderr in error records and falsely reports failure.
 ## Conventions this repo actually holds to
 
 - **Commits carry Wolklaw's name only.** No `Co-Authored-By` trailer, in any repository.
-- **Comments say why, not what**, and a comment that explains a decision is part of that
-  decision's code. If the behaviour changes, the comment changes in the same diff — stale
-  rationale has caused real bugs here.
+- **No comments and no docstrings.** The code carries no prose. Name things so the reason
+  is in the name, the type and the test, and put the rest where it cannot go stale: the
+  commit message, [`CHANGELOG.md`](CHANGELOG.md), or a file under `docs/`. Two exceptions,
+  because they instruct tooling rather than explain anything to a person — keep `# noqa`
+  and `# type:` exactly where they are. This replaced a why-not-what rule on 2026-10-24;
+  4,500 lines of comment and docstring came out of the Python and another 140 out of the
+  templates in that pass, so do not reintroduce them a few at a time.
 - **Backward-compatible SQLite migrations, always.** Real users' trading data is in these
   files. `_add_missing_columns` and the backfill `UPDATE`s in `journal.py` are the pattern:
   add columns, backfill, never drop.

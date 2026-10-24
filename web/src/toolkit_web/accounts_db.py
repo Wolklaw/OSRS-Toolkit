@@ -1,11 +1,3 @@
-"""Who has an account here, and what pairing token their journal reads through.
-
-Deliberately separate from any one user's journal database. A journal is per-Discord-account
-data that lives under its own file; this is the small shared table that says which journal
-belongs to which login and which sync pairing feeds it. Losing this file loses nobody's trades
-— it costs a re-login and re-pasting a token, not a rebuild of anyone's history.
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -126,9 +118,6 @@ class Character:
 
 @dataclass(frozen=True, slots=True)
 class DesktopToken:
-    """One issued desktop credential. Never carries the secret -- only its digest, which is
-    all that survives being written down, and is enough to name the row for revocation."""
-
     token_sha256: str
     label: str
     created_at: str
@@ -137,9 +126,6 @@ class DesktopToken:
 
 @dataclass(frozen=True, slots=True)
 class WatchlistAlert:
-    """One watched item's price alert configuration. ``target_price``/``direction`` are
-    both ``None`` for a plain watch with no alert armed on it."""
-
     item_id: int
     target_price: int | None
     direction: str | None
@@ -148,9 +134,6 @@ class WatchlistAlert:
 
 @dataclass(frozen=True, slots=True)
 class ArmedAlert:
-    """One account's alert, joined against the webhook it fires to. Only ever produced for
-    an alert that could actually fire — a target, a direction and a webhook all present."""
-
     discord_user_id: str
     discord_webhook_url: str
     item_id: int
@@ -159,9 +142,6 @@ class ArmedAlert:
     last_alerted_at: str | None
 
 
-#: Columns added after the table's first release. A fresh database gets them from SCHEMA
-#: above; a database that already exists needs each added by hand so its one real row — a
-#: login, a pairing token — is not lost the way dropping and recreating the table would lose it.
 _MIGRATION_COLUMNS = {
     "goal_label": "TEXT",
     "goal_target": "INTEGER",
@@ -169,7 +149,6 @@ _MIGRATION_COLUMNS = {
     "discord_webhook_url": "TEXT",
 }
 
-#: Same idea as ``_MIGRATION_COLUMNS``, for ``watchlist_item`` rather than ``account``.
 _WATCHLIST_MIGRATION_COLUMNS = {
     "target_price": "INTEGER",
     "direction": "TEXT",
@@ -196,14 +175,6 @@ class AccountsDB:
             self._rekey_trade_characters(connection)
 
     def _rekey_trade_characters(self, connection: sqlite3.Connection) -> None:
-        """Move trade attributions off local trade ids and onto the trade's own name.
-
-        The old rows cannot be translated from here: the mapping from trade_id to sync_uid
-        lives in that account's journal, a different database this class knows nothing about.
-        So rather than guess or drop them, any that exist are set aside under their own table
-        name where they can still be read. In practice there are none -- no trade was ever
-        recorded here before this changed -- and an empty table is simply replaced.
-        """
         columns = {
             str(row["name"]) for row in connection.execute("PRAGMA table_info(trade_character)")
         }
@@ -230,8 +201,6 @@ class AccountsDB:
         connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
-        # Off by default in SQLite regardless of the schema saying otherwise — needed for
-        # character's and trade_character's ON DELETE CASCADE to actually take effect.
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
@@ -249,12 +218,6 @@ class AccountsDB:
             connection.close()
 
     def upsert_login(self, discord_user_id: str, username: str, avatar: str | None) -> Account:
-        """Record a successful sign-in, creating the account on its first one.
-
-        The username and avatar are refreshed on every login — Discord display names change,
-        and there is no reason to keep showing someone a stale one when the truth arrives free
-        with every sign-in.
-        """
         with self._transaction() as connection:
             connection.execute(
                 "INSERT INTO account (discord_user_id, username, avatar, created_at, last_login_at)"
@@ -275,13 +238,6 @@ class AccountsDB:
         return _row_to_account(row) if row else None
 
     def set_display_name(self, discord_user_id: str, username: str) -> None:
-        """Rename an account from its own profile page.
-
-        Only offered to a recovery-code account, which has no identity provider to take a name
-        from — a Discord login's next sign-in overwrites this with whatever Discord says, which
-        is the right answer for a name Discord owns. Deciding who may rename is the caller's;
-        this just performs it.
-        """
         with self._transaction() as connection:
             connection.execute(
                 "UPDATE account SET username = ? WHERE discord_user_id = ?",
@@ -289,12 +245,6 @@ class AccountsDB:
             )
 
     def set_pairing_token(self, discord_user_id: str, token: str | None) -> None:
-        """Attach a sync pairing token to this login, or remove one with ``None``.
-
-        Not validated here — the caller is expected to have already asked the sync service
-        whether the token means anything, since that is the only place that can answer. This
-        just remembers what came back yes.
-        """
         with self._transaction() as connection:
             connection.execute(
                 "UPDATE account SET pairing_token = ? WHERE discord_user_id = ?",
@@ -302,12 +252,6 @@ class AccountsDB:
             )
 
     def set_discord_webhook(self, discord_user_id: str, url: str | None) -> None:
-        """Attach a Discord webhook URL for alert delivery, or remove one with ``None``.
-
-        Not validated here — the caller (``discord_webhook.is_discord_webhook_url``) is
-        expected to have already confirmed it is really a Discord webhook, for the same
-        reason a pairing token is confirmed before it reaches ``set_pairing_token``.
-        """
         with self._transaction() as connection:
             connection.execute(
                 "UPDATE account SET discord_webhook_url = ? WHERE discord_user_id = ?",
@@ -315,16 +259,6 @@ class AccountsDB:
             )
 
     def set_savings_goal(self, discord_user_id: str, label: str, target: int) -> None:
-        """Replace any goal already set. Progress toward it is graded from this moment
-        onward — see ``toolkit_web.app``, which reads ``goal_created_at`` as the start of the
-        window profit is scored against, matching how the desktop window's own goal works.
-
-        Stamped to whole-second precision deliberately, not ``_stamp()``'s microseconds: a
-        manual trade recorded a moment after the goal is set carries a journal timestamp
-        truncated to the second (``JournalRepository.add``), and comparing that against a
-        microsecond-precision boundary could read a trade added a fraction of a second later
-        as having happened before the goal existed.
-        """
         created_at = datetime.now(UTC).isoformat(timespec="seconds")
         with self._transaction() as connection:
             connection.execute(
@@ -341,12 +275,8 @@ class AccountsDB:
                 (discord_user_id,),
             )
 
-    # -- characters --------------------------------------------------------------------
 
     def add_character(self, discord_user_id: str, name: str) -> Character | None:
-        """A new named character for this account, or ``None`` if that name is already
-        taken by one of their others — the caller decides what to tell the user about it,
-        this just refuses to create a second row that would make "which one?" ambiguous."""
         try:
             with self._transaction() as connection:
                 cursor = connection.execute(
@@ -373,8 +303,6 @@ class AccountsDB:
         ]
 
     def delete_character(self, discord_user_id: str, character_id: int) -> None:
-        """The character disappears; trades that were attributed to it are not deleted, only
-        left unattributed — trade_character's own foreign key cascades that automatically."""
         with self._transaction() as connection:
             connection.execute(
                 "DELETE FROM character WHERE discord_user_id = ? AND character_id = ?",
@@ -400,8 +328,6 @@ class AccountsDB:
             )
 
     def get_trade_characters(self, discord_user_id: str) -> dict[str, int]:
-        """Every trade this account has attributed to a character, as sync_uid -> character_id
-        — read once per page render rather than once per row."""
         with self._transaction() as connection:
             rows = connection.execute(
                 "SELECT trade_sync_uid, character_id FROM trade_character"
@@ -410,12 +336,8 @@ class AccountsDB:
             ).fetchall()
         return {row["trade_sync_uid"]: row["character_id"] for row in rows}
 
-    # -- watchlist -----------------------------------------------------------------------
 
     def add_watchlist_item(self, discord_user_id: str, item_id: int) -> bool:
-        """Returns False rather than raising when the item is already watched — the caller
-        decides what, if anything, to tell the user about that, the same way ``add_character``
-        leaves that call to its caller."""
         with self._transaction() as connection:
             cursor = connection.execute(
                 "INSERT OR IGNORE INTO watchlist_item (discord_user_id, item_id, added_at)"
@@ -459,9 +381,6 @@ class AccountsDB:
     def set_watchlist_alert(
         self, discord_user_id: str, item_id: int, target_price: int, direction: str
     ) -> bool:
-        """Arm an alert on an already-watched item. False if the item is not watched — the
-        caller is expected to have called ``add_watchlist_item`` first, the same order the
-        watchlist page's own "watch this item" step already requires."""
         with self._transaction() as connection:
             cursor = connection.execute(
                 "UPDATE watchlist_item SET target_price = ?, direction = ?, last_alerted_at = NULL"
@@ -479,8 +398,6 @@ class AccountsDB:
             )
 
     def list_armed_alerts(self) -> list[ArmedAlert]:
-        """Every alert that could actually fire right now, across every account — what
-        ``/internal/check-alerts`` evaluates each time it is triggered."""
         with self._transaction() as connection:
             rows = connection.execute(
                 """
@@ -514,15 +431,8 @@ class AccountsDB:
                 (_stamp(), discord_user_id, item_id),
             )
 
-    # -- desktop tokens ------------------------------------------------------------------
 
     def create_desktop_token(self, discord_user_id: str, label: str) -> str:
-        """Mint a credential for the desktop window and return it once.
-
-        Once is the whole point: only the digest is stored, so this string cannot be shown
-        again afterwards. Losing it costs minting another, which is cheap -- far cheaper than
-        a table full of secrets that a stolen copy of this file would hand over intact.
-        """
         token = secrets.token_urlsafe(32)
         with self._transaction() as connection:
             connection.execute(
@@ -533,12 +443,6 @@ class AccountsDB:
         return token
 
     def account_id_for_desktop_token(self, token: str) -> str | None:
-        """Whose account this credential belongs to, or ``None`` if it is not one of ours.
-
-        ``last_used_at`` is refreshed at most once a minute rather than on every call. It
-        exists so somebody can recognise a stale credential on their profile page, and that
-        question is not answered any better by a database write on every single API request.
-        """
         digest = _digest(token)
         with self._transaction() as connection:
             row = connection.execute(
@@ -572,8 +476,6 @@ class AccountsDB:
         ]
 
     def revoke_desktop_token(self, discord_user_id: str, token_sha256: str) -> bool:
-        """Scoped to the account doing the revoking, so a digest read from somewhere else
-        cannot be used to sign out a stranger's desktop."""
         with self._transaction() as connection:
             cursor = connection.execute(
                 "DELETE FROM desktop_token WHERE discord_user_id = ? AND token_sha256 = ?",
@@ -582,13 +484,6 @@ class AccountsDB:
             return cursor.rowcount > 0
 
     def delete_account(self, discord_user_id: str) -> bool:
-        """Remove this account and everything that references it.
-
-        Characters, trade attributions, desktop tokens and watchlist items all carry
-        ``ON DELETE CASCADE`` back to this row, so removing it removes all of them in one
-        statement. The journal itself lives in its own file outside this database and is not
-        touched here -- the caller deletes that separately.
-        """
         with self._transaction() as connection:
             cursor = connection.execute(
                 "DELETE FROM account WHERE discord_user_id = ?", (discord_user_id,)

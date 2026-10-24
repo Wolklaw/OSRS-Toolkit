@@ -12,9 +12,6 @@ from toolkit_web.config import Settings
 
 @pytest.fixture(autouse=True)
 def _clear_process_caches():
-    """The plugin-activity and character-list caches are keyed by pairing token and live for
-    the process, not the app, so tests that reuse a token would otherwise read each other's
-    answers — and pass or fail depending on the order they happened to run in."""
     from toolkit_web import importing
 
     importing._activity_cache.clear()
@@ -41,17 +38,12 @@ def settings(tmp_path: Path) -> Settings:
 
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
-    # The oauth_state and session cookies are both Secure, correctly, since this is served
-    # over HTTPS in production. Testing over plain http://testserver would mean the client's
-    # cookie jar silently refusing to send them back, hiding what production actually does —
-    # so tests run over https:// too, the same as the deployed service.
     with TestClient(create_app(settings), base_url="https://testserver") as test_client:
         yield test_client
 
 
 @pytest.fixture
 def signed_in(client: TestClient) -> TestClient:
-    """A client already signed in as one dev-login account, session cookie and all."""
     response = client.post(
         "/auth/dev-login", json={"discord_user_id": "111", "username": "Wolklaw"}
     )

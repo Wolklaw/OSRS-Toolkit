@@ -1,12 +1,9 @@
-"""Presentation helpers: turning raw values into the strings the UI displays."""
-
 from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # Avoids a runtime import cycle (performance -> journal_presentation -> this module).
     from osrs_toolkit.journal import SyncedItem, SyncedTrade
     from osrs_toolkit.performance import GroupPerformance
 
@@ -21,7 +18,6 @@ def signed_gp(value: int) -> str:
 
 
 def percent(value: float | None, *, signed: bool = False) -> str:
-    """Formats a percentage, avoiding a misleading "-0.0%" for tiny values."""
     if value is None:
         return "—"
     places = 2 if value and abs(value) < 0.05 else 1
@@ -29,7 +25,6 @@ def percent(value: float | None, *, signed: bool = False) -> str:
 
 
 def hold_time(hours: float | None) -> str:
-    """Formats a duration at a readable scale: minutes, hours, or days."""
     if hours is None:
         return "—"
     if hours < 1:
@@ -54,7 +49,6 @@ def short_duration(seconds: int) -> str:
 
 
 def format_countdown(seconds: int) -> str:
-    """Hours-and-minutes countdown for the buy-limit "resets in" column."""
     if seconds <= 0:
         return "any moment"
     hours, minutes = divmod(seconds // 60, 60)
@@ -64,14 +58,12 @@ def format_countdown(seconds: int) -> str:
 
 
 def format_goal_percent(percent: float) -> str:
-    """Shows "<1%" instead of rounding a real but tiny sliver of progress down to "0%"."""
     if 0 < percent < 1:
         return "<1%"
     return f"{percent:.0f}%"
 
 
 def format_eta(days: float) -> str:
-    """Formats a rough ETA in days or years, whichever reads better."""
     if days < 1:
         return "less than a day"
     if days < 365:
@@ -138,8 +130,6 @@ def group_row(group: GroupPerformance, *, hold: bool) -> list[str]:
 
 
 def attention_tooltip(asking: int, live_sell_price: int) -> str:
-    """Why a journal row is flagged. Split into short lines since Qt renders a plain-text
-    tooltip on a single line however long it is."""
     drop_pct = (asking - live_sell_price) / asking * 100
     return (
         "This ask looks stale.\n"

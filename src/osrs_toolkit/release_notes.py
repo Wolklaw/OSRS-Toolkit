@@ -1,10 +1,3 @@
-"""Reads the bundled CHANGELOG so the app can show what changed in the running version.
-
-The "What's new" window shows headlines, not full entries: a release may open with a
-"### Highlights" section for its short version; without one, each entry is cut to its
-opening sentence.
-"""
-
 from __future__ import annotations
 
 import html
@@ -20,11 +13,8 @@ _BULLET = re.compile(r"^[-*]\s+(.*)$")
 _CODE_SPAN = re.compile(r"`([^`]+)`")
 _BOLD_SPAN = re.compile(r"\*\*([^*]+)\*\*")
 _LINK_SPAN = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
-# Requires a capital letter after the break so "Est. 12,345 gp" (a mid-sentence full stop)
-# doesn't get split.
 _SENTENCE_END = re.compile(r'(?<=[.!?])\s+(?=[A-Z"“])')
 
-# "Unreleased" is a placeholder heading rather than a version anyone can be running.
 _PLACEHOLDER_VERSIONS = {"unreleased"}
 
 HIGHLIGHTS_HEADING = "highlights"
@@ -33,8 +23,6 @@ MUTED = "#91a0b4"
 
 @dataclass(frozen=True)
 class ReleaseSection:
-    """One "### Added"/"### Fixed" group within a release."""
-
     heading: str
     entries: tuple[str, ...]
 
@@ -51,7 +39,6 @@ class ReleaseNotes:
 
 
 def parse_changelog(text: str) -> list[ReleaseNotes]:
-    """Parse Keep a Changelog markdown into releases, newest first as written."""
     releases: list[ReleaseNotes] = []
     version = ""
     date = ""
@@ -98,7 +85,6 @@ def parse_changelog(text: str) -> list[ReleaseNotes]:
         if bullet_match:
             entries.append(bullet_match.group(1).strip())
             continue
-        # A wrapped bullet continues on an indented line; join it back onto its entry.
         if entries and line.startswith((" ", "\t")) and line.strip():
             entries[-1] = f"{entries[-1]} {line.strip()}"
 
@@ -107,7 +93,6 @@ def parse_changelog(text: str) -> list[ReleaseNotes]:
 
 
 def load_release_notes(path: Path) -> list[ReleaseNotes]:
-    """Parse the changelog at ``path``; an unreadable changelog yields no notes."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -121,8 +106,6 @@ def notes_for_version(releases: list[ReleaseNotes], version: str) -> ReleaseNote
 
 
 def version_key(version: str) -> tuple[int, ...]:
-    """Order versions by their numbers. Unparseable text sorts oldest, so one bad heading
-    doesn't break the whole catch-up."""
     digits = re.fullmatch(r"v?(\d+(?:\.\d+)*)", version.strip())
     if not digits:
         return ()
@@ -136,14 +119,6 @@ def catch_up_notes(
     since: str = "",
     limit: int = 5,
 ) -> list[ReleaseNotes]:
-    """The releases to describe on this launch, newest first.
-
-    Never anything newer than ``current`` (the changelog ships with the app). ``since`` is
-    the last version seen, so updating three versions at once describes all three, not just
-    the newest. ``limit`` caps a long-idle install from opening onto a wall of history.
-
-    Falls back to just the running version if nothing else qualifies.
-    """
     running = version_key(current)
     missed = version_key(since) if since else ()
     described = [
@@ -162,19 +137,11 @@ def catch_up_notes(
 
 @dataclass(frozen=True)
 class Highlight:
-    """One line of a release's short description."""
-
     label: str
     text: str
 
 
 def summarize(notes: ReleaseNotes, limit: int = 4) -> tuple[tuple[Highlight, ...], int]:
-    """A release in at most ``limit`` lines, with the number of entries left out.
-
-    A "Highlights" section is used as written. Otherwise entries are cut to their opening
-    sentence and interleaved round-robin across sections, so e.g. four fixes and three
-    changes don't describe the release entirely as bug fixes.
-    """
     for section in notes.sections:
         if section.heading.strip().lower() == HIGHLIGHTS_HEADING:
             written = tuple(Highlight("", entry) for entry in section.entries)
@@ -190,7 +157,6 @@ def summarize(notes: ReleaseNotes, limit: int = 4) -> tuple[tuple[Highlight, ...
 
 
 def _opening_sentence(text: str, limit: int = 130) -> str:
-    """The first sentence, shortened to ``limit`` characters on a word boundary."""
     sentence = _SENTENCE_END.split(text.strip(), maxsplit=1)[0].strip()
     if len(sentence) <= limit:
         return sentence
@@ -198,7 +164,6 @@ def _opening_sentence(text: str, limit: int = 130) -> str:
 
 
 def _inline_html(text: str) -> str:
-    """Escape a bullet, then restore the small subset of markdown the changelog uses."""
     escaped = html.escape(text)
     escaped = _LINK_SPAN.sub(r'<a href="\2">\1</a>', escaped)
     escaped = _BOLD_SPAN.sub(r"<b>\1</b>", escaped)
@@ -206,7 +171,6 @@ def _inline_html(text: str) -> str:
 
 
 def notes_to_html(notes: ReleaseNotes, limit: int = 4) -> str:
-    """One release's headlines as the rich text shown in the "What's new" window."""
     points, omitted = summarize(notes, limit)
     bullets = []
     for point in points:
@@ -225,11 +189,6 @@ def notes_to_html(notes: ReleaseNotes, limit: int = 4) -> str:
 
 
 def catch_up_to_html(releases: Sequence[ReleaseNotes]) -> str:
-    """Render the newest release, then anything missed before it, as one page.
-
-    Everything here is the short version; the window's "Full changelog" button is where
-    the entries are written out in full.
-    """
     if not releases:
         return ""
     newest, earlier = releases[0], releases[1:]

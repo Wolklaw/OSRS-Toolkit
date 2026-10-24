@@ -1,9 +1,3 @@
-"""Generate the 1280x640 GitHub social preview card (Settings > General > Social preview).
-
-Crops the GE Flipper table and leaves the sidebar out, keeping the busiest part of the app
-in frame without showing nav contents that go stale between releases.
-"""
-
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QRectF, Qt
@@ -25,13 +19,12 @@ TEXT = QColor("#e6edf3")
 MUTED = QColor("#8b98a5")
 
 STRIP_TOP = 312
-TABLE_LEFT = 257  # First pixel right of the sidebar in ge-flipper.png.
+TABLE_LEFT = 257
 TABLE_WIDTH = 1618
 TABLE_HEADER_TOP = 318
 
 
 def main() -> int:
-    # Held for the lifetime of main(): QImage text rendering needs a live application.
     _app = QGuiApplication.instance() or QGuiApplication([])
     root = Path(__file__).resolve().parents[1]
 
@@ -51,13 +44,11 @@ def main() -> int:
     )
     painter.drawImage(QRectF(0, STRIP_TOP, WIDTH, strip_height), source)
 
-    # Blend the strip into the background instead of butting it against a hard edge.
     top_fade = QLinearGradient(0, STRIP_TOP, 0, STRIP_TOP + 90)
     top_fade.setColorAt(0.0, BACKGROUND)
     top_fade.setColorAt(1.0, QColor(13, 17, 23, 0))
     painter.fillRect(QRectF(0, STRIP_TOP, WIDTH, 90), top_fade)
 
-    # Dissolve the final row rather than slicing it in half.
     bottom_fade = QLinearGradient(0, HEIGHT - 78, 0, HEIGHT)
     bottom_fade.setColorAt(0.0, QColor(13, 17, 23, 0))
     bottom_fade.setColorAt(1.0, BACKGROUND)

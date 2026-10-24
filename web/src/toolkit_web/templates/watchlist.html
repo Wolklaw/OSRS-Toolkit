@@ -63,7 +63,7 @@
           <td class="num" style="color:var(--buy)">{{ "{:,}".format(row.buy_price) }}</td>
           <td class="num" style="color:var(--sell)">{{ "{:,}".format(row.sell_price) }}</td>
           <td class="num {{ 'positive' if row.profit >= 0 else 'negative' }}">{{ "{:+,}".format(row.profit) }}</td>
-          {# Same 12% ceiling the ranker scores against, so a bar here means what it means there. #}
+
           <td class="num cell-meter {{ 'positive' if row.roi >= 0 else 'negative' }}">
             {{ "%.2f"|format(row.roi) }}%
             {% if row.roi > 0 %}

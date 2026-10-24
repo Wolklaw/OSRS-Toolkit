@@ -10,22 +10,8 @@ from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint
 GE_TAX_RATE = 0.02
 GE_TAX_CAP = 5_000_000
 
-# Items the Grand Exchange charges no tax on. Jagex exempted the starter tools and bonds
-# when the tax launched in December 2021, then added low-level food, teleport tablets and
-# low-tier ammunition when the rate rose to 2% in May 2025.
-#
-# Both the id and the name are stored because the two sides of the app know different
-# things: the ranker works from market snapshots keyed by item id, while a journal row
-# typed in by hand only ever has a name. One table feeds both lookups so they cannot drift
-# apart. Ids were resolved against the live wiki item mapping rather than written from
-# memory — exempting the wrong item invents profit that the game will not pay.
-#
-# Poisoned and part-dose variants are deliberately absent: Jagex named the base items, and
-# under-exempting only costs 2% of accuracy on an unusual flip, while over-exempting
-# fabricates a margin.
 TAX_EXEMPT_ITEMS: tuple[tuple[int, str], ...] = (
     (13190, "Old school bond"),
-    # Low-level food.
     (365, "Bass"),
     (2309, "Bread"),
     (1891, "Cake"),
@@ -39,7 +25,6 @@ TAX_EXEMPT_ITEMS: tuple[tuple[int, str], ...] = (
     (329, "Salmon"),
     (315, "Shrimps"),
     (361, "Tuna"),
-    # Low-tier ammunition and runes.
     (882, "Bronze arrow"),
     (806, "Bronze dart"),
     (884, "Iron arrow"),
@@ -47,7 +32,6 @@ TAX_EXEMPT_ITEMS: tuple[tuple[int, str], ...] = (
     (558, "Mind rune"),
     (886, "Steel arrow"),
     (808, "Steel dart"),
-    # Teleports.
     (8011, "Ardougne teleport (tablet)"),
     (8010, "Camelot teleport (tablet)"),
     (28824, "Civitas illa fortis teleport"),
@@ -58,7 +42,6 @@ TAX_EXEMPT_ITEMS: tuple[tuple[int, str], ...] = (
     (2552, "Ring of dueling(8)"),
     (8013, "Teleport to house (tablet)"),
     (8007, "Varrock teleport (tablet)"),
-    # Starter tools.
     (1755, "Chisel"),
     (5325, "Gardening trowel"),
     (1785, "Glassblowing pipe"),
@@ -79,11 +62,6 @@ _TAX_EXEMPT_ITEM_NAMES = frozenset(name.casefold() for _item_id, name in TAX_EXE
 
 
 def is_tax_exempt(item_id: int | None = None, item_name: str | None = None) -> bool:
-    """Whether the Grand Exchange takes no cut when this item sells.
-
-    Either key identifies an item on its own, so a caller passes whichever it has. The id
-    is authoritative; the name only has to carry rows that never recorded one.
-    """
     if item_id is not None and item_id in TAX_EXEMPT_ITEM_IDS:
         return True
     return item_name is not None and item_name.strip().casefold() in _TAX_EXEMPT_ITEM_NAMES
@@ -127,30 +105,17 @@ STRATEGIES = {
 
 
 def confidence_standing(confidence: int, floor: int) -> float:
-    """Where a score sits between the strategy's own minimum and 100.
-
-    Every row already cleared ``floor``, so the raw number alone is misleading (58% is poor
-    under Overnight's 65 but comfortable under Quick's 45). 0 means "scraped in", 1 means
-    "as good as this gets".
-    """
     span = max(1, 100 - floor)
     return max(0.0, min(1.0, (confidence - floor) / span))
 
 
 def ge_tax(sell_price: int, *, exempt: bool = False) -> int:
-    """Return per-item GE tax: 2%, rounded down, capped at 5m.
-
-    Rounding down is what spares cheap items: below 50gp the 2% is under a coin, so the
-    game charges nothing without needing a separate rule. ``exempt`` covers the items it
-    never taxes at any price — see ``is_tax_exempt``.
-    """
     if exempt:
         return 0
     return min(math.floor(max(0, sell_price) * GE_TAX_RATE), GE_TAX_CAP)
 
 
 def offer_targets(point: MarketPoint) -> tuple[int, int]:
-    """Return cautious passive targets anchored across latest, 5m, and 1h trades."""
     buy_observations = (point.low, point.average_low_5m, point.average_low_1h)
     sell_observations = (point.high, point.average_high_5m, point.average_high_1h)
     buy_price = max(price for price in buy_observations if price is not None and price > 0)
@@ -170,14 +135,6 @@ def rank_flips(
     remaining_limits: Mapping[int, int] | None = None,
     now: int | None = None,
 ) -> list[FlipCandidate]:
-    """Rank actionable flips without pretending that an observed margin is guaranteed.
-
-    ``remaining_limits`` is how much of each item's 4-hour buy limit is still free, from
-    ``buy_limits.buy_limit_status``. An item listed with no room left drops out entirely
-    rather than being suggested at a quantity the Grand Exchange would refuse. Items absent
-    from the mapping are unconstrained, so a caller that knows nothing about recent buying
-    passes nothing and gets the full limit as before.
-    """
     settings = STRATEGIES.get(strategy, STRATEGIES["Balanced (1–4h)"])
     required_roi = float(settings["min_roi"] if min_roi is None else min_roi)
     current_time = now or int(time.time())
@@ -233,7 +190,6 @@ def rank_flips(
             continue
         capital_required = buy_price * quantity
         potential = profit * quantity
-        # All components are normalized before weighting so confidence is not drowned out by GP.
         profit_quality = min(1.0, math.log1p(potential) / math.log1p(max(cash_stack, 10)))
         roi_quality = min(1.0, roi / 12.0)
         profit_weight, liquidity_weight, roi_weight, confidence_weight = settings["weights"]
@@ -271,12 +227,6 @@ def plan_flip_portfolio(
     cash_stack: int,
     slot_count: int = 8,
 ) -> list[FlipCandidate]:
-    """Allocate one cash stack across distinct GE offers without exceeding safe item caps.
-
-    Turns the independent per-item limits from ``rank_flips`` into one diversified,
-    cash-constrained plan. Leaves cash unused when liquidity, buy limits, or risk caps say
-    to stop.
-    """
     if cash_stack <= 0 or slot_count <= 0:
         return []
 
@@ -292,10 +242,6 @@ def plan_flip_portfolio(
     current_utility = -1
     current_capital = -1
 
-    # Forward-select the offer that contributes most to the portfolio at each step (score
-    # only breaks ties). Every trial re-sizes the whole set — this runs thousands of times
-    # per plan, so it works in plain numbers and only builds FlipCandidate objects once,
-    # for the winning set.
     for _slot in range(min(slot_count, len(eligible))):
         best_candidate: FlipCandidate | None = None
         best_metric: tuple[int, int, float] | None = None
@@ -334,11 +280,6 @@ def plan_flip_portfolio(
 
 
 def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
-    """Quantities for a chosen offer set, sized for maximum confidence-adjusted profit.
-
-    Buys one unit of every offer first to stay diversified, then spends spare cash on
-    whichever offers return the most confidence-adjusted profit per coin.
-    """
     quantities = [1 for _candidate in selected]
     remaining = cash_stack - sum(candidate.buy_price for candidate in selected)
     priority = sorted(
@@ -359,7 +300,6 @@ def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
 
 
 def _allocate_selected(selected: list[FlipCandidate], cash_stack: int) -> list[FlipCandidate]:
-    """``_size_offers`` applied to the offers themselves, for the plan that is returned."""
     return [
         replace(
             candidate,
@@ -388,11 +328,8 @@ def _stability(point: MarketPoint) -> float:
 
 
 def _has_two_sided_liquidity(point: MarketPoint) -> bool:
-    """Reject spreads supported by only a token trade on one side of the market."""
     total = point.high_volume_1h + point.low_volume_1h
     if total <= 0:
-        # Keeps manually constructed/legacy snapshots usable. Live snapshots always
-        # include the separate high- and low-price volumes.
         return True
     thinner_side = min(point.high_volume_1h, point.low_volume_1h)
     return thinner_side >= 3 and thinner_side / total >= 0.02

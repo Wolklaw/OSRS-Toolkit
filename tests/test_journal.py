@@ -144,8 +144,6 @@ def test_legacy_malformed_balanced_strategy_is_normalized(tmp_path: Path) -> Non
 def test_a_database_written_before_the_ask_existed_opens_and_asks_its_suggestion(
     tmp_path: Path,
 ) -> None:
-    """Every position already on disk was saved without a recorded ask. Opening one must
-    migrate rather than fail, and it has nothing to say about its ask but its own target."""
     database_path = tmp_path / "journal.db"
     repository = JournalRepository(database_path)
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
@@ -204,11 +202,9 @@ def test_completed_trade_rejects_unaccounted_buy_quantity(tmp_path: Path) -> Non
 
 
 def test_cancelled_partial_buy_can_be_resized_and_sold(tmp_path: Path) -> None:
-    """A buy order cancelled mid-fill leaves a smaller position that must still be sold."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Cancelled partial", 100, 1_500, 1_700)
 
-    # Only 40 of the intended 100 filled before the order was cancelled.
     repository.update_tracked(
         position_id,
         "Bought",
@@ -238,9 +234,6 @@ def test_cancelled_partial_buy_can_be_resized_and_sold(tmp_path: Path) -> None:
 
 
 def test_the_estimate_prices_the_stock_a_part_bought_position_holds(tmp_path: Path) -> None:
-    """Regression: the estimate priced the whole tracked quantity at the price actually paid,
-    so a plan of 7,612 that only bought 3,000 advertised 7,612 units of profit — 2.5x what the
-    position could possibly make. "Capital traded" already counts only what bought."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Shark lure", 7_612, 315, 337)
     repository.update_tracked(position_id, "Pending buy", None, None, None, [(3_000, 315)])
@@ -252,7 +245,6 @@ def test_the_estimate_prices_the_stock_a_part_bought_position_holds(tmp_path: Pa
 
 
 def test_the_estimate_prices_the_whole_plan_while_nothing_has_bought(tmp_path: Path) -> None:
-    """Nothing bought yet is a plan, not a shortfall: there is no stock to price instead."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.track(1, "Shark lure", 7_612, 315, 337)
 
@@ -339,7 +331,6 @@ def test_ge_fill_applies_to_the_oldest_eligible_pending_buy(tmp_path: Path) -> N
 
 
 def test_ge_fill_buy_side_preserves_an_already_recorded_sell_price(tmp_path: Path) -> None:
-    """Regression: a buy-side-only update must not blank out an already-recorded sell price."""
     database_path = tmp_path / "journal.db"
     repository = JournalRepository(database_path)
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
@@ -383,9 +374,6 @@ def test_ge_fill_partial_buy_keeps_position_pending_until_fully_bought(tmp_path:
 def test_ge_fill_overshoot_without_total_quantity_leaves_the_existing_position_untouched(
     tmp_path: Path,
 ) -> None:
-    """A fill that overshoots the one eligible position's room, with no total_quantity to
-    size a fresh position correctly, is left unmatched rather than guessed at — guessing
-    wrong here would create a position that can never reconcile with the real offer."""
     repository = JournalRepository(tmp_path / "journal.db")
     existing_id = repository.track(1, "Whip", 10, 1_500, 1_800)
 
@@ -411,7 +399,6 @@ def test_ge_fill_sell_side_moves_through_partially_sold_to_completed(tmp_path: P
     assert first == position_id
     partial = repository.list_tracked()[0]
     assert partial.status == "Partially sold"
-    # Regression: a sell-side-only update must not blank out the already-recorded buy price.
     assert partial.actual_buy == 1_500
 
     second = repository.apply_synced_ge_fill(
@@ -425,9 +412,6 @@ def test_ge_fill_sell_side_moves_through_partially_sold_to_completed(tmp_path: P
 
 
 def test_selling_a_part_bought_plan_completes_it_at_what_it_bought(tmp_path: Path) -> None:
-    """Regression: a plan bigger than the offer placed against it can never finish buying, so
-    its sale used to find nothing eligible and the row sat on "Pending buy" for good — the flip
-    was done, the profit realized, and the Journal still showed it as filling."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Shark lure", 7_612, 315, 337)
     repository.apply_offer_opened(
@@ -450,7 +434,6 @@ def test_selling_a_part_bought_plan_completes_it_at_what_it_bought(tmp_path: Pat
     assert matched == position_id
     completed = repository.list_tracked()[0]
     assert completed.status == "Completed"
-    # Resized to the stock it really held; the 4,612 it never bought are not part of the flip.
     assert completed.quantity == 3_000
     assert (completed.actual_buy, completed.actual_sell) == (315, 337)
     assert completed.realized_profit == 3_000 * (337 - 315 - ge_tax(337))
@@ -473,9 +456,6 @@ def test_selling_part_of_a_part_bought_plan_keeps_it_partially_sold(tmp_path: Pa
 
 
 def test_a_sale_bigger_than_a_part_bought_plan_holds_stays_unmatched(tmp_path: Path) -> None:
-    """Only what a position bought is stock it can sell. A sale covering more than that came
-    from somewhere else, and splitting it across positions is the reconciliation this app
-    deliberately leaves to the player."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Shark lure", 7_612, 315, 337)
     repository.update_tracked(position_id, "Pending buy", None, None, None, [(1_000, 315)])
@@ -492,8 +472,6 @@ def test_a_sale_bigger_than_a_part_bought_plan_holds_stays_unmatched(tmp_path: P
 def test_a_sale_prefers_a_finished_holding_over_an_older_part_bought_plan(
     tmp_path: Path,
 ) -> None:
-    """The part-bought fallback is a last resort: a position that finished buying is the
-    obvious owner of a sale, however much older the one still buying is."""
     repository = JournalRepository(tmp_path / "journal.db")
     still_buying = repository.track(1, "Shark lure", 7_612, 315, 337)
     repository.update_tracked(still_buying, "Pending buy", None, None, None, [(3_000, 315)])
@@ -512,8 +490,6 @@ def test_a_sale_prefers_a_finished_holding_over_an_older_part_bought_plan(
 
 
 def test_listing_a_part_bought_plan_resizes_it_to_what_it_bought(tmp_path: Path) -> None:
-    """Listing the stock a position gave up buying is the player saying the buying is over,
-    so the position becomes the size of that stock and can be sold down to Completed."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Shark lure", 7_612, 315, 337)
     repository.update_tracked(position_id, "Pending buy", None, None, None, [(3_000, 315)])
@@ -532,10 +508,6 @@ def test_listing_a_part_bought_plan_resizes_it_to_what_it_bought(tmp_path: Path)
 def test_ge_fill_buy_with_no_eligible_position_and_no_total_quantity_is_left_unmatched(
     tmp_path: Path,
 ) -> None:
-    """Without the offer's real total_quantity, a fresh fill can't be sized correctly, so
-    it is left for the RuneLite activity feed rather than spawning a position that later
-    fills of the same offer could never merge back into (see the sibling test below for
-    the total_quantity-aware creation path, which is the one that should actually fire)."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     matched = repository.apply_synced_ge_fill(
@@ -549,10 +521,6 @@ def test_ge_fill_buy_with_no_eligible_position_and_no_total_quantity_is_left_unm
 def test_ge_fill_buy_with_no_match_sizes_the_new_position_to_the_offer_total(
     tmp_path: Path,
 ) -> None:
-    """When the plugin reports the GE offer's full total_quantity, the auto-created
-    position should use that as its target instead of just the first partial fill, so
-    later fills of the same offer keep accumulating onto it rather than each spawning
-    their own position."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session()
 
@@ -588,8 +556,6 @@ def test_ge_fill_buy_with_no_match_sizes_the_new_position_to_the_offer_total(
 def test_ge_fill_buy_with_no_match_seeds_the_live_suggestion_as_the_sell_estimate(
     tmp_path: Path,
 ) -> None:
-    """An untracked fill still gets a real profit estimate when a live market suggestion is
-    available, instead of one that always reads as guaranteed break-even."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session()
 
@@ -605,16 +571,12 @@ def test_ge_fill_buy_with_no_match_seeds_the_live_suggestion_as_the_sell_estimat
 
     assert position_id is not None
     created = repository.list_tracked()[0]
-    # target_sell still mirrors the buy price: this position must never be mistaken for a
-    # plan the player made on purpose (see test_offer_opened_buy_always_creates_its_own_position).
     assert created.target_sell == 57
     assert created.sell_suggestion == 64
     assert created.estimated_profit > 0
 
 
 def test_ge_fill_buy_with_no_match_ignores_a_suggestion_at_or_below_cost(tmp_path: Path) -> None:
-    """A suggestion that would not even cover what was paid is not a suggestion worth
-    showing — falls back to the previous break-even behavior instead of a guaranteed loss."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     repository.apply_synced_ge_fill(
@@ -632,8 +594,6 @@ def test_ge_fill_buy_with_no_match_ignores_a_suggestion_at_or_below_cost(tmp_pat
 
 
 def test_ge_fill_sell_with_no_eligible_position_returns_none(tmp_path: Path) -> None:
-    """Unlike buys, a sell fill with nothing to attach to is left alone rather than
-    creating a position — there is no such thing as tracking a sale plan retroactively."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     matched = repository.apply_synced_ge_fill(
@@ -645,8 +605,6 @@ def test_ge_fill_sell_with_no_eligible_position_returns_none(tmp_path: Path) -> 
 
 
 def test_offer_opened_buy_starts_tracking_before_anything_fills(tmp_path: Path) -> None:
-    """Placing a buy offer should show up in the Journal immediately, not only once the
-    first fill lands — nothing has been bought yet, but the player has committed to it."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session()
 
@@ -668,8 +626,6 @@ def test_offer_opened_buy_starts_tracking_before_anything_fills(tmp_path: Path) 
 
 
 def test_offer_opened_buy_always_creates_its_own_position(tmp_path: Path) -> None:
-    """Two independent buy offers for the same item (e.g. two GE slots) should not be
-    conflated into one position — each offer gets its own."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     first = repository.apply_offer_opened(
@@ -708,10 +664,6 @@ def test_offer_opened_buy_with_no_plan_seeds_the_live_suggestion_as_the_sell_est
 def test_offer_opened_buy_seeded_suggestion_does_not_get_treated_as_a_plan(
     tmp_path: Path,
 ) -> None:
-    """Regression: seeding current_sell_suggestion above the offer price must not make an
-    auto-created position look like something the player planned on purpose — the "planned"
-    check only ever looks at target_sell, so a second, genuinely independent offer for the
-    same item must still get its own row instead of merging into the first."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     first = repository.apply_offer_opened(
@@ -731,9 +683,6 @@ def test_offer_opened_buy_seeded_suggestion_does_not_get_treated_as_a_plan(
 
 
 def test_offer_opened_buy_adopts_the_plan_the_player_already_tracked(tmp_path: Path) -> None:
-    """Tracking a suggested flip and then placing that very offer is the ordinary workflow. It
-    must not leave a duplicate row priced from the offer, whose sell target equals its buy
-    target and so always shows a loss — the tracked plan's own targets are the point."""
     repository = JournalRepository(tmp_path / "journal.db")
     planned = repository.track(24_615, "Iorwerth camp teleport", 77, 6_479, 6_896)
 
@@ -764,7 +713,6 @@ def test_offer_opened_buy_grows_a_plan_when_the_offer_is_larger(tmp_path: Path) 
     assert matched == planned
     position = repository.list_tracked()[0]
     assert position.quantity == 12
-    # The player's planned prices survive being resized.
     assert (position.target_buy, position.target_sell) == (1_500, 1_800)
 
 
@@ -780,10 +728,6 @@ def test_offer_opened_buy_leaves_a_smaller_offer_room_in_the_plan(tmp_path: Path
 
 
 def test_offer_opened_buy_rejoins_the_part_bought_position_it_matches(tmp_path: Path) -> None:
-    """Regression: the game re-sends every live offer on a world hop, and an older plugin build
-    cannot say so. An offer matching a part-bought position on both size and price is that same
-    offer announced again, not a second one — believing otherwise duplicated an active flip
-    every time the player hopped."""
     repository = JournalRepository(tmp_path / "journal.db")
     planned = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(planned, "Pending buy", None, None, None, [(4, 1_500)])
@@ -795,7 +739,6 @@ def test_offer_opened_buy_rejoins_the_part_bought_position_it_matches(tmp_path: 
     assert matched == planned
     positions = repository.list_tracked()
     assert len(positions) == 1
-    # Adopting must not disturb what already bought, nor the targets the player set.
     assert positions[0].bought_quantity == 4
     assert (positions[0].target_buy, positions[0].target_sell) == (1_500, 1_800)
 
@@ -803,8 +746,6 @@ def test_offer_opened_buy_rejoins_the_part_bought_position_it_matches(tmp_path: 
 def test_offer_opened_buy_beside_a_part_bought_position_it_differs_from_gets_its_own_row(
     tmp_path: Path,
 ) -> None:
-    """The match has to be exact to read as a re-announcement. An offer at another price is a
-    separate commitment however much the first one has bought."""
     repository = JournalRepository(tmp_path / "journal.db")
     planned = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(planned, "Pending buy", None, None, None, [(4, 1_500)])
@@ -820,9 +761,6 @@ def test_offer_opened_buy_beside_a_part_bought_position_it_differs_from_gets_its
 def test_restored_offer_rejoins_the_position_tracking_it_whatever_its_price(
     tmp_path: Path,
 ) -> None:
-    """A restored offer is one already running, so it cannot be a new commitment: it belongs to
-    whatever is tracking it even when the plan was made at a different price to the one the
-    offer was finally placed at."""
     repository = JournalRepository(tmp_path / "journal.db")
     planned = repository.track(1, "Whip", 10, 1_600, 1_800)
     repository.update_tracked(planned, "Pending buy", None, None, None, [(4, 1_500)])
@@ -863,10 +801,6 @@ def test_restored_offer_prefers_the_position_sized_to_it(tmp_path: Path) -> None
 def test_restored_offer_prefers_the_position_tracking_it_over_an_untouched_plan(
     tmp_path: Path,
 ) -> None:
-    """Regression: a re-sent offer cannot be the placing of a plan that was never placed, but
-    it matched one first — adopting a flip it had nothing to do with and resizing it to the
-    offer, while the position actually buying against that offer was left behind. On a world
-    hop it happened again to whatever plan was untouched."""
     repository = JournalRepository(tmp_path / "journal.db")
     buying = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.apply_offer_opened(
@@ -888,15 +822,12 @@ def test_restored_offer_prefers_the_position_tracking_it_over_an_untouched_plan(
 
     assert matched == buying
     by_position = {trade.position_id: trade for trade in repository.list_tracked()}
-    # The plan is untouched: neither adopted nor grown to an offer that was not placed for it.
     assert by_position[plan].quantity == 6
     assert by_position[plan].bought_quantity == 0
     assert repository.list_tracked() == list(by_position.values())
 
 
 def test_a_newly_placed_offer_still_takes_the_plan_it_was_placed_for(tmp_path: Path) -> None:
-    """The other side of the same rule: a new offer is a plan being acted on, so the plan
-    wins there even while another position for the item is part way through buying."""
     repository = JournalRepository(tmp_path / "journal.db")
     buying = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(buying, "Pending buy", None, None, None, [(4, 1_500)])
@@ -910,8 +841,6 @@ def test_a_newly_placed_offer_still_takes_the_plan_it_was_placed_for(tmp_path: P
 
 
 def test_restored_offer_with_nothing_tracked_still_starts_a_position(tmp_path: Path) -> None:
-    """Offers placed on mobile, or while this app was closed, arrive as restored ones. Nothing
-    is tracking them yet, so they still have to open a row of their own."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     matched = repository.apply_offer_opened(
@@ -930,8 +859,6 @@ def test_restored_offer_with_nothing_tracked_still_starts_a_position(tmp_path: P
 def test_restored_offer_does_not_reclaim_a_position_that_finished_buying(
     tmp_path: Path,
 ) -> None:
-    """A restored buy offer adopts what is still buying. A position already bought in full is
-    waiting on a sale, and pulling it back would undo that."""
     repository = JournalRepository(tmp_path / "journal.db")
     bought = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(bought, "Bought", None, None, None, [(10, 1_500)])
@@ -953,8 +880,6 @@ def test_restored_offer_does_not_reclaim_a_position_that_finished_buying(
 def test_restored_sell_offer_counts_an_already_listed_position_as_matched(
     tmp_path: Path,
 ) -> None:
-    """The listing this offer describes is already on the page. Reporting nothing matched would
-    make a restored sell look unhandled on every login."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(position_id, "Listed for sale", None, None, None, [(10, 1_500)])
@@ -990,8 +915,6 @@ def test_offer_opened_sell_advances_a_bought_position_to_listed_for_sale(
 
 
 def test_offer_opened_sell_with_nothing_bought_does_nothing(tmp_path: Path) -> None:
-    """Unlike a buy, a sell offer can't start tracking on its own — there is no plan to
-    advance without something already bought behind it."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     matched = repository.apply_offer_opened(
@@ -1136,7 +1059,6 @@ def test_default_journal_recovers_from_version_independent_backup(
     repository = JournalRepository()
     repository.add("Preserved item", 5, 100, 150)
 
-    # A later launch snapshots the populated database outside the install/data location.
     JournalRepository()
     database_path = local_data / "OSRSToolkit" / "data" / "toolkit.db"
     database_path.unlink()
@@ -1147,8 +1069,6 @@ def test_default_journal_recovers_from_version_independent_backup(
 
 
 def test_update_tracked_can_move_a_position_to_supplies(tmp_path: Path) -> None:
-    """Marking a position 'Supplies' is just an ordinary status change — the same
-    ``update_tracked`` call the Update dialog already makes for every other status."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Lobster", 100, 150, 150)
 
@@ -1158,8 +1078,6 @@ def test_update_tracked_can_move_a_position_to_supplies(tmp_path: Path) -> None:
 
 
 def test_a_supplies_position_still_absorbs_its_own_remaining_buy_fills(tmp_path: Path) -> None:
-    """Regression: reclassifying a still-in-progress position to 'Supplies' must not stop
-    the fill matcher from seeing it, or the offer's next fill would spawn a duplicate row."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Lobster", 100, 150, 150)
     repository.update_tracked(position_id, "Supplies", None, None)
@@ -1179,8 +1097,6 @@ def test_a_supplies_position_still_absorbs_its_own_remaining_buy_fills(tmp_path:
 
 
 def test_a_supplies_position_still_absorbs_its_own_remaining_sell_fills(tmp_path: Path) -> None:
-    """A supplies item that does get partly sold off keeps its status — it stays excluded
-    from performance grading even though it now has realized proceeds."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Lobster", 100, 150, 150)
     repository.update_tracked(position_id, "Supplies", None, None, None, [(100, 150)])
@@ -1196,8 +1112,6 @@ def test_a_supplies_position_still_absorbs_its_own_remaining_sell_fills(tmp_path
 
 
 def test_cancelling_a_part_filled_supplies_buy_keeps_it_supplies(tmp_path: Path) -> None:
-    """apply_offer_cancelled's ordinary resize-to-what-bought path must not pull a position
-    back into the flip lifecycle just because its offer got cancelled."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Lobster", 100, 150, 150)
     repository.update_tracked(position_id, "Supplies", None, None, None, [(40, 150)])
@@ -1255,8 +1169,6 @@ def test_save_loadout_snapshot_records_net_worth_history(tmp_path: Path) -> None
 def test_net_worth_history_survives_the_latest_snapshot_being_overwritten(
     tmp_path: Path,
 ) -> None:
-    """save_loadout_snapshot replaces the 'current state' row for an account, but each call
-    must still leave its own historical reading behind."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     repository.save_loadout_snapshot(_snapshot("hash", "2026-08-15T00:00:00+00:00", 1_000))
@@ -1355,9 +1267,6 @@ def test_skills_history_scopes_by_account_hash(tmp_path: Path) -> None:
 
 
 def test_cancelling_a_buy_keeps_the_plan_the_offer_adopted(tmp_path: Path) -> None:
-    """Tracking a suggested flip and then placing exactly that offer means the offer adopts
-    the plan instead of opening a row beside it (see apply_offer_opened). Cancelling the
-    offer must not then delete the plan, which the player made and can still act on."""
     repository = JournalRepository(tmp_path / "journal.db")
     planned_id = repository.track(453, "Coal", 500, 100, 120)
     assert repository.apply_offer_opened(453, "Coal", "buy", 500, 100) == planned_id
@@ -1374,8 +1283,6 @@ def test_cancelling_a_buy_keeps_the_plan_the_offer_adopted(tmp_path: Path) -> No
 
 
 def test_editing_a_finished_position_keeps_the_time_it_finished(tmp_path: Path) -> None:
-    """Correcting a fill price on old history is an edit, not a second completion. Re-stamping
-    it would drag the trade into today's period filters and stretch its recorded hold time."""
     database_path = tmp_path / "journal.db"
     repository = JournalRepository(database_path)
     position_id = repository.track(1, "Backdated flip", 10, 100, 150)
@@ -1394,7 +1301,6 @@ def test_editing_a_finished_position_keeps_the_time_it_finished(tmp_path: Path) 
 
 
 def test_reopening_and_finishing_again_records_the_new_completion(tmp_path: Path) -> None:
-    """Keeping the original stamp only applies to a position that was terminal already."""
     database_path = tmp_path / "journal.db"
     repository = JournalRepository(database_path)
     position_id = repository.track(1, "Reopened flip", 10, 100, 150)
@@ -1413,8 +1319,6 @@ def test_reopening_and_finishing_again_records_the_new_completion(tmp_path: Path
 
 
 def test_listing_synced_trades_since_a_cutoff_drops_older_events(tmp_path: Path) -> None:
-    """The buy-limit view re-reads on a timer and only ever looks at the last few hours, so
-    it must not pay for the whole imported history — items included."""
     repository = JournalRepository(tmp_path / "journal.db")
     now = datetime.now(UTC)
     repository.add_synced_trades(
@@ -1434,8 +1338,6 @@ def test_listing_synced_trades_since_a_cutoff_drops_older_events(tmp_path: Path)
 def test_listing_synced_trades_since_a_cutoff_keeps_events_written_without_seconds(
     tmp_path: Path,
 ) -> None:
-    """The plugin's writer omits time fields that are zero, so "12:00Z" sorts after
-    "12:00:30Z" as text. The cutoff has to be loose enough that text order cannot lose one."""
     repository = JournalRepository(tmp_path / "journal.db")
     now = datetime(2026, 8, 16, 12, 0, 0, tzinfo=UTC)
     just_inside = _synced_fill("terse", now - timedelta(hours=3))
@@ -1464,9 +1366,6 @@ def _synced_fill(event_id: str, occurred_at: datetime) -> SyncedTrade:
 
 
 def test_a_sell_offer_records_the_price_the_player_actually_listed_at(tmp_path: Path) -> None:
-    """Regression: the price on a sell offer was read for its side and then discarded, so a
-    position's ask stayed whatever the flip was planned to sell at. Relisting lower changed
-    nothing the app could see."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(position_id, "Bought", 1_500, None, None, [(10, 1_500)])
@@ -1478,7 +1377,6 @@ def test_a_sell_offer_records_the_price_the_player_actually_listed_at(tmp_path: 
     position = repository.list_tracked()[0]
     assert position.status == "Listed for sale"
     assert position.asking_price == 1_640
-    # The plan and the app's own advice are untouched by the player choosing a price.
     assert position.target_sell == 1_800
     assert position.sell_suggestion == 1_800
     assert position.suggestion_was_refreshed is False
@@ -1503,8 +1401,6 @@ def test_relisting_at_a_new_price_replaces_the_recorded_ask(tmp_path: Path) -> N
 def test_a_position_never_listed_through_an_offer_asks_its_sell_suggestion(
     tmp_path: Path,
 ) -> None:
-    """Nothing has told the app what this position is asking, so its own target is the best
-    statement of intent there is — the behaviour every position had before the ask existed."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(position_id, "Listed for sale", 1_500, None, None, [(10, 1_500)])
@@ -1517,9 +1413,6 @@ def test_a_position_never_listed_through_an_offer_asks_its_sell_suggestion(
 def test_a_restored_sell_offer_records_the_ask_of_an_already_listed_position(
     tmp_path: Path,
 ) -> None:
-    """A world hop re-sends the offer rather than the player placing it. It is still the
-    truest statement of the ask available, and for a position listed while the app was
-    closed it is the only one."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(position_id, "Listed for sale", 1_500, None, None, [(10, 1_500)])
@@ -1538,9 +1431,6 @@ def test_a_restored_sell_offer_records_the_ask_of_an_already_listed_position(
 
 
 def test_relisting_a_part_sold_position_records_the_new_ask(tmp_path: Path) -> None:
-    """A cancelled sell leaves a part-sold position exactly as it was, so a relist has no
-    status to change — and the price on it used to go nowhere, leaving the position asking
-    whatever it was asking before the player thought better of it."""
     repository = JournalRepository(tmp_path / "journal.db")
     position_id = repository.track(1, "Whip", 10, 1_500, 1_800)
     repository.update_tracked(
@@ -1554,7 +1444,6 @@ def test_relisting_a_part_sold_position_records_the_new_ask(tmp_path: Path) -> N
     assert matched == position_id
     position = repository.list_tracked()[0]
     assert position.asking_price == 1_610
-    # Relisting the remainder is not a sale, a cancellation, or a status change.
     assert position.status == "Partially sold"
     assert position.sold_quantity == 4
     assert position.quantity == 10
@@ -1573,7 +1462,6 @@ def test_a_sell_offer_for_an_untracked_item_still_matches_nothing(tmp_path: Path
 
 
 def test_exempt_items_keep_their_whole_margin_in_the_journal(tmp_path: Path) -> None:
-    """A bond pays no Grand Exchange tax, so neither side of the journal charges it."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.add("Old school bond", 2, 10_000_000, 10_300_000)
     position_id = repository.track(13190, "Old school bond", 2, 10_000_000, 10_300_000)

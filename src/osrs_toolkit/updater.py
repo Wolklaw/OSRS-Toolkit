@@ -19,16 +19,12 @@ USER_AGENT = f"OSRS-Toolkit-Updater/{__version__} (+https://github.com/Wolklaw/O
 _FINALIZE_ATTEMPTS = 5
 _FINALIZE_RETRY_SECONDS = 0.4
 
-# Inno Setup registers the uninstall entry under the AppId in packaging/installer.iss + "_is1".
-# Keep both in sync — a mismatch makes every install look portable and falls back to the wizard.
 _SETUP_APP_ID = "{D8518C0E-7D14-47D9-A9D8-4030E3B25DB6}_is1"
 _UNINSTALL_KEY = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{_SETUP_APP_ID}"
 
 
 @dataclass(frozen=True)
 class InstallLocation:
-    """A registered installation the setup program can update where it stands."""
-
     directory: Path
     all_users: bool
 
@@ -125,13 +121,6 @@ def download_installer(
 
 
 def _finalize_download(partial: Path, destination: Path) -> None:
-    """Move the verified download into place, retrying past a transient file lock.
-
-    Antivirus scanning can briefly hold the file open and fail the rename with Windows
-    error 5 ("Access is denied") even though nothing's wrong. Retry clears that up; a
-    genuinely locked destination (e.g. installer still running) gets a clearer message
-    instead of the raw OS error.
-    """
     last_error: OSError | None = None
     for attempt in range(_FINALIZE_ATTEMPTS):
         try:
@@ -149,29 +138,19 @@ def _finalize_download(partial: Path, destination: Path) -> None:
 
 
 def update_directory() -> Path:
-    """Where the downloaded installer and its log live — outside the folder being replaced."""
     return Path(tempfile.gettempdir()) / "OSRSToolkitUpdate"
 
 
 def application_directory() -> Path:
-    """The folder the running build was started from."""
     return Path(sys.executable).parent
 
 
 def find_install(app_directory: Path | None = None) -> InstallLocation | None:
-    """The registered installation this running copy belongs to, if it is one.
-
-    A portable copy isn't an installation — nothing registered it or knows how to remove it.
-    Compares this folder against the one Setup recorded, rather than checking for "Program
-    Files" in the path (a portable copy can sit there too).
-    """
     if sys.platform != "win32":
         return None
     import winreg
 
     directory = (app_directory or application_directory()).resolve()
-    # Machine-wide first: both registrations can exist at once, but only the one we're
-    # actually running from matters.
     for root, all_users in (
         (winreg.HKEY_LOCAL_MACHINE, True),
         (winreg.HKEY_CURRENT_USER, False),
@@ -193,38 +172,20 @@ def find_install(app_directory: Path | None = None) -> InstallLocation | None:
 
 
 def silent_install_arguments(installer: Path, install: InstallLocation) -> list[str]:
-    """The command line that replaces an installed copy without showing a wizard.
-
-    ``/DIR`` plus the privilege switch keep the update in the same location — without them,
-    an unelevated update of a machine-wide install would land in the user's folder instead,
-    leaving two installations behind.
-    """
     return [
         str(installer),
         "/VERYSILENT",
         "/SUPPRESSMSGBOXES",
         "/NORESTART",
         "/NOCANCEL",
-        # Read by packaging/installer.iss's [Run] section: relaunch the app once files are
-        # in place.
         "/RELAUNCH=1",
         "/ALLUSERS" if install.all_users else "/CURRENTUSER",
         f"/DIR={install.directory}",
-        # The app is gone by the time anything can go wrong, so this log is the only
-        # record of a failed update.
         f"/LOG={update_directory() / 'install.log'}",
     ]
 
 
 def start_installer(path: Path, install: InstallLocation | None = None) -> None:
-    """Hand the update to the setup program and get out of its way.
-
-    An installed copy is replaced in place with no wizard — the app already asked whether
-    to update. A portable copy still gets the wizard, since it's being offered an install
-    it doesn't have yet.
-
-    Detached: what it's about to overwrite includes this process's own executable.
-    """
     arguments = silent_install_arguments(path, install) if install else [str(path)]
     creation_flags = 0
     if sys.platform == "win32":

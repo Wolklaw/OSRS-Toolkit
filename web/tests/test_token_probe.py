@@ -32,8 +32,6 @@ def test_a_403_also_reads_as_definitely_wrong():
 
 
 def test_a_server_error_cannot_be_told_apart_from_a_wrong_token_so_it_says_neither():
-    """A 500 is the service's own fault, not evidence the token was ever wrong — the pasted
-    value should not be rejected over an outage that has nothing to do with it."""
     error = urllib.error.HTTPError("url", 500, "Internal Server Error", {}, None)
     with patch("urllib.request.urlopen", side_effect=error):
         assert probe_token("https://sync.example.invalid", "some-token") is None

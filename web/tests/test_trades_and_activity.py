@@ -7,8 +7,6 @@ from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade
 
 from toolkit_web.config import Settings
 
-# -- manual trades, via the API ------------------------------------------------------------
-
 
 def test_adding_a_trade_returns_its_id(signed_in: TestClient):
     response = signed_in.post(
@@ -84,9 +82,6 @@ def test_adding_a_trade_needs_a_session(client: TestClient):
     assert client.post("/api/trades", json={}).status_code == 401
 
 
-# -- position removal --------------------------------------------------------------------
-
-
 def test_deleting_a_position_removes_it_from_the_journal(signed_in: TestClient, settings: Settings):
     repository = JournalRepository(settings.journal_path("111"))
     position_id = repository.track(
@@ -100,9 +95,6 @@ def test_deleting_a_position_removes_it_from_the_journal(signed_in: TestClient, 
 
 def test_deleting_a_position_needs_a_session(client: TestClient):
     assert client.delete("/api/positions/1").status_code == 401
-
-
-# -- trades page --------------------------------------------------------------------------
 
 
 def test_the_trades_page_shows_an_added_trade(signed_in: TestClient):
@@ -130,9 +122,6 @@ def test_the_trades_page_shows_the_empty_state(signed_in: TestClient):
 
 def test_the_trades_page_needs_a_session(client: TestClient):
     assert client.get("/trades").status_code == 401
-
-
-# -- activity page ------------------------------------------------------------------------
 
 
 def test_the_activity_page_shows_a_ge_fill_with_its_own_label(
@@ -186,9 +175,6 @@ def _ge_fill_event() -> SyncedTrade:
 def test_an_imported_event_can_be_deleted_from_the_journal(
     signed_in: TestClient, settings: Settings
 ):
-    """For an event that should never have been counted — a trade with a friend that was
-    really a gift. Imported events are acknowledged as they land, so one deleted here is not
-    handed back again by the next read."""
     repository = JournalRepository(settings.journal_path("111"))
     repository.add_synced_trade(_ge_fill_event())
 

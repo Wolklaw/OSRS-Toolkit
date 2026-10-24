@@ -1,14 +1,3 @@
-"""Generate the Inno Setup wizard artwork (sidebar and badge images) using the existing Qt
-build dependency, styled to match the application icon instead of Inno's stock grey wizard.
-
-Each image is drawn once against a logical canvas and rasterised at several sizes, since Inno
-picks the closest match for the display's scaling. Output is BMP for compatibility with all
-6.x versions of Inno Setup (PNG support only arrived in 6.3).
-
-Files land in packaging/wizard/, not assets/, since the compiled build sweeps up all of
-assets/ and installer chrome shouldn't ship inside the running application.
-"""
-
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, Qt
@@ -31,7 +20,6 @@ GOLD = QColor("#d5ad52")
 GOLD_BRIGHT = QColor("#f0c862")
 MUTED = QColor("#91a0b4")
 
-# Sizes Inno Setup's docs list for the two image slots, scaled by display DPI.
 SIDEBAR_SIZES = ((164, 314), (192, 386), (246, 459), (328, 628), (410, 797))
 BADGE_SIZES = ((55, 55), (64, 68), (92, 97), (110, 116), (138, 140), (164, 161))
 
@@ -40,7 +28,6 @@ BADGE_CANVAS = (55.0, 55.0)
 
 
 def _canvas(width: int, height: int, logical: tuple[float, float]) -> tuple[QImage, QPainter]:
-    """An image of the requested pixel size, with the painter scaled to logical units."""
     image = QImage(width, height, QImage.Format.Format_RGB32)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -50,7 +37,6 @@ def _canvas(width: int, height: int, logical: tuple[float, float]) -> tuple[QIma
 
 
 def _draw_mark(painter: QPainter, rect: QRectF, stroke: float, radius: float) -> None:
-    """The application's own icon: a gold-edged panel with the initials inside it."""
     painter.setPen(QPen(GOLD, stroke))
     painter.setBrush(PANEL)
     painter.drawRoundedRect(rect, radius, radius)

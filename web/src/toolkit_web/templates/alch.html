@@ -54,8 +54,7 @@
     {% endif %}
   </div>
   {% if candidates %}
-  {# Bars are drawn against the best row on the page, not an absolute ceiling: "how does this
-     compare with the best thing I could be alching" is the question this table answers. #}
+
   {% set best_hourly = candidates | map(attribute="hourly_profit") | max %}
   <div class="table-wrap">
     <table id="alch-table" class="table-dense">

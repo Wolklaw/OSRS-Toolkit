@@ -16,7 +16,6 @@ from toolkit_web.config import Settings
 
 @pytest.fixture
 def guarded(settings: Settings) -> Iterator[TestClient]:
-    """A client whose server has Turnstile keys, so account creation demands a token."""
     configured = dataclasses.replace(
         settings, turnstile_site_key="site-key", turnstile_secret_key="secret-key"
     )
@@ -25,7 +24,6 @@ def guarded(settings: Settings) -> Iterator[TestClient]:
 
 
 def test_no_keys_means_no_challenge_and_no_widget(client: TestClient):
-    """The default setup — local and test — has neither key, and must still be usable."""
     assert "cf-turnstile" not in client.get("/").text
     assert client.post("/auth/recovery/create", json={"display_name": "Wolklaw"}).status_code == 200
 
@@ -42,7 +40,6 @@ def test_creating_an_account_without_a_token_is_refused(guarded: TestClient):
         response = guarded.post("/auth/recovery/create", json={"display_name": "Bot"})
 
     assert response.status_code == 400
-    # A token that was never sent fails on its own — Cloudflare is never asked about it.
     urlopen.assert_not_called()
     assert guarded.get("/api/me").status_code == 401
 
@@ -72,8 +69,6 @@ def test_a_token_cloudflare_accepts_creates_the_account(guarded: TestClient):
 def test_cloudflare_being_unreachable_asks_for_a_retry_rather_than_blaming_the_visitor(
     guarded: TestClient,
 ):
-    """A failed lookup is not a failed check — nobody should be told they failed something
-    they never saw, and no account should be minted on an answer that never arrived."""
     with patch.object(turnstile, "verify", return_value=None):
         response = guarded.post(
             "/auth/recovery/create", json={"display_name": "Wolklaw", "turnstile_token": "solved"}
@@ -84,8 +79,6 @@ def test_cloudflare_being_unreachable_asks_for_a_retry_rather_than_blaming_the_v
 
 
 def test_signing_back_in_with_a_code_needs_no_challenge(guarded: TestClient):
-    """Only creation is gated. A recovery code is already proof the account was made by
-    someone who passed the check once."""
     with patch.object(turnstile, "verify", return_value=True):
         code = guarded.post("/auth/recovery/create", json={"turnstile_token": "solved"}).json()[
             "code"

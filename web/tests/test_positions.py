@@ -1,9 +1,3 @@
-"""Opening a position from a suggestion, and recording what actually happened to it.
-
-Between them these are the whole point of a journal, and until now the web front end could
-only read positions the plugin had opened for it — never open one, never close one out.
-"""
-
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
@@ -40,8 +34,6 @@ def test_a_tracked_flip_shows_up_on_the_dashboard(signed_in: TestClient):
 
 
 def test_a_position_is_tagged_with_the_character_being_looked_at(signed_in: TestClient):
-    """Otherwise a plan opened while viewing one account would later read as belonging to
-    every one of them, which is exactly what the character switcher exists to prevent."""
     signed_in.cookies.set("active_character", "hash-a")
 
     signed_in.post("/api/positions", json=_WHIP)
@@ -70,9 +62,6 @@ def test_a_position_missing_its_prices_is_refused(signed_in: TestClient):
     assert signed_in.get("/api/positions").json()["positions"] == []
 
 
-# -- updating ------------------------------------------------------------------------------
-
-
 def test_recording_fills_completes_a_position_and_realizes_its_profit(signed_in: TestClient):
     position_id = signed_in.post("/api/positions", json=_WHIP).json()["position_id"]
 
@@ -88,7 +77,6 @@ def test_recording_fills_completes_a_position_and_realizes_its_profit(signed_in:
     assert response.status_code == 200
     [position] = signed_in.get("/api/positions").json()["positions"]
     assert position["status"] == "Completed"
-    # (1,555,000 - 1,448,000 - 2% tax of 31,100) * 5
     assert position["realized_profit"] == 379_500
 
 
@@ -154,8 +142,6 @@ def test_a_status_the_journal_does_not_recognise_is_refused(signed_in: TestClien
 def test_an_update_that_sends_no_fills_leaves_the_recorded_ones_alone(
     signed_in: TestClient, settings: Settings
 ):
-    """A synced position's partial fills are history nobody typed. Changing its status from
-    the web should never be a way to lose them."""
     repository = JournalRepository(settings.journal_path("111"))
     position_id = repository.track(
         4151, "Abyssal whip", 5, target_buy=1_450_000, target_sell=1_560_000

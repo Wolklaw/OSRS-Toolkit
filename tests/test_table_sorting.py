@@ -42,11 +42,8 @@ def test_journal_profit_variants_sort_by_amount() -> None:
 
 
 def test_journal_status_order_follows_the_trade_lifecycle_not_alphabet() -> None:
-    """Regression: sorting by Status must not interleave terminal states between active ones."""
     ranked = sorted(_JOURNAL_STATUS_ORDER, key=_JOURNAL_STATUS_ORDER.get)
     assert ranked == [
-        # A plan and a placed offer are the same stage of the lifecycle, so they share a rank
-        # and fall back to sorting by name — the table must not separate them.
         "Planned",
         "Pending buy",
         "Bought",

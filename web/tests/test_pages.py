@@ -17,9 +17,6 @@ def test_the_landing_page_shows_a_sign_in_link_when_signed_out(client: TestClien
 
 
 def test_the_landing_page_says_the_plugin_is_on_the_hub(client: TestClient):
-    """A stranger's shortest read on whether this is worth trusting: RuneLite reviewed the
-    plugin and lists it. Worth saying where they decide, not only on the page they reach
-    afterwards."""
     page = client.get("/").text
 
     assert "Plugin Hub" in page
@@ -56,7 +53,6 @@ def test_an_empty_journal_shows_the_empty_state(signed_in: TestClient):
     response = signed_in.get("/")
 
     assert "Nothing tracked yet" in response.text
-    # No stray Jinja template errors leaking into the page from a None/empty computation.
     assert "Undefined" not in response.text
 
 
@@ -69,16 +65,12 @@ def test_a_tracked_position_appears_on_the_dashboard_with_its_numbers(
     response = signed_in.get("/")
 
     assert "Abyssal whip" in response.text
-    # 2 * 1,000,000 target buy, no fills recorded yet — the planned outlay is what should show.
     assert "2,000,000" in response.text
 
 
 def test_net_worth_shows_the_most_recent_reading_not_an_older_one(
     signed_in: TestClient, settings: Settings
 ):
-    """The headline stat is the latest reading. An older one is allowed to reappear as a
-    history-chart axis label now — that is the chart doing its job — so this checks the
-    specific stat tile rather than the page as a whole."""
     repository = JournalRepository(settings.journal_path("111"))
     for value in (1_000_000, 5_000_000):
         repository.save_loadout_snapshot(_bare_snapshot(total_value=value))
@@ -110,8 +102,6 @@ def test_the_performance_page_shows_a_completed_positions_realized_profit(
 
     assert response.status_code == 200
     assert "Undefined" not in response.text
-    # By-strategy groups even a single position (minimum_positions=1); the default
-    # strategy label from track() is what should show up there.
     assert "Balanced (1" in response.text
 
 
@@ -142,7 +132,7 @@ def test_pvm_shows_supplies_spend_grouped_by_item(signed_in: TestClient, setting
     assert response.status_code == 200
     assert "Undefined" not in response.text
     assert "Prayer potion(4)" in response.text
-    assert "100,000" in response.text  # 10 * 10,000 spent
+    assert "100,000" in response.text
 
 
 def test_the_item_history_page_degrades_cleanly_when_the_wiki_is_unreachable(
@@ -186,7 +176,6 @@ def test_the_item_history_page_shows_volume_and_spread_stats(signed_in: TestClie
 
     from osrs_toolkit.models import TimeseriesPoint
 
-    # Sunday and Monday, per the timestamps below.
     points = [
         TimeseriesPoint(
             timestamp=1755392400,
@@ -244,9 +233,6 @@ def _bare_snapshot(total_value: int):
 
 
 def test_the_wordmark_is_one_flex_item_so_it_does_not_read_rune_scope(signed_in: TestClient):
-    """`.brand` is a flex row with a gap for the icon. Left bare, "Rune" and <em>Scope</em>
-    are two anonymous flex items and that gap opens between them, so the logo renders as
-    "Rune Scope". Wrapping the wordmark is what keeps it one item, and one word."""
     page = signed_in.get("/").text
 
     assert '<span class="wordmark">Rune<em>Scope</em></span>' in page
@@ -254,8 +240,6 @@ def test_the_wordmark_is_one_flex_item_so_it_does_not_read_rune_scope(signed_in:
 
 
 def test_the_signed_out_header_wordmark_is_wrapped_too(client: TestClient):
-    """There are two copies of the brand — sidebar and signed-out topbar — and fixing one is
-    the easy way to leave the other reading "Rune Scope"."""
     page = client.get("/about").text
 
     assert '<span class="wordmark">Rune<em>Scope</em></span>' in page

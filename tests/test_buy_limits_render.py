@@ -1,7 +1,3 @@
-"""Drives the real MainWindow._render_buy_limits, the way test_journal_summary.py drives
-_render_journal — the widgets it fills only exist once the whole page is built.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -40,7 +36,6 @@ def _buy(item_id: int, item_name: str, quantity: int, ago: timedelta) -> SyncedT
 
 
 def _connect(window: MainWindow, tmp_path: Path) -> None:
-    """Give the importer a sync root that exists, which is what "plugin installed" means."""
     root = tmp_path / "sync"
     root.mkdir()
     window._sync_importer = RuneLiteSyncImporter(root)
@@ -59,8 +54,6 @@ def test_empty_state_with_nothing_bought(window: MainWindow, tmp_path: Path) -> 
 def test_an_empty_tab_without_the_plugin_does_not_read_as_room_to_buy(
     window: MainWindow,
 ) -> None:
-    """Nothing counts purchases without the plugin, so "nothing is limited" would be a
-    claim about the account rather than about what this tab can see."""
     window._render_buy_limits()
 
     assert window.buy_limits_empty.isHidden() is False

@@ -59,9 +59,6 @@ def test_characters_need_a_session(client: TestClient):
     assert client.post("/api/characters", json={"name": "x"}).status_code == 401
 
 
-# -- trades attributed to a character ------------------------------------------------------
-
-
 def test_a_trade_can_be_attributed_to_a_character(signed_in: TestClient):
     character = signed_in.post("/api/characters", json={"name": "Wolklaw"}).json()["character"]
 
@@ -109,16 +106,11 @@ def test_deleting_a_character_leaves_its_trades_in_the_log_unattributed(signed_i
 
     response = signed_in.get("/trades")
     assert "Dragon bones" in response.text
-    # "Wolklaw" is also this session's dev-login username, shown in the header regardless —
-    # the real assertion is that the trade row's own character cell reads the placeholder.
     assert "<td>Wolklaw</td>" not in response.text
     assert "<td>—</td>" in response.text
 
 
 def test_a_character_from_one_account_cannot_be_attributed_by_another(client: TestClient):
-    """The character id space is global across all accounts' rows, so this only holds if
-    set_trade_character actually scopes by discord_user_id rather than trusting the id
-    alone."""
     client.post("/auth/dev-login", json={"discord_user_id": "aaa", "username": "First"})
     character = client.post("/api/characters", json={"name": "Alt"}).json()["character"]
 
@@ -134,7 +126,5 @@ def test_a_character_from_one_account_cannot_be_attributed_by_another(client: Te
         },
     )
 
-    # The second account's own character list is empty, so nothing it looks up under its own
-    # id can ever resolve this foreign character_id to a name.
     response = client.get("/trades")
     assert "Alt" not in response.text

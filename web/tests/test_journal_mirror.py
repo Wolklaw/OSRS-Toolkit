@@ -1,11 +1,3 @@
-"""The three routes the desktop window mirrors its journal through.
-
-The merge itself is tested in the toolkit's own suite, against two real journals. These cover
-what this app adds on top: that the routes are reachable with a desktop credential, that the
-version poll is what drains the plugin's queue, and that a trade's character attribution
-survives the move to identities that mean the same thing on both machines.
-"""
-
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -14,7 +6,6 @@ from fastapi.testclient import TestClient
 
 
 def _desktop(signed_in: TestClient) -> tuple[TestClient, dict[str, str]]:
-    """A client with no cookie jar, carrying only a desktop token — as the desktop arrives."""
     token = signed_in.post("/api/desktop-tokens", json={"label": "Desktop"}).json()["token"]
     bare = TestClient(signed_in.app, base_url="https://testserver")
     return bare, {"Authorization": f"Bearer {token}"}
@@ -30,9 +21,6 @@ def _add_trade(client: TestClient, name: str, **headers: str) -> dict:
     return response.json()
 
 
-# -- version -------------------------------------------------------------------------------
-
-
 def test_version_starts_empty_and_moves_with_the_journal(signed_in: TestClient) -> None:
     first = signed_in.get("/api/journal/version").json()
     assert first["counts"] == {"trades": 0, "tracked_trades": 0}
@@ -45,7 +33,6 @@ def test_version_starts_empty_and_moves_with_the_journal(signed_in: TestClient) 
 
 
 def test_version_is_steady_when_nothing_happens(signed_in: TestClient) -> None:
-    """The desktop polls this every minute. It must not look like news each time."""
     _add_trade(signed_in, "Abyssal whip")
     assert signed_in.get("/api/journal/version").json() == (
         signed_in.get("/api/journal/version").json()
@@ -55,12 +42,6 @@ def test_version_is_steady_when_nothing_happens(signed_in: TestClient) -> None:
 def test_version_still_answers_when_the_sync_service_is_unreachable(
     signed_in: TestClient,
 ) -> None:
-    """It imports first now, so it has to survive the import failing.
-
-    The fixture points sync_base_url at an address that does not resolve. An unreachable
-    service must mean "no events this pass", not a mirror that stops working: the desktop's
-    own journal is on disk and is still the right answer.
-    """
     with patch("toolkit_web.app.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
@@ -71,14 +52,6 @@ def test_version_still_answers_when_the_sync_service_is_unreachable(
 
 
 def test_the_desktops_own_poll_drains_the_plugins_queue(signed_in: TestClient) -> None:
-    """The data flow the whole product rests on: plugin -> sync service -> website -> desktop.
-
-    Every route the desktop calls used to read straight off disk, so somebody using only the
-    desktop window never ran an import and the plugin's events piled up in the sync service
-    until they happened to open the website in a browser. A pull cannot rescue it either -- a
-    pull only follows a version that moved, and with nothing importing, the version never
-    moves. So the version poll is the thing that has to drain the queue.
-    """
     with patch("toolkit_web.app.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
@@ -86,9 +59,6 @@ def test_the_desktops_own_poll_drains_the_plugins_queue(signed_in: TestClient) -
         signed_in.get("/api/journal/version")
 
     importer.return_value.import_pending.assert_called_once()
-
-
-# -- pull and push -------------------------------------------------------------------------
 
 
 def test_the_desktop_can_pull_what_the_website_holds(signed_in: TestClient) -> None:
@@ -113,7 +83,6 @@ def test_pulling_since_a_watermark_carries_only_what_changed(signed_in: TestClie
 
 
 def test_the_desktop_can_seed_an_empty_website(signed_in: TestClient) -> None:
-    """The real first sync: the desktop holds a month of history and this side holds nothing."""
     bare, headers = _desktop(signed_in)
     seed = {
         "trades": [
@@ -171,9 +140,6 @@ def test_a_round_trip_leaves_both_sides_agreeing(signed_in: TestClient) -> None:
     assert len(signed_in.get("/api/trades").json()["trades"]) == 1
 
 
-# -- who may -------------------------------------------------------------------------------
-
-
 def test_the_mirror_needs_an_account(client: TestClient) -> None:
     assert client.get("/api/journal/version").status_code == 401
     assert client.get("/api/journal/pull").status_code == 401
@@ -193,13 +159,7 @@ def test_one_account_cannot_pull_anothers_journal(
     assert [row["item_name"] for row in mine["trades"]] == ["Abyssal whip"]
 
 
-# -- character attribution across the re-key -----------------------------------------------
-
-
 def test_a_trade_keeps_its_character_through_the_new_key(signed_in: TestClient) -> None:
-    """Attribution is stored against the trade's sync_uid now. An autoincrement id names a
-    different trade on every machine, so the old key would follow whichever trade happened to
-    land on that number."""
     created_character = signed_in.post("/api/characters", json={"name": "Wolklaw"}).json()
     character = created_character["character"]
     created = signed_in.post(

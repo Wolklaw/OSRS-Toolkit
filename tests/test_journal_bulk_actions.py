@@ -1,11 +1,3 @@
-"""Selecting several journal rows and acting on all of them.
-
-Editing twenty positions one dialog at a time is the thing this replaces, so what these pin
-down is that a selection of several reaches a batch editor at all, that the batch editor
-cannot touch the per-row numbers, and that one row still gets the full single-row editor it
-always had.
-"""
-
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -17,7 +9,6 @@ from osrs_toolkit.journal import UNCHANGED
 
 
 def _position(window: MainWindow, name: str, quantity: int = 100) -> int:
-    """A position that has bought its full quantity, so it carries a real average."""
     position_id = window._journal.track(1234, name, quantity, 2_000, 2_500)
     window._journal.update_tracked(position_id, "Bought", None, None, None, [(quantity, 1_900)])
     return position_id
@@ -32,16 +23,11 @@ def _select_rows(window: MainWindow, rows: list[int]) -> None:
     table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
 
 
-# -- the table has to allow it at all --------------------------------------------------------
-
-
 def test_the_journal_table_allows_a_multi_row_selection(window: MainWindow) -> None:
-    """Every table was SingleSelection, so there was no way to ask for a batch."""
     assert window.journal_table.selectionMode() == QAbstractItemView.SelectionMode.ExtendedSelection
 
 
 def test_other_tables_are_left_single_select(window: MainWindow) -> None:
-    """Only a table whose actions can act on a batch should offer a batch selection."""
     assert window.loot_log_table.selectionMode() == QAbstractItemView.SelectionMode.SingleSelection
 
 
@@ -59,11 +45,7 @@ def test_the_button_says_how_many_it_will_change(window: MainWindow) -> None:
     assert window.journal_update_button.text() == "Update selected trade"
 
 
-# -- which editor opens ----------------------------------------------------------------------
-
-
 def test_one_row_still_gets_the_full_single_row_editor(window: MainWindow) -> None:
-    """The batch editor cannot touch fills, so a single row must not be routed to it."""
     _position(window, "Shark")
     window._render_journal()
     _select_rows(window, [0])
@@ -90,15 +72,10 @@ def test_several_rows_reach_the_batch_editor(window: MainWindow) -> None:
         window._update_selected_trade()
 
     assert batch.called is True
-    assert batch.call_args[0][0] == 2  # told how many it is editing
-
-
-# -- applying it ------------------------------------------------------------------------------
+    assert batch.call_args[0][0] == 2
 
 
 def test_refiling_a_selection_leaves_every_average_alone(window: MainWindow) -> None:
-    """The batch write must never go near a fill or an average -- they differ per row, and
-    losing them to one wrong click is exactly what a batch editor risks."""
     for name in ("Shark", "Karambwan", "Prayer potion(4)"):
         _position(window, name)
     window._render_journal()
@@ -134,9 +111,6 @@ def test_deleting_a_selection_removes_all_of_them(window: MainWindow) -> None:
     assert window._journal.list_tracked() == []
 
 
-# -- the dialog's own rules -------------------------------------------------------------------
-
-
 def test_the_dialog_starts_on_leave_unchanged_everywhere(qt_app) -> None:
     dialog = RetagTradesDialog(3, ["Balanced (1–4h)"], [("abc", "Wolklaw")])
     try:
@@ -148,7 +122,6 @@ def test_the_dialog_starts_on_leave_unchanged_everywhere(qt_app) -> None:
 
 
 def test_the_dialog_warns_before_completed_rather_than_after(qt_app) -> None:
-    """Finding out from the summary afterwards reads like the app ignored you."""
     dialog = RetagTradesDialog(3, ["Balanced (1–4h)"], [("abc", "Wolklaw")])
     try:
         dialog.status.setCurrentText("Completed")

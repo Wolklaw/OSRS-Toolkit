@@ -1,9 +1,3 @@
-"""Reading a Trade Journal CSV back in.
-
-The round-trip test is the one that matters: the export has existed on its own for a while,
-so the import is only worth anything if it reads what that actually writes.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -45,8 +39,6 @@ def test_a_file_that_is_not_a_journal_export_is_refused():
 
 
 def test_an_empty_file_is_refused_rather_than_read_as_zero_trades():
-    """Silently importing nothing, especially in replace mode, would wipe a journal and
-    report success."""
     with pytest.raises(CsvImportError):
         parse_journal_csv("")
 
@@ -67,7 +59,6 @@ def test_an_open_position_is_skipped_with_a_reason_rather_than_invented():
 
 
 def test_numbers_a_spreadsheet_reformatted_still_read():
-    """Opening the export in Excel and saving it again is the ordinary way a file gets here."""
     content = (
         "Date,Status,Item,Quantity,Buy target,Actual buy (avg),Sell target,"
         "Actual sell (avg),Strategy,Profit (gp),Profit is realized\n"
@@ -112,7 +103,6 @@ def test_a_nonsense_quantity_is_skipped_rather_than_imported_as_zero():
 
 
 def test_the_summary_names_what_replacing_would_delete():
-    """The number is the thing that stops somebody picking Replace by accident."""
     parsed = parse_journal_csv(journal_csv([], [_record()]))
 
     replacing = summarise(parsed, replacing=True, existing=42)

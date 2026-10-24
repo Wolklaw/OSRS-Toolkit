@@ -1,7 +1,3 @@
-"""Drives the real MainWindow._render_loot_log, the way test_buy_limits_render.py drives
-_render_buy_limits — the widgets it fills only exist once the whole page is built.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

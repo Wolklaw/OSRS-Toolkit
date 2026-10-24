@@ -35,9 +35,8 @@ def test_fetch_player_parses_hiscores_response() -> None:
 
 
 def test_fetch_player_skips_malformed_skill_lines_instead_of_disabling_lookup() -> None:
-    """A garbled or shifted hiscores line must not crash the whole parse (regression: P1)."""
     lines = [f"1,{100 + index},0" for index, _skill in enumerate(HISCORE_SKILLS)]
-    lines[1] = "not,a,number"  # Attack's level field is unparsable.
+    lines[1] = "not,a,number"
     body = "\n".join(lines).encode("utf-8")
     with patch("osrs_toolkit.account.urllib.request.urlopen", return_value=FakeResponse(body)):
         profile = fetch_player("Example Player")

@@ -1,11 +1,3 @@
-"""The live price lookup MainWindow builds for the sync importer.
-
-``MainWindow._suggested_sell_prices`` turns the market snapshot already loaded for the
-Watchlist and GE Flipper into a plain ``{item_id: sell_price}`` map, so a buy fill or offer
-with nothing pre-tracked can still seed a real profit estimate (see test_journal.py and
-test_runelite_sync.py for the journal side of that).
-"""
-
 from __future__ import annotations
 
 from osrs_toolkit.app import MainWindow
@@ -44,8 +36,6 @@ def test_empty_before_the_first_market_load(window: MainWindow) -> None:
 
 
 def test_skips_a_point_with_no_usable_observation_on_either_side(window: MainWindow) -> None:
-    """A point with zero prices on both sides (e.g. an item with no trade history) makes
-    offer_targets raise; that one item is skipped rather than the whole lookup failing."""
     dead = _point(
         9,
         high=0,

@@ -1,12 +1,3 @@
-"""A hand-rolled inline SVG line chart for one item's price history.
-
-No charting library: this app has no JS build step and no CDN to pull one from, and a couple
-of polylines is little enough code that pulling in a dependency for it would cost more than it
-saves. Values are plotted, not styled with CSS variables — an SVG downloaded or viewed outside
-the page has no ``:root`` to read them from, so the same handful of hex colours the rest of the
-app uses are written here directly instead.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -20,9 +11,6 @@ _TEXT_COLOR = "#8b8f9a"
 
 
 def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: int = 240) -> str:
-    """An SVG chart of average high/low prices over time, oldest first. Empty string when
-    there is nothing plottable — a caller decides what to show in that case, this does not
-    invent an empty chart to say so."""
     plotted = [
         (point.timestamp, point.average_high, point.average_low)
         for point in points
@@ -105,9 +93,6 @@ def price_history_svg(points: list[TimeseriesPoint], width: int = 760, height: i
 
 
 def volume_history_svg(points: list[TimeseriesPoint], width: int = 760, height: int = 120) -> str:
-    """A bar chart of total (high + low) volume per interval, oldest first, on the same
-    x-axis time span as ``price_history_svg`` so the two can sit stacked. Empty string when
-    there is nothing plottable — no points, or every interval traded zero volume."""
     plotted = [(point.timestamp, point.total_volume) for point in points]
     if len(plotted) < 2:
         return ""
@@ -171,8 +156,6 @@ def volume_history_svg(points: list[TimeseriesPoint], width: int = 760, height: 
 def net_worth_history_svg(
     points: list[tuple[str, int]], width: int = 760, height: int = 200
 ) -> str:
-    """The same chart shape as ``price_history_svg``, for a single series of
-    ``(captured_at, total_value)`` readings instead of an item's two-sided price."""
     if len(points) < 2:
         return ""
     values = [value for _captured_at, value in points]

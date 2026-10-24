@@ -170,7 +170,6 @@ def test_skilling_recipe_supports_multiple_inputs_and_output_tax() -> None:
 
 
 def test_skilling_exempts_food_the_grand_exchange_does_not_tax() -> None:
-    """Lobster is on the exemption list; shark is not."""
     rows = skill_results(
         {},
         [
@@ -187,6 +186,5 @@ def test_skilling_exempts_food_the_grand_exchange_does_not_tax() -> None:
 
     assert lobster.output_value == 200
     assert lobster.profit_action == 20
-    # 2% of the 1,000gp sale, rounded down, still comes off a shark.
     assert shark.output_value == 980
     assert shark.profit_action == 80

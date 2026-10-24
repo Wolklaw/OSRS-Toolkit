@@ -84,5 +84,5 @@ def test_volume_history_svg_draws_a_bar_per_nonzero_interval():
     svg = volume_history_svg(points)
 
     assert svg.startswith("<svg")
-    assert svg.count("<rect") == 2  # the zero-volume interval draws no bar
-    assert "75" in svg  # the max-volume axis label (50 + 25)
+    assert svg.count("<rect") == 2
+    assert "75" in svg

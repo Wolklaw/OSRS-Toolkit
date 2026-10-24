@@ -1,14 +1,3 @@
-"""What the newest desktop release is, asked of GitHub and remembered for a while.
-
-The download page could just link at ``/releases/latest`` and let GitHub draw the list, but
-then the site cannot say which version it is offering, how big it is, or when it landed —
-which is most of what somebody weighing "do I want this?" is actually asking. So the release
-is read once an hour and rendered here instead.
-
-Nothing depends on this succeeding. A page with no release to show still links to the
-releases page, which is where the download would have pointed anyway.
-"""
-
 from __future__ import annotations
 
 import json
@@ -26,9 +15,6 @@ REPO = "Wolklaw/OSRS-Toolkit"
 RELEASES_URL = f"https://github.com/{REPO}/releases"
 LATEST_API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 
-#: GitHub allows 60 unauthenticated calls an hour from one address. One an hour leaves that
-#: budget untouched, and a release that is an hour old on the page is a release nobody has
-#: noticed yet anyway.
 REFRESH_SECONDS = 3600
 
 
@@ -58,11 +44,6 @@ def _download(asset: dict) -> Download | None:
 
 
 def _parse(payload: dict) -> Release | None:
-    """The two assets a release is expected to carry, picked by extension rather than by name.
-
-    Matching on the file type rather than on ``OSRS-Toolkit-Setup-<version>.exe`` means the
-    build can rename or re-version its artifacts without this page quietly losing a button.
-    """
     tag = payload.get("tag_name")
     if not isinstance(tag, str) or not tag:
         return None
@@ -101,15 +82,7 @@ def fetch_latest() -> Release | None:
 
 
 class ReleaseCache:
-    """One shared read of the latest release, refreshed on a timer like the market snapshot.
-
-    Whatever was last fetched is kept when a refresh fails, so a GitHub outage costs the page
-    its freshness rather than its content.
-    """
-
     def __init__(self, fetch: Callable[[], Release | None] | None = None) -> None:
-        #: Looked up at call time rather than bound here, so a test can replace the module's
-        #: fetcher without having to reach inside an app that already built its cache.
         self._fetch = fetch
         self._lock = threading.Lock()
         self._release: Release | None = None

@@ -13,8 +13,6 @@ def _stamp(**delta: float) -> str:
 
 
 def test_a_ge_buy_outside_a_session_is_filed_as_supplies(tmp_path: Path):
-    """The default a player actually lives under: most of what anyone buys on the Grand
-    Exchange is a consumable, so a buy is supplies until they say they are flipping."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     repository.apply_synced_ge_fill(561, "Nature rune", "buy", 1_000, 95, total_quantity=1_000)
@@ -43,8 +41,6 @@ def test_an_opened_offer_outside_a_session_is_filed_as_supplies(tmp_path: Path):
 
 
 def test_supplies_keep_absorbing_the_rest_of_their_own_offer(tmp_path: Path):
-    """A part-filled supplies buy must not spawn a second position for its remaining fills —
-    the same rule flips have always followed."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     repository.apply_synced_ge_fill(561, "Nature rune", "buy", 400, 95, total_quantity=1_000)
@@ -57,8 +53,6 @@ def test_supplies_keep_absorbing_the_rest_of_their_own_offer(tmp_path: Path):
 
 
 def test_a_supplies_position_gets_no_sell_suggestion(tmp_path: Path):
-    """Supplies mirror their sell price to what was paid so nothing reads a profit into
-    them; seeding a market suggestion would undo exactly that."""
     repository = JournalRepository(tmp_path / "journal.db")
 
     repository.apply_synced_ge_fill(
@@ -87,8 +81,6 @@ def test_an_unknown_tracking_mode_is_refused(tmp_path: Path):
 
 
 def test_a_fill_is_judged_by_when_it_happened_not_when_it_imported(tmp_path: Path):
-    """Events wait in the sync queue until a page load drains them. A session closed in the
-    meantime must not retag the flips it was opened for."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session(started_at=_stamp(hours=2))
     repository.end_trading_session()
@@ -162,8 +154,6 @@ def test_a_session_belongs_to_the_character_that_started_it(tmp_path: Path):
 
 
 def test_a_session_with_no_character_covers_every_character(tmp_path: Path):
-    """The same rule an untagged position follows: with no owner to exclude it, it counts
-    everywhere rather than nowhere."""
     repository = JournalRepository(tmp_path / "journal.db")
     repository.start_trading_session()
 

@@ -16,12 +16,6 @@ def test_no_cookie_is_no_session():
 
 
 def test_a_tampered_cookie_is_rejected():
-    """Mutated in the middle of the string, not at the very end.
-
-    The last character of a base64url-encoded HMAC can sit on unused padding bits — flipping
-    it can occasionally decode to the identical byte sequence by coincidence, which made this
-    test flaky rather than wrong. A character mid-signature has no such ambiguity.
-    """
     signer = SessionSigner("secret")
     cookie = signer.issue("111")
     middle = len(cookie) // 2

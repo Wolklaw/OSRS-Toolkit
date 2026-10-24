@@ -20,9 +20,6 @@ def test_the_pvm_page_prompts_for_a_snapshot_when_there_is_none(signed_in: TestC
 def test_an_empty_loadout_is_not_ready_for_a_single_activity(
     signed_in: TestClient, settings: Settings
 ):
-    """Level 1 in everything and nothing owned cannot clear a real boss checklist — every
-    row has to read "Not ready", never "Ready", so an empty snapshot never claims readiness
-    it has no basis for."""
     repository = JournalRepository(settings.journal_path("111"))
     repository.save_loadout_snapshot(_empty_snapshot())
 
@@ -30,8 +27,6 @@ def test_an_empty_loadout_is_not_ready_for_a_single_activity(
 
     assert response.status_code == 200
     assert response.text.count("Not ready") == len(PVM_ACTIVITIES)
-    # A ready cell renders exactly >Ready</td> — distinct from the >Ready</th> column
-    # header and from >Not ready</td>, so this cannot collide with either.
     assert ">Ready</td>" not in response.text
 
 

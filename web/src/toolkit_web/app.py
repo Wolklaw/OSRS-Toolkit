@@ -134,6 +134,9 @@ POSITION_STATUSES = (
 CLOSED_STATUSES = frozenset({"Completed", "Cancelled", "Supplies"})
 
 
+# What each status says to someone who arrived by clicking a link, rather than the bare
+# ``detail`` a JSON client reads. Anything not here is a generic failure, which is honest:
+# guessing at a friendly name for an unexpected code just invents reassurance.
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     accounts = AccountsDB(settings.accounts_db_path)

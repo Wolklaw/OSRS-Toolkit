@@ -1,11 +1,3 @@
-"""Every theme offered in Settings must produce a complete stylesheet.
-
-A theme is a table of colours pushed through one f-string, so the failure worth catching
-is a theme that is offered but half-defined: a name in the dropdown with no palette behind
-it, or a palette missing a colour some rule needs. Both leave the app running and looking
-wrong rather than raising, which is exactly the kind of thing that ships unnoticed.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -23,8 +15,6 @@ def test_applying_a_theme_fills_in_every_colour(window: MainWindow, theme: str) 
     window._apply_theme(theme)
 
     stylesheet = window.styleSheet()
-    # An f-string given a missing attribute would raise, but one given an empty string
-    # quietly produces "color: ;" — a rule Qt drops, leaving that element unthemed.
     assert "None" not in stylesheet
     assert ": ;" not in stylesheet
     assert ": }" not in stylesheet
@@ -33,8 +23,6 @@ def test_applying_a_theme_fills_in_every_colour(window: MainWindow, theme: str) 
 
 @pytest.mark.parametrize("theme", list(_PALETTES))
 def test_a_theme_colours_the_cells_it_paints_itself(window: MainWindow, theme: str) -> None:
-    """Table cells are coloured from Python, not the stylesheet, so they need the switch
-    to reach the attributes the renderers read."""
     window._apply_theme(theme)
     palette = _PALETTES[theme]
 
@@ -57,7 +45,6 @@ def test_a_theme_colours_the_cells_it_paints_itself(window: MainWindow, theme: s
 
 
 def test_an_unknown_saved_theme_falls_back_to_dark(window: MainWindow) -> None:
-    """A settings file written by a newer version can name a theme this one does not have."""
     window._apply_theme("Falador")
 
     assert window._profit_color == _PALETTES["Dark"].profit
@@ -68,19 +55,11 @@ def test_an_unknown_saved_theme_falls_back_to_dark(window: MainWindow) -> None:
 def test_the_gp_fields_are_painted_like_the_spin_boxes_beside_them(
     window: MainWindow, theme: str
 ) -> None:
-    """GpSpinBox is a sibling of QSpinBox rather than a subclass of it, and a stylesheet
-    type selector only reaches subclasses — so rules written against QSpinBox left the
-    cash stack and budget fields with no background, no border and no arrows at all.
-
-    Compared against the slot count beside it rather than against a colour, since what
-    matters is that one rule paints both.
-    """
     window._apply_theme(theme)
 
     assert _field_pixel(window.cash) == _field_pixel(window.slots)
 
 
 def _field_pixel(field: QAbstractSpinBox) -> int:
-    """The colour just inside a field's left border, where its background shows through."""
     image = field.grab().toImage()
     return image.pixel(6, image.height() // 2)
