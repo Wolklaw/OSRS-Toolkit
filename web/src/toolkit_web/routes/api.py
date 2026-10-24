@@ -28,14 +28,19 @@ def build(deps: Deps) -> APIRouter:
 
     @router.get("/api/trading-session")
     def read_trading_session(
-        account: Account = CurrentAccount, active: str | None = ActiveCharacter
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        account_hash: str | None = None,
     ) -> dict:
+        character = account_hash or active
         repository = journal_for(settings, account)
-        running = repository.active_trading_session(active)
+        running = repository.active_trading_session(character)
         return {
             "active": serialize(running) if running else None,
             "mode": repository.flip_tracking_mode(),
-            "recent": [serialize(entry) for entry in repository.list_trading_sessions(active, 10)],
+            "recent": [
+                serialize(entry) for entry in repository.list_trading_sessions(character, 10)
+            ],
         }
 
     @router.post("/api/trading-session", status_code=201)
@@ -43,6 +48,7 @@ def build(deps: Deps) -> APIRouter:
         payload: dict | None = None,
         account: Account = CurrentAccount,
         active: str | None = ActiveCharacter,
+        account_hash: str | None = None,
     ) -> dict:
         payload = payload or {}
         label = str(payload.get("label") or "").strip()[:80]
@@ -58,15 +64,17 @@ def build(deps: Deps) -> APIRouter:
             minutes = max(0, min(minutes, 24 * 60))
             started_at = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
         repository = journal_for(settings, account)
-        session = repository.start_trading_session(active, label, started_at)
+        session = repository.start_trading_session(account_hash or active, label, started_at)
         return {"active": serialize(session)}
 
     @router.delete("/api/trading-session")
     def finish_trading_session(
-        account: Account = CurrentAccount, active: str | None = ActiveCharacter
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        account_hash: str | None = None,
     ) -> dict:
         repository = journal_for(settings, account)
-        ended = repository.end_trading_session(active)
+        ended = repository.end_trading_session(account_hash or active)
         return {"ended": serialize(ended) if ended else None}
 
     @router.put("/api/flip-tracking-mode")

@@ -54,8 +54,11 @@ class ToolkitWebClient:
     def get(self, path: str, timeout: float | None = None, **params: str) -> object | None:
         return self._call("GET", path, params=params, timeout=timeout)
 
-    def post(self, path: str, body: object) -> object | None:
-        return self._call("POST", path, body=body)
+    def post(self, path: str, body: object, **params: str) -> object | None:
+        return self._call("POST", path, body=body, params=params)
+
+    def delete(self, path: str, **params: str) -> object | None:
+        return self._call("DELETE", path, params=params)
 
     def _call(
         self,
@@ -92,6 +95,24 @@ class ToolkitWebClient:
             return None
         self.last_error = None
         return result
+
+    def trading_session(self, account_hash: str = "") -> dict | None:
+        payload = self.get("/api/trading-session", account_hash=account_hash)
+        return payload if isinstance(payload, dict) else None
+
+    def start_trading_session(
+        self, account_hash: str = "", backdate_minutes: int = 0
+    ) -> dict | None:
+        payload = self.post(
+            "/api/trading-session",
+            {"backdate_minutes": backdate_minutes},
+            account_hash=account_hash,
+        )
+        return payload if isinstance(payload, dict) else None
+
+    def stop_trading_session(self, account_hash: str = "") -> dict | None:
+        payload = self.delete("/api/trading-session", account_hash=account_hash)
+        return payload if isinstance(payload, dict) else None
 
     def check(self) -> str:
         if not self.configured:

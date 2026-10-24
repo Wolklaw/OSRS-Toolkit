@@ -256,6 +256,36 @@ class AccountWorker(QObject):
             self.failed.emit(f"Unexpected error while looking up hiscores: {exc}")
 
 
+class TradingSessionWorker(QObject):
+    finished = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, action: str, account_hash: str, backdate_minutes: int = 0) -> None:
+        super().__init__()
+        self.action = action
+        self.account_hash = account_hash
+        self.backdate_minutes = backdate_minutes
+
+    def run(self) -> None:
+        client = configured_web_client()
+        if not client.configured:
+            self.failed.emit("Connect this app to the website under Settings, then Website.")
+            return
+        try:
+            if self.action == "start":
+                client.start_trading_session(self.account_hash, self.backdate_minutes)
+            elif self.action == "stop":
+                client.stop_trading_session(self.account_hash)
+            payload = client.trading_session(self.account_hash)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(f"Unexpected error while reaching the website: {exc}")
+            return
+        if payload is None:
+            self.failed.emit(client.last_error or "The website did not answer.")
+            return
+        self.finished.emit(payload)
+
+
 class SearchLineEdit(QLineEdit):
     def __init__(self, placeholder: str) -> None:
         super().__init__()
@@ -2051,6 +2081,8 @@ class MainWindow(QMainWindow):
         self._ge_slot_states: dict[int, str] | None = None
         self._ge_terminal_items: frozenset[int] | None = None
         self._last_synced_account_hash: str | None = None
+        self._trading_session_thread: QThread | None = None
+        self._trading_session_worker: TradingSessionWorker | None = None
         self._attention_positions: list[int] = []
         self._offer_screen: GEOfferScreen | None = None
         self._live_offers: frozenset[tuple[int, str | None]] = frozenset()
@@ -2084,6 +2116,7 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(250, self, self.load_market)
         QTimer.singleShot(600, self, self._run_startup_notices)
         self._mirror_timer.start()
+        QTimer.singleShot(900, self, self._refresh_trading_session)
         QTimer.singleShot(4_000, self, self._mirror_journal)
         self._market_timer = QTimer(self)
         self._market_timer.setInterval(5 * 60 * 1_000)
@@ -2522,7 +2555,51 @@ class MainWindow(QMainWindow):
         )
         self.journal_period_filter.currentTextChanged.connect(self._journal_period_filter_changed)
         summary.addWidget(self.journal_period_filter)
+
+        session_row = QHBoxLayout()
+        session_row.setSpacing(8)
+        self.trading_session_badge = QLabel(objectName="status")
+        self.trading_session_note = QLabel(objectName="muted")
+        self.trading_session_note.setWordWrap(True)
+        self.trading_session_start = QPushButton("Start trading session")
+        self.trading_session_start.clicked.connect(lambda: self._set_trading_session("start", 0))
+        self.trading_session_backdate = QPushButton("Started an hour ago", objectName="secondary")
+        self.trading_session_backdate.setToolTip(
+            "Count the last hour of Grand Exchange buys as flips too, for when you remember "
+            "the button part way in."
+        )
+        self.trading_session_backdate.clicked.connect(
+            lambda: self._set_trading_session("start", 60)
+        )
+        self.trading_session_stop = QPushButton("Stop session", objectName="secondary")
+        self.trading_session_stop.clicked.connect(lambda: self._set_trading_session("stop", 0))
+        session_hint = (
+            "Outside a trading session a Grand Exchange buy is filed as Supplies rather than "
+            "opened as a flip, because most of what anyone buys is a consumable. This is the "
+            "same switch as the one on the website, and it is the website that holds it."
+        )
+        for widget in (
+            self.trading_session_badge,
+            self.trading_session_note,
+            self.trading_session_start,
+            self.trading_session_stop,
+        ):
+            widget.setToolTip(session_hint)
+        session_row.addWidget(self.trading_session_badge)
+        session_row.addWidget(self.trading_session_note, 1)
+        session_row.addWidget(self.trading_session_start)
+        session_row.addWidget(self.trading_session_backdate)
+        session_row.addWidget(self.trading_session_stop)
+        for widget in (
+            self.trading_session_badge,
+            self.trading_session_note,
+            self.trading_session_start,
+            self.trading_session_backdate,
+            self.trading_session_stop,
+        ):
+            widget.setVisible(False)
         layout.addLayout(summary)
+        layout.addLayout(session_row)
 
         self.ge_offers_empty = QLabel(
             "Connect RuneLite with a character logged in to see your 8 Grand Exchange "
@@ -3251,10 +3328,100 @@ class MainWindow(QMainWindow):
         table.verticalHeader().setDefaultSectionSize(38)
         return table
 
+    def _refresh_trading_session(self) -> None:
+        self._set_trading_session("read", 0)
+
+    def _set_trading_session(self, action: str, backdate_minutes: int) -> None:
+        if self._trading_session_thread is not None:
+            return
+        if not configured_web_client().configured:
+            return
+        self._trading_session_busy(True)
+        thread = QThread(self)
+        worker = TradingSessionWorker(action, self._synced_account_hash() or "", backdate_minutes)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._trading_session_loaded)
+        worker.failed.connect(self._trading_session_failed)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(self._clear_trading_session_worker)
+        self._trading_session_thread = thread
+        self._trading_session_worker = worker
+        thread.start()
+
+    def _clear_trading_session_worker(self) -> None:
+        thread = self._trading_session_thread
+        self._trading_session_thread = None
+        self._trading_session_worker = None
+        if thread is not None:
+            thread.deleteLater()
+
+    def _trading_session_loaded(self, payload: object) -> None:
+        self._trading_session_busy(False)
+        self._render_trading_session(payload if isinstance(payload, dict) else {})
+
+    def _trading_session_failed(self, message: str) -> None:
+        self._trading_session_busy(False)
+        self.trading_session_badge.setVisible(True)
+        self.trading_session_note.setVisible(True)
+        self.trading_session_badge.setText("Unknown")
+        self.trading_session_note.setText(message)
+        self.trading_session_start.setVisible(False)
+        self.trading_session_backdate.setVisible(False)
+        self.trading_session_stop.setVisible(False)
+
+    def _trading_session_busy(self, busy: bool) -> None:
+        for button in (
+            self.trading_session_start,
+            self.trading_session_backdate,
+            self.trading_session_stop,
+        ):
+            button.setEnabled(not busy)
+
+    def _render_trading_session(self, state: dict) -> None:
+        if state.get("mode") == "always":
+            for widget in (
+                self.trading_session_badge,
+                self.trading_session_note,
+                self.trading_session_start,
+                self.trading_session_backdate,
+                self.trading_session_stop,
+            ):
+                widget.setVisible(False)
+            return
+        self.trading_session_badge.setVisible(True)
+        self.trading_session_note.setVisible(True)
+        running = state.get("active")
+        if isinstance(running, dict):
+            started = str(running.get("started_at") or "")[:16].replace("T", " ")
+            label = str(running.get("label") or "")
+            self.trading_session_badge.setText("Flipping")
+            self.trading_session_note.setText(
+                f"Session started {started}{f' - {label}' if label else ''}. "
+                "Grand Exchange buys are being tracked as flips."
+            )
+            self.trading_session_start.setVisible(False)
+            self.trading_session_backdate.setVisible(False)
+            self.trading_session_stop.setVisible(True)
+            return
+        self.trading_session_badge.setText("Not flipping")
+        self.trading_session_note.setText(
+            "Buys are filed as Supplies. Start a session and the ones that follow are tracked "
+            "as flips instead."
+        )
+        self.trading_session_start.setVisible(True)
+        self.trading_session_backdate.setVisible(True)
+        self.trading_session_stop.setVisible(False)
+
     def _change_page(self, row: int) -> None:
         if row >= 0:
             self.pages.setCurrentIndex(row)
             self._release_pending_flashes()
+            if self.NAV_ITEMS[row] == "Trade Journal":
+                self._refresh_trading_session()
 
     def open_settings(self) -> None:
         client = configured_web_client()
