@@ -4,6 +4,59 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-24
+
+### Highlights
+
+- **A Grand Exchange buy is supplies until you say you are flipping.** Every synced buy used
+  to open a tracked flip, so a trip's brews, runes and food ran through Performance as losing
+  trades and dragged the real numbers down with them. Supplies already existed as a status,
+  excluded from performance, the savings goal and the flip ranking -- nothing ever chose it.
+  Now a position the plugin opens starts as Supplies unless a trading session is running.
+  Start one from the Trade Journal, or from the dashboard on the website; it can be backdated
+  an hour for when you remember the button part way in. Whether a buy counts is judged by
+  when the offer happened rather than when the import ran, because events wait in the sync
+  queue until a page load drains them. Setting the tracking mode back to "always" restores
+  the old behaviour for a journal that was built under it. No plugin change: this is a
+  decision about data that was already arriving.
+- **Importing a batch of fills is about three times quicker.** Matching a fill to a position
+  read every position for the character and then both fill tables whole, then threw all but
+  the handful for one item away, so the cost grew with the journal's entire history rather
+  than with the work. On a 1,500-position journal that was 31.9ms per fill; it is now 10.8ms,
+  and the gap widens as a journal grows. Three missing indexes went in underneath it, and
+  connections now open in WAL mode, so a page load no longer takes turns with an import on
+  one file lock.
+- **A mistyped address gets a page instead of a JSON object.** The website had no exception
+  handler at all, so a bad link returned `{"detail": "Not Found"}` with a JSON content type,
+  which the browser then drew with its own JSON viewer -- close enough to a working screen to
+  be confusing. Navigations now get a real 404 page; API clients still get JSON. Signed out,
+  the account pages were doing the same thing, and now redirect to the landing page.
+
+### Changed
+
+- The cash stack, Alch Finder budget and savings goal fields take any amount now, instead of
+  stopping at 2,000,000,000. They were QSpinBoxes, whose value is a 32-bit int and so cannot
+  hold a stack past 2,147,483,647 at all -- with the Grand Exchange's cash cap gone, there
+  was no way to tell the app what you were actually holding. A saved budget or goal above the
+  old ceiling is no longer quietly written back down on start-up either.
+- The RuneLite sync loadout snapshot now carries skill experience alongside levels
+  (`xp`, additive), so a session can tell "trained but didn't level up" from "did nothing".
+  Requires the RuneLite plugin to send it; older builds keep working exactly as before.
+- A new `session_summary()` on the journal infers the player's most recent session from the
+  gaps between loot, deaths and player trades, for the website's "This Session" page.
+  GE flips are intentionally left out -- fills don't carry their own timestamp.
+- Loadout snapshots are kept rather than overwritten, in an append-only history table thinned
+  on a ladder with age: everything for 30 days, then the newest of each day out to a year,
+  then the newest of each week.
+- The source carries no comments and no docstrings. Rationale lives in the commit message,
+  this file, and `docs/` -- somewhere it cannot silently contradict the code. Prompted by two
+  real bugs that were stale comments rather than stale code.
+- The website's HTTP layer is no longer one 2,000-line function. `create_app` is 60 lines of
+  wiring, with the routes in six modules behind `deps.py` and `errors.py`, and the pure
+  shaping helpers in `presentation.py`. No route path, method, status code or JSON shape
+  changed; the OpenAPI schema is identical across all 77 operations.
+
+
 - The cash stack, Alch Finder budget and savings goal fields take any amount now, instead of
   stopping at 2,000,000,000. They were QSpinBoxes, whose value is a 32-bit int and so cannot
   hold a stack past 2,147,483,647 at all -- with the Grand Exchange's cash cap gone, there
