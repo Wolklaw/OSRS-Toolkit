@@ -8,7 +8,7 @@ import sys
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -33,10 +33,81 @@ SNAPSHOT_HISTORY_DAILY_DAYS = 365
 # history can hold more rows than that, so fetches by id go out in chunks below it.
 MAX_SQL_PARAMETERS = 500
 
+# A reader waits this long for a writer rather than failing the request outright. An
+# import pass holds the write lock for a few hundred milliseconds at most; a page load that
+# lands mid-import should queue behind it, not 500.
+BUSY_TIMEOUT_SECONDS = 15.0
+
 # occurred_at is stored as text from the plugin, not a clean sortable instant (fields
 # omitted when zero, or a non-UTC offset), so text comparison is only safe as a loose lower
 # bound to cut away old rows cheaply. Callers still filter exactly on what comes back.
 NOT_BEFORE_SAFETY_MARGIN = timedelta(days=1)
+
+# Supplies-first: a synced buy is a flip only inside a declared trading session. The other
+# mode, 'always', is the pre-session behaviour kept for anyone whose journal was built on it.
+DEFAULT_FLIP_TRACKING_MODE = "session"
+
+
+def _instant(raw: str) -> datetime:
+    """A stored timestamp as a comparable instant; a value without a zone is read as UTC."""
+    parsed = datetime.fromisoformat(raw)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _chunks(values: Sequence[int], size: int) -> Iterator[Sequence[int]]:
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
+
+
+def _fills_for(
+    connection: sqlite3.Connection, table: str, position_ids: Sequence[int]
+) -> list[sqlite3.Row]:
+    """Fills belonging to the given positions, in fill order.
+
+    Scoped to the positions being returned rather than reading the table whole: each
+    position's fills land in a single chunk, so fill order within a position survives the
+    chunking even though the chunks themselves are not globally ordered.
+    """
+    rows: list[sqlite3.Row] = []
+    for chunk in _chunks(position_ids, MAX_SQL_PARAMETERS):
+        placeholders = ",".join("?" * len(chunk))
+        rows.extend(
+            connection.execute(
+                f"SELECT * FROM {table} WHERE position_id IN ({placeholders})"
+                " ORDER BY fill_id ASC",
+                tuple(chunk),
+            ).fetchall()
+        )
+    return rows
+
+
+def _trading_session(row: sqlite3.Row) -> TradingSession:
+    return TradingSession(
+        session_id=int(row["session_id"]),
+        account_hash=str(row["account_hash"]) if row["account_hash"] is not None else None,
+        label=str(row["label"]),
+        started_at=str(row["started_at"]),
+        ended_at=str(row["ended_at"]) if row["ended_at"] is not None else None,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class TradingSession:
+    """A stretch of time the player declared they were flipping.
+
+    Outside one, a Grand Exchange buy the plugin reports is filed as Supplies rather than
+    opened as a flip -- see ``JournalRepository._new_position_status``.
+    """
+
+    session_id: int
+    account_hash: str | None
+    label: str
+    started_at: str
+    ended_at: str | None
+
+    @property
+    def is_open(self) -> bool:
+        return self.ended_at is None
 
 
 @dataclass(frozen=True, slots=True)
@@ -543,6 +614,7 @@ class RetagResult:
 
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
+    FLIP_TRACKING_MODES: ClassVar[frozenset[str]] = frozenset({"session", "always"})
     #: Every status a tracked position can be filed under, so a bulk retag can refuse a
     #: typo rather than writing a status nothing else in the app knows how to read.
     _ALL_STATUSES = frozenset(
@@ -866,9 +938,16 @@ class JournalRepository:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.database_path)
+        connection = sqlite3.connect(self.database_path, timeout=BUSY_TIMEOUT_SECONDS)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # WAL lets every page load read while an import writes; under the rollback journal
+        # they took turns on one file lock, which is what made a sync pass stall the site.
+        # It is a property of the file, so this only converts once, and NORMAL is the
+        # durability WAL is built around -- a crash can cost the last commit, never the
+        # database.
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA synchronous = NORMAL")
         try:
             with connection:
                 yield connection
@@ -876,335 +955,544 @@ class JournalRepository:
             connection.close()
 
     def _initialize(self) -> None:
+        """Bring the schema up to date, in dependency order.
+
+        Every step is idempotent and additive: real trading data lives in these files,
+        so a column is added and backfilled, never dropped. The order matters, because
+        a backfill reads what an earlier step created.
+        """
         with self._connect() as connection:
-            # Migrations below rewrite rows wholesale (backfilling a suggestion, stamping a
-            # completion, giving an old row its sync_uid). None of that is a person editing a
-            # trade, so triggers are dropped for the duration rather than trusting every
-            # statement to preserve the stamp.
+            # These steps rewrite rows wholesale (backfilling a suggestion, stamping a
+            # completion, giving an old row its sync_uid). None of that is a person
+            # editing a trade, so the triggers come off for the duration rather than
+            # every statement being trusted to preserve the stamp.
             for table in self._SYNC_TABLES:
                 connection.execute(f"DROP TRIGGER IF EXISTS {table}_touch_updated_at")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS trades (
-                    trade_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    recorded_at TEXT NOT NULL,
-                    item_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    buy_price INTEGER NOT NULL CHECK (buy_price >= 0),
-                    sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
-                )
-                """
-            )
-            self._migrate_sync_columns(connection, "trades", "trade_id", "recorded_at")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS synced_trades (
-                    event_id TEXT PRIMARY KEY,
-                    occurred_at TEXT NOT NULL,
-                    imported_at TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    counterparty TEXT,
-                    direction TEXT NOT NULL,
-                    metadata_json TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS synced_trade_items (
-                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL REFERENCES synced_trades(event_id) ON DELETE CASCADE,
-                    flow TEXT NOT NULL CHECK (flow IN ('given', 'received')),
-                    item_id INTEGER NOT NULL,
-                    item_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
-                )
-                """
-            )
-            # An opening/cancellation moves no coins, so it has no synced_trades row — but it
-            # still edits a position, and applying it twice would duplicate or delete one.
-            # The queue file is deleted after applying, and deletes can fail on Windows, so
-            # track which ones already landed.
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS applied_offer_events (
-                    event_id TEXT PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS synced_trade_items_event "
-                "ON synced_trade_items(event_id)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS npc_loot_events (
-                    event_id TEXT PRIMARY KEY,
-                    occurred_at TEXT NOT NULL,
-                    imported_at TEXT NOT NULL,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    npc_name TEXT NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS npc_loot_items (
-                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL REFERENCES npc_loot_events(event_id) ON DELETE CASCADE,
-                    item_id INTEGER NOT NULL,
-                    item_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS npc_loot_events_occurred "
-                "ON npc_loot_events(occurred_at)"
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS npc_loot_items_event ON npc_loot_items(event_id)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS player_death_events (
-                    event_id TEXT PRIMARY KEY,
-                    occurred_at TEXT NOT NULL,
-                    imported_at TEXT NOT NULL,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    skulled INTEGER NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS player_death_items (
-                    item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_id TEXT NOT NULL
-                        REFERENCES player_death_events(event_id) ON DELETE CASCADE,
-                    flow TEXT NOT NULL CHECK (flow IN ('equipment', 'inventory')),
-                    item_id INTEGER NOT NULL,
-                    item_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS player_death_events_occurred "
-                "ON player_death_events(occurred_at)"
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS player_death_items_event "
-                "ON player_death_items(event_id)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS loadout_snapshots (
-                    account_hash TEXT PRIMARY KEY,
-                    account_name TEXT NOT NULL,
-                    captured_at TEXT NOT NULL,
-                    equipment_json TEXT NOT NULL,
-                    inventory_json TEXT NOT NULL,
-                    bank_json TEXT NOT NULL,
-                    skills_json TEXT NOT NULL
-                )
-                """
-            )
-            self._add_missing_columns(
-                connection, "loadout_snapshots", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
-            )
-            # History is its own table rather than loadout_snapshots re-keyed on
-            # (account_hash, captured_at): changing a primary key in SQLite means rebuilding
-            # the table and renaming over the original, and these files hold real trading
-            # data. So loadout_snapshots stays exactly what every existing reader already
-            # treats it as -- the newest snapshot per character -- and this sits beside it,
-            # append-only, read by nothing else.
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS loadout_snapshot_history (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    captured_at TEXT NOT NULL,
-                    equipment_json TEXT NOT NULL,
-                    inventory_json TEXT NOT NULL,
-                    bank_json TEXT NOT NULL,
-                    skills_json TEXT NOT NULL,
-                    xp_json TEXT NOT NULL DEFAULT '{}'
-                )
-                """
-            )
-            connection.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS loadout_snapshot_history_captured "
-                "ON loadout_snapshot_history(account_hash, captured_at)"
-            )
-            # Seed the history from the single snapshot a journal written before this table
-            # already holds, so an existing character starts with a point rather than none.
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO loadout_snapshot_history (
-                    account_hash, account_name, captured_at, equipment_json, inventory_json,
-                    bank_json, skills_json, xp_json
-                )
-                SELECT account_hash, account_name, captured_at, equipment_json,
-                       inventory_json, bank_json, skills_json, xp_json
-                FROM loadout_snapshots
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS net_worth_history (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    captured_at TEXT NOT NULL,
-                    total_value INTEGER NOT NULL
-                )
-                """
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS net_worth_history_captured "
-                "ON net_worth_history(captured_at)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS skills_history (
-                    entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_hash TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    captured_at TEXT NOT NULL,
-                    skills_json TEXT NOT NULL
-                )
-                """
-            )
-            self._add_missing_columns(
-                connection, "skills_history", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
-            )
-            connection.execute(
-                "CREATE INDEX IF NOT EXISTS skills_history_captured ON skills_history(captured_at)"
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tracked_trades (
-                    position_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT NOT NULL,
-                    item_id INTEGER,
-                    item_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    target_buy INTEGER NOT NULL CHECK (target_buy >= 0),
-                    target_sell INTEGER NOT NULL CHECK (target_sell >= 0),
-                    actual_buy INTEGER,
-                    actual_sell INTEGER,
-                    status TEXT NOT NULL
-                )
-                """
-            )
-            tracked_columns = {
-                str(row["name"])
-                for row in connection.execute("PRAGMA table_info(tracked_trades)").fetchall()
-            }
-            column_migrations = {
-                "strategy": "TEXT NOT NULL DEFAULT 'Balanced (1–4h)'",
-                "current_buy_suggestion": "INTEGER",
-                "current_sell_suggestion": "INTEGER",
-                "suggestion_reviewed_at": "TEXT",
-                "completed_at": "TEXT",
-                "listed_sell_price": "INTEGER",
-                "account_hash": "TEXT",
-            }
-            for column, definition in column_migrations.items():
-                if column not in tracked_columns:
-                    connection.execute(
-                        f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
-                    )
-            self._migrate_sync_columns(connection, "tracked_trades", "position_id", "created_at")
-            connection.execute(
-                """
-                UPDATE tracked_trades
-                SET strategy = ?
-                WHERE strategy LIKE 'Balanced (%4h)' AND strategy <> ?
-                """,
-                ("Balanced (1–4h)", "Balanced (1–4h)"),
-            )
-            connection.execute(
-                """
-                UPDATE tracked_trades
-                SET current_buy_suggestion = COALESCE(current_buy_suggestion, target_buy),
-                    current_sell_suggestion = COALESCE(current_sell_suggestion, target_sell),
-                    suggestion_reviewed_at = COALESCE(suggestion_reviewed_at, created_at)
-                """
-            )
-            # Backfill completion time for positions saved before it existed, so period
-            # filters don't silently drop old history.
-            connection.execute(
-                """
-                UPDATE tracked_trades
-                SET completed_at = created_at
-                WHERE completed_at IS NULL AND status IN ('Completed', 'Cancelled')
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tracked_sale_fills (
-                    fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    position_id INTEGER NOT NULL
-                        REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
-                )
-                """
-            )
-            # Preserve completed positions created before variable-price fills existed.
-            connection.execute(
-                """
-                INSERT INTO tracked_sale_fills (position_id, quantity, sell_price)
-                SELECT position_id, quantity, actual_sell
-                FROM tracked_trades
-                WHERE status = 'Completed'
-                  AND actual_sell IS NOT NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM tracked_sale_fills
-                      WHERE tracked_sale_fills.position_id = tracked_trades.position_id
-                  )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tracked_buy_fills (
-                    fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    position_id INTEGER NOT NULL
-                        REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
-                    quantity INTEGER NOT NULL CHECK (quantity > 0),
-                    buy_price INTEGER NOT NULL CHECK (buy_price >= 0)
-                )
-                """
-            )
-            # Preserve positions recorded before variable-price buy fills existed: their
-            # single actual_buy price becomes one fill covering the whole quantity.
-            connection.execute(
-                """
-                INSERT INTO tracked_buy_fills (position_id, quantity, buy_price)
-                SELECT position_id, quantity, actual_buy
-                FROM tracked_trades
-                WHERE actual_buy IS NOT NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM tracked_buy_fills
-                      WHERE tracked_buy_fills.position_id = tracked_trades.position_id
-                  )
-                """
-            )
+            self._create_trade_tables(connection)
+            self._create_synced_trade_tables(connection)
+            self._create_activity_tables(connection)
+            self._create_loadout_tables(connection)
+            self._create_timeseries_tables(connection)
+            self._create_position_tables(connection)
+            self._create_session_tables(connection)
             self._install_touch_triggers(connection)
+
+    def _create_trade_tables(self, connection: sqlite3.Connection) -> None:
+        """Create the hand-written trade log, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trades (
+                trade_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recorded_at TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                buy_price INTEGER NOT NULL CHECK (buy_price >= 0),
+                sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
+            )
+            """
+        )
+        self._migrate_sync_columns(connection, "trades", "trade_id", "recorded_at")
+
+    def _create_synced_trade_tables(self, connection: sqlite3.Connection) -> None:
+        """Create what the plugin reported, item by item, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS synced_trades (
+                event_id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL,
+                imported_at TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                counterparty TEXT,
+                direction TEXT NOT NULL,
+                metadata_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS synced_trade_items (
+                item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL REFERENCES synced_trades(event_id) ON DELETE CASCADE,
+                flow TEXT NOT NULL CHECK (flow IN ('given', 'received')),
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+            )
+            """
+        )
+        # An opening/cancellation moves no coins, so it has no synced_trades row — but it
+        # still edits a position, and applying it twice would duplicate or delete one.
+        # The queue file is deleted after applying, and deletes can fail on Windows, so
+        # track which ones already landed.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS applied_offer_events (
+                event_id TEXT PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS synced_trade_items_event "
+            "ON synced_trade_items(event_id)"
+        )
+
+    def _create_activity_tables(self, connection: sqlite3.Connection) -> None:
+        """Create kills and deaths, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS npc_loot_events (
+                event_id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL,
+                imported_at TEXT NOT NULL,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                npc_name TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS npc_loot_items (
+                item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL REFERENCES npc_loot_events(event_id) ON DELETE CASCADE,
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS npc_loot_events_occurred "
+            "ON npc_loot_events(occurred_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS npc_loot_items_event ON npc_loot_items(event_id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS player_death_events (
+                event_id TEXT PRIMARY KEY,
+                occurred_at TEXT NOT NULL,
+                imported_at TEXT NOT NULL,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                skulled INTEGER NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS player_death_items (
+                item_row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL
+                    REFERENCES player_death_events(event_id) ON DELETE CASCADE,
+                flow TEXT NOT NULL CHECK (flow IN ('equipment', 'inventory')),
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                unit_value INTEGER NOT NULL CHECK (unit_value >= 0)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS player_death_events_occurred "
+            "ON player_death_events(occurred_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS player_death_items_event "
+            "ON player_death_items(event_id)"
+        )
+
+    def _create_loadout_tables(self, connection: sqlite3.Connection) -> None:
+        """Create gear, inventory and bank, newest and over time, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS loadout_snapshots (
+                account_hash TEXT PRIMARY KEY,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                equipment_json TEXT NOT NULL,
+                inventory_json TEXT NOT NULL,
+                bank_json TEXT NOT NULL,
+                skills_json TEXT NOT NULL
+            )
+            """
+        )
+        self._add_missing_columns(
+            connection, "loadout_snapshots", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
+        )
+        # History is its own table rather than loadout_snapshots re-keyed on
+        # (account_hash, captured_at): changing a primary key in SQLite means rebuilding
+        # the table and renaming over the original, and these files hold real trading
+        # data. So loadout_snapshots stays exactly what every existing reader already
+        # treats it as -- the newest snapshot per character -- and this sits beside it,
+        # append-only, read by nothing else.
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS loadout_snapshot_history (
+                entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                equipment_json TEXT NOT NULL,
+                inventory_json TEXT NOT NULL,
+                bank_json TEXT NOT NULL,
+                skills_json TEXT NOT NULL,
+                xp_json TEXT NOT NULL DEFAULT '{}'
+            )
+            """
+        )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS loadout_snapshot_history_captured "
+            "ON loadout_snapshot_history(account_hash, captured_at)"
+        )
+        # Seed the history from the single snapshot a journal written before this table
+        # already holds, so an existing character starts with a point rather than none.
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO loadout_snapshot_history (
+                account_hash, account_name, captured_at, equipment_json, inventory_json,
+                bank_json, skills_json, xp_json
+            )
+            SELECT account_hash, account_name, captured_at, equipment_json,
+                   inventory_json, bank_json, skills_json, xp_json
+            FROM loadout_snapshots
+            """
+        )
+
+    def _create_timeseries_tables(self, connection: sqlite3.Connection) -> None:
+        """Create net worth and skills over time, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS net_worth_history (
+                entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                total_value INTEGER NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS net_worth_history_captured "
+            "ON net_worth_history(captured_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS skills_history (
+                entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_hash TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                skills_json TEXT NOT NULL
+            )
+            """
+        )
+        self._add_missing_columns(
+            connection, "skills_history", {"xp_json": "TEXT NOT NULL DEFAULT '{}'"}
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS skills_history_captured ON skills_history(captured_at)"
+        )
+
+    def _create_position_tables(self, connection: sqlite3.Connection) -> None:
+        """Create tracked positions and their fills, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tracked_trades (
+                position_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                item_id INTEGER,
+                item_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                target_buy INTEGER NOT NULL CHECK (target_buy >= 0),
+                target_sell INTEGER NOT NULL CHECK (target_sell >= 0),
+                actual_buy INTEGER,
+                actual_sell INTEGER,
+                status TEXT NOT NULL
+            )
+            """
+        )
+        tracked_columns = {
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(tracked_trades)").fetchall()
+        }
+        column_migrations = {
+            "strategy": "TEXT NOT NULL DEFAULT 'Balanced (1–4h)'",
+            "current_buy_suggestion": "INTEGER",
+            "current_sell_suggestion": "INTEGER",
+            "suggestion_reviewed_at": "TEXT",
+            "completed_at": "TEXT",
+            "listed_sell_price": "INTEGER",
+            "account_hash": "TEXT",
+        }
+        for column, definition in column_migrations.items():
+            if column not in tracked_columns:
+                connection.execute(
+                    f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
+                )
+        self._migrate_sync_columns(connection, "tracked_trades", "position_id", "created_at")
+        connection.execute(
+            """
+            UPDATE tracked_trades
+            SET strategy = ?
+            WHERE strategy LIKE 'Balanced (%4h)' AND strategy <> ?
+            """,
+            ("Balanced (1–4h)", "Balanced (1–4h)"),
+        )
+        connection.execute(
+            """
+            UPDATE tracked_trades
+            SET current_buy_suggestion = COALESCE(current_buy_suggestion, target_buy),
+                current_sell_suggestion = COALESCE(current_sell_suggestion, target_sell),
+                suggestion_reviewed_at = COALESCE(suggestion_reviewed_at, created_at)
+            """
+        )
+        # Backfill completion time for positions saved before it existed, so period
+        # filters don't silently drop old history.
+        connection.execute(
+            """
+            UPDATE tracked_trades
+            SET completed_at = created_at
+            WHERE completed_at IS NULL AND status IN ('Completed', 'Cancelled')
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tracked_sale_fills (
+                fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                position_id INTEGER NOT NULL
+                    REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                sell_price INTEGER NOT NULL CHECK (sell_price >= 0)
+            )
+            """
+        )
+        # Preserve completed positions created before variable-price fills existed.
+        connection.execute(
+            """
+            INSERT INTO tracked_sale_fills (position_id, quantity, sell_price)
+            SELECT position_id, quantity, actual_sell
+            FROM tracked_trades
+            WHERE status = 'Completed'
+              AND actual_sell IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM tracked_sale_fills
+                  WHERE tracked_sale_fills.position_id = tracked_trades.position_id
+              )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tracked_buy_fills (
+                fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                position_id INTEGER NOT NULL
+                    REFERENCES tracked_trades(position_id) ON DELETE CASCADE,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                buy_price INTEGER NOT NULL CHECK (buy_price >= 0)
+            )
+            """
+        )
+        # Preserve positions recorded before variable-price buy fills existed: their
+        # single actual_buy price becomes one fill covering the whole quantity.
+        connection.execute(
+            """
+            INSERT INTO tracked_buy_fills (position_id, quantity, buy_price)
+            SELECT position_id, quantity, actual_buy
+            FROM tracked_trades
+            WHERE actual_buy IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM tracked_buy_fills
+                  WHERE tracked_buy_fills.position_id = tracked_trades.position_id
+              )
+            """
+        )
+        # Every tracked-position read joins fills back to their position and filters
+        # by character. Without these SQLite scanned both fill tables whole each time,
+        # which made an import cost time proportional to the journal's entire history
+        # rather than to the handful of positions the fills actually touched.
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS tracked_sale_fills_position "
+            "ON tracked_sale_fills(position_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS tracked_buy_fills_position "
+            "ON tracked_buy_fills(position_id)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS tracked_trades_live "
+            "ON tracked_trades(deleted_at, account_hash)"
+        )
+
+    def _create_session_tables(self, connection: sqlite3.Connection) -> None:
+        """Create trading sessions, and this journal's own settings, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trading_sessions (
+                session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_hash TEXT,
+                label TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS trading_sessions_open "
+            "ON trading_sessions(ended_at, account_hash)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS journal_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+
+    def _setting(self, key: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM journal_settings WHERE key = ?", (key,)
+            ).fetchone()
+        return str(row["value"]) if row is not None else None
+
+    def _write_setting(self, key: str, value: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO journal_settings (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def flip_tracking_mode(self) -> str:
+        """Whether a Grand Exchange buy the plugin reports is a flip or a supply run.
+
+        'session' only opens a flip while a trading session is running, and files everything
+        else as Supplies. 'always' is how this worked before sessions existed: every buy
+        became a tracked flip, which filed a trip's worth of brews and runes as losing
+        trades and dragged the performance pages down with them.
+        """
+        value = self._setting("flip_tracking_mode")
+        return value if value in self.FLIP_TRACKING_MODES else DEFAULT_FLIP_TRACKING_MODE
+
+    def set_flip_tracking_mode(self, mode: str) -> None:
+        if mode not in self.FLIP_TRACKING_MODES:
+            raise ValueError("mode must be 'session' or 'always'")
+        self._write_setting("flip_tracking_mode", mode)
+
+    def start_trading_session(
+        self,
+        account_hash: str | None = None,
+        label: str = "",
+        started_at: str | None = None,
+    ) -> TradingSession:
+        """Open a session, closing whatever was already running for the same character.
+
+        Two open sessions for one character would make "am I flipping right now" ambiguous
+        and leave the older one to be closed by hand, so starting one is also how you
+        restart one.
+
+        ``started_at`` backdates the session. Offers reach the journal through a queue, so
+        someone who flipped for an hour before remembering to press the button can still say
+        so, and the buys already imported as supplies are the ones they were.
+        """
+        now = _now()
+        opened_at = started_at or now
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE trading_sessions SET ended_at = ?"
+                " WHERE ended_at IS NULL AND (account_hash IS ? OR account_hash IS NULL)",
+                (now, account_hash),
+            )
+            cursor = connection.execute(
+                "INSERT INTO trading_sessions (account_hash, label, started_at)"
+                " VALUES (?, ?, ?)",
+                (account_hash, label.strip(), opened_at),
+            )
+            session_id = int(cursor.lastrowid)
+        return TradingSession(session_id, account_hash, label.strip(), opened_at, None)
+
+    def end_trading_session(self, account_hash: str | None = None) -> TradingSession | None:
+        """Close the session covering this character, if one is running."""
+        running = self.active_trading_session(account_hash)
+        if running is None:
+            return None
+        ended_at = _now()
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE trading_sessions SET ended_at = ? WHERE session_id = ?",
+                (ended_at, running.session_id),
+            )
+        return replace(running, ended_at=ended_at)
+
+    def active_trading_session(self, account_hash: str | None = None) -> TradingSession | None:
+        """The open session covering this character, newest first.
+
+        A session with no character of its own covers every character, the same way an
+        untagged position belongs to all of them.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM trading_sessions"
+                " WHERE ended_at IS NULL AND (account_hash IS ? OR account_hash IS NULL)"
+                " ORDER BY started_at DESC, session_id DESC LIMIT 1",
+                (account_hash,),
+            ).fetchone()
+        return _trading_session(row) if row is not None else None
+
+    def list_trading_sessions(
+        self, account_hash: str | None = None, limit: int = 50
+    ) -> list[TradingSession]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM trading_sessions"
+                " WHERE account_hash IS ? OR account_hash IS NULL OR ? IS NULL"
+                " ORDER BY started_at DESC, session_id DESC LIMIT ?",
+                (account_hash, account_hash, max(1, limit)),
+            ).fetchall()
+        return [_trading_session(row) for row in rows]
+
+    def _new_position_status(
+        self, account_hash: str | None, occurred_at: str | None = None
+    ) -> str:
+        """What a position opened from a plugin event should start life as.
+
+        A Grand Exchange buy is only a flip while the player says they are flipping.
+        Everything else bought is a consumable, and filing those as flips is what put a
+        trip's supplies through the performance pages as losses.
+
+        Judged against when the offer happened rather than when this import ran: events sit
+        in the sync queue until a page load drains them, so a session closed in the meantime
+        would otherwise retag the flips it was opened for.
+        """
+        if self.flip_tracking_mode() == "always":
+            return "Pending buy"
+        return "Pending buy" if self._session_covers(account_hash, occurred_at) else "Supplies"
+
+    def _session_covers(self, account_hash: str | None, occurred_at: str | None) -> bool:
+        if occurred_at is None:
+            return self.active_trading_session(account_hash) is not None
+        try:
+            moment = _instant(occurred_at)
+        except ValueError:
+            # An unparseable stamp is the plugin's, not ours to reject here; fall back to
+            # the live answer rather than silently filing the buy as supplies.
+            return self.active_trading_session(account_hash) is not None
+        for session in self.list_trading_sessions(account_hash, limit=200):
+            if _instant(session.started_at) > moment:
+                continue
+            if session.ended_at is None or _instant(session.ended_at) >= moment:
+                return True
+        return False
 
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
@@ -1312,33 +1600,36 @@ class JournalRepository:
             )
             return int(cursor.lastrowid)
 
-    def list_tracked(self, account_hash: str | None = None) -> list[TrackedTrade]:
+    def list_tracked(
+        self, account_hash: str | None = None, item_id: int | None = None
+    ) -> list[TrackedTrade]:
         """Every tracked position, or just one character's plus anything never tagged to one.
 
         An untagged position has no owner to exclude it, so it's kept in every filtered read
         rather than only the unfiltered one.
+
+        ``item_id`` narrows it to one item. Matching a fill or an offer only ever looks at
+        the positions for the item it names, and reading the whole journal to throw all but
+        a handful away is what made importing a batch cost time proportional to the square
+        of the journal's size.
         """
+        clauses = ["deleted_at IS NULL"]
+        parameters: list[object] = []
+        if account_hash is not None:
+            clauses.append("(account_hash = ? OR account_hash IS NULL)")
+            parameters.append(account_hash)
+        if item_id is not None:
+            clauses.append("item_id = ?")
+            parameters.append(item_id)
         with self._connect() as connection:
-            if account_hash is None:
-                rows = connection.execute(
-                    "SELECT * FROM tracked_trades WHERE deleted_at IS NULL"
-                    " ORDER BY created_at DESC, position_id DESC"
-                ).fetchall()
-            else:
-                rows = connection.execute(
-                    """
-                    SELECT * FROM tracked_trades
-                    WHERE deleted_at IS NULL AND (account_hash = ? OR account_hash IS NULL)
-                    ORDER BY created_at DESC, position_id DESC
-                    """,
-                    (account_hash,),
-                ).fetchall()
-            fill_rows = connection.execute(
-                "SELECT * FROM tracked_sale_fills ORDER BY fill_id ASC"
+            rows = connection.execute(
+                f"SELECT * FROM tracked_trades WHERE {' AND '.join(clauses)}"
+                " ORDER BY created_at DESC, position_id DESC",
+                tuple(parameters),
             ).fetchall()
-            buy_fill_rows = connection.execute(
-                "SELECT * FROM tracked_buy_fills ORDER BY fill_id ASC"
-            ).fetchall()
+            position_ids = [int(row["position_id"]) for row in rows]
+            fill_rows = _fills_for(connection, "tracked_sale_fills", position_ids)
+            buy_fill_rows = _fills_for(connection, "tracked_buy_fills", position_ids)
         fills_by_position: dict[int, list[SaleFill]] = {}
         for row in fill_rows:
             position_id = int(row["position_id"])
@@ -1522,6 +1813,7 @@ class JournalRepository:
         total_quantity: int | None = None,
         suggested_sell_price: int | None = None,
         account_hash: str | None = None,
+        occurred_at: str | None = None,
     ) -> int | None:
         """Match a synced GE fill to the oldest eligible tracked position and record it as a
         buy or sale fill, transitioning status when it completes a side.
@@ -1557,7 +1849,7 @@ class JournalRepository:
         # Restricted to this character's own positions (plus any never tagged to one), so a
         # fill on one character can't absorb into another character's position for the same
         # item.
-        tracked = [trade for trade in self.list_tracked(account_hash) if trade.item_id == item_id]
+        tracked = self.list_tracked(account_hash, item_id)
         candidates = sorted(
             (trade for trade in tracked if trade.status in eligible_statuses),
             key=lambda trade: trade.created_at,
@@ -1635,6 +1927,14 @@ class JournalRepository:
             unit_price,
             account_hash=account_hash,
         )
+        opened_as = self._new_position_status(account_hash, occurred_at)
+        if opened_as == "Supplies":
+            # Not a flip, so it gets no sell suggestion: a Supplies row mirrors its sell
+            # price to what was paid precisely so nothing reads a profit into it.
+            self.update_tracked(
+                position_id, "Supplies", None, None, None, [(quantity, unit_price)]
+            )
+            return position_id
         status = "Bought" if quantity == total_quantity else "Pending buy"
         self.update_tracked(position_id, status, None, None, None, [(quantity, unit_price)])
         if suggested_sell_price is not None and suggested_sell_price > unit_price:
@@ -1651,6 +1951,7 @@ class JournalRepository:
         suggested_sell_price: int | None = None,
         restored: bool = False,
         account_hash: str | None = None,
+        occurred_at: str | None = None,
     ) -> int | None:
         """Start (or advance) tracking the moment an offer is placed, before anything fills.
 
@@ -1687,21 +1988,22 @@ class JournalRepository:
             raise ValueError("side must be 'buy' or 'sell'")
         # Restricted the same way apply_synced_ge_fill is: to this character's own positions
         # plus any never tagged to one.
-        by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
+        by_age = sorted(
+            self.list_tracked(account_hash, item_id), key=lambda trade: trade.created_at
+        )
         if side == "buy":
             untouched_plan = next(
                 (
                     trade
                     for trade in by_age
-                    if trade.item_id == item_id
-                    and trade.status == "Pending buy"
+                    if trade.status == "Pending buy"
                     and trade.bought_quantity == 0
                     and trade.target_sell > trade.target_buy
                 ),
                 None,
             )
             already_tracked = self._offer_already_tracked(
-                by_age, item_id, total_quantity, offer_price, restored
+                by_age, total_quantity, offer_price, restored
             )
             # A newly placed offer is a plan being acted on, so the plan takes it. A re-sent
             # offer is already running and tracked elsewhere — taking the plan there would
@@ -1718,6 +2020,9 @@ class JournalRepository:
                     offer_price,
                     account_hash=account_hash,
                 )
+                if self._new_position_status(account_hash, occurred_at) == "Supplies":
+                    self.update_tracked(position_id, "Supplies", None, None)
+                    return position_id
                 if suggested_sell_price is not None and suggested_sell_price > offer_price:
                     self.review_suggestion(position_id, offer_price, suggested_sell_price)
                 return position_id
@@ -1732,17 +2037,10 @@ class JournalRepository:
                     quantity=total_quantity,
                 )
             return planned.position_id
-        candidate = next(
-            (trade for trade in by_age if trade.item_id == item_id and trade.status == "Bought"),
-            None,
-        )
+        candidate = next((trade for trade in by_age if trade.status == "Bought"), None)
         if candidate is None and restored:
             already_listed = next(
-                (
-                    trade
-                    for trade in by_age
-                    if trade.item_id == item_id and trade.status == "Listed for sale"
-                ),
+                (trade for trade in by_age if trade.status == "Listed for sale"),
                 None,
             )
             if already_listed is not None:
@@ -1753,9 +2051,7 @@ class JournalRepository:
                 (
                     trade
                     for trade in by_age
-                    if trade.item_id == item_id
-                    and trade.status == "Pending buy"
-                    and trade.bought_quantity > 0
+                    if trade.status == "Pending buy" and trade.bought_quantity > 0
                 ),
                 None,
             )
@@ -1764,12 +2060,7 @@ class JournalRepository:
                 # relisting the rest changes nothing but the price — without recording it the
                 # row stays flagged against the ask the player just abandoned.
                 part_sold = next(
-                    (
-                        trade
-                        for trade in by_age
-                        if trade.item_id == item_id and trade.status == "Partially sold"
-                    ),
-                    None,
+                    (trade for trade in by_age if trade.status == "Partially sold"), None
                 )
                 if part_sold is None:
                     return None
@@ -1790,22 +2081,21 @@ class JournalRepository:
     @staticmethod
     def _offer_already_tracked(
         by_age: list[TrackedTrade],
-        item_id: int,
         total_quantity: int,
         offer_price: int,
         restored: bool,
     ) -> TrackedTrade | None:
         """The position a buy offer is already tracked by, when the offer is not a new one.
 
-        Only consulted once no untouched plan matched, so every candidate here either has
-        fills or was opened by an offer of its own. See ``apply_offer_opened`` for why a
-        restored offer may adopt any of them while an unflagged one needs an exact match.
+        ``by_age`` is already narrowed to one item and one character by the caller. Only
+        consulted once no untouched plan matched, so every candidate here either has fills
+        or was opened by an offer of its own. See ``apply_offer_opened`` for why a restored
+        offer may adopt any of them while an unflagged one needs an exact match.
         """
         in_flight = [
             trade
             for trade in by_age
-            if trade.item_id == item_id
-            and trade.status in ("Pending buy", "Supplies")
+            if trade.status in ("Pending buy", "Supplies")
             and trade.bought_quantity < trade.quantity
         ]
         if not in_flight:
@@ -1858,17 +2148,14 @@ class JournalRepository:
         """
         if side not in ("buy", "sell"):
             raise ValueError("side must be 'buy' or 'sell'")
-        by_age = sorted(self.list_tracked(account_hash), key=lambda trade: trade.created_at)
+        by_age = sorted(
+            self.list_tracked(account_hash, item_id), key=lambda trade: trade.created_at
+        )
         if side == "sell":
             # A sell offer never created the position, so its price/size don't describe how
             # the position was tracked. Status is the honest thing to match on.
             candidate = next(
-                (
-                    trade
-                    for trade in by_age
-                    if trade.item_id == item_id and trade.status == "Listed for sale"
-                ),
-                None,
+                (trade for trade in by_age if trade.status == "Listed for sale"), None
             )
             if candidate is None:
                 return None
@@ -1880,8 +2167,7 @@ class JournalRepository:
             (
                 trade
                 for trade in by_age
-                if trade.item_id == item_id
-                and trade.status in ("Pending buy", "Supplies")
+                if trade.status in ("Pending buy", "Supplies")
                 and trade.quantity == total_quantity
                 and trade.target_buy == offer_price
             ),

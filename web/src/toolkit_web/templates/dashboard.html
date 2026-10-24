@@ -138,6 +138,44 @@
   </div>
 </div>
 
+{#
+  Whether a Grand Exchange buy counts as a flip or as supplies. Off by default, because most
+  of what anyone buys is a consumable -- treating every purchase as a flip filed a trip's
+  worth of brews and runes as losing trades and dragged the performance pages down with them.
+  The toggle is on the dashboard rather than in settings because it is a thing you do, like
+  starting a stopwatch, not a thing you configure once.
+#}
+{% if flip_tracking_mode == "session" %}
+<div class="panel session-bar {{ 'is-live' if trading_session else '' }}">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>
+        {% if trading_session %}<span class="badge ok">Flipping</span>
+        {% else %}<span class="badge">Not flipping</span>{% endif %}
+        Trading session
+      </h2>
+      <p class="hint tight" id="session-hint">
+        {% if trading_session %}
+          Started {{ trading_session.started_at[:16].replace("T", " ") }}{% if trading_session.label %} &middot; {{ trading_session.label }}{% endif %}.
+          Grand Exchange buys are being tracked as flips.
+        {% else %}
+          Buys are filed as <strong>Supplies</strong>. Start a session and the ones that follow
+          are tracked as flips instead.
+        {% endif %}
+      </p>
+    </div>
+    {% if trading_session %}
+    <button class="button secondary small" onclick="endTradingSession(this)">Stop session</button>
+    {% else %}
+    <button class="button small" onclick="beginTradingSession(this, 0)">Start trading session</button>
+    <button class="button ghost small" onclick="beginTradingSession(this, 60)"
+            title="Count the last hour of buys as flips too">Started an hour ago</button>
+    {% endif %}
+  </div>
+  <div class="hint" id="session-status"></div>
+</div>
+{% endif %}
+
 {% if attention_count %}
 <div class="callout bad" style="margin-bottom:1.1rem">
   <strong>{{ attention_count }} ask{{ '' if attention_count == 1 else 's' }} the market has moved past.</strong>
@@ -473,6 +511,28 @@
   async function deletePosition(positionId) {
     if (!confirm('Remove this position? This does not undo anything in game.')) { return; }
     await fetch(`/api/positions/${positionId}`, { method: 'DELETE' });
+    location.reload();
+  }
+
+async function beginTradingSession(button, backdateMinutes) {
+    button.disabled = true;
+    const result = await api('POST', '/api/trading-session', { backdate_minutes: backdateMinutes });
+    if (!result.ok) {
+      button.disabled = false;
+      setStatus('session-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  async function endTradingSession(button) {
+    button.disabled = true;
+    const result = await api('DELETE', '/api/trading-session');
+    if (!result.ok) {
+      button.disabled = false;
+      setStatus('session-status', result.error, 'error');
+      return;
+    }
     location.reload();
   }
 

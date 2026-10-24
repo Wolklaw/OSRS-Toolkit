@@ -45,7 +45,7 @@ def test_mint_returns_none_when_unreachable():
 
 
 def test_generating_a_token_pairs_the_account(signed_in: TestClient):
-    with patch("toolkit_web.app.mint_pairing_token", return_value="fresh-token-abc"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="fresh-token-abc"):
         response = signed_in.post("/api/pairing-token/generate")
 
     assert response.status_code == 200
@@ -64,8 +64,8 @@ def test_generating_a_token_does_not_go_through_the_probe(signed_in: TestClient)
     service to confirm its own answer would be redundant, and the wrong signal if that
     second call happened to fail."""
     with (
-        patch("toolkit_web.app.mint_pairing_token", return_value="fresh-token-abc"),
-        patch("toolkit_web.app.probe_token") as probe,
+        patch("toolkit_web.routes.account.mint_pairing_token", return_value="fresh-token-abc"),
+        patch("toolkit_web.routes.account.probe_token") as probe,
     ):
         signed_in.post("/api/pairing-token/generate")
 
@@ -73,7 +73,7 @@ def test_generating_a_token_does_not_go_through_the_probe(signed_in: TestClient)
 
 
 def test_generation_failure_does_not_pair_the_account(signed_in: TestClient):
-    with patch("toolkit_web.app.mint_pairing_token", return_value=None):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value=None):
         response = signed_in.post("/api/pairing-token/generate")
 
     assert response.status_code == 502
@@ -95,10 +95,10 @@ def test_a_paired_account_is_not_told_it_is_connected_until_something_arrives(
 ):
     """The bug this replaces: a saved token rendered as "Plugin connected" whether or not the
     game was running. Saving a token is not the same fact as data arriving."""
-    with patch("toolkit_web.app.mint_pairing_token", return_value="fresh-token-abc"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="fresh-token-abc"):
         signed_in.post("/api/pairing-token/generate")
 
-    with patch("toolkit_web.app.plugin_activity", return_value="idle"):
+    with patch("toolkit_web.routes.pages.plugin_activity", return_value="idle"):
         response = signed_in.get("/")
 
     assert badge_text(response.text) == "Idle"
@@ -106,10 +106,10 @@ def test_a_paired_account_is_not_told_it_is_connected_until_something_arrives(
 
 
 def test_a_paired_account_can_still_generate_a_replacement_token(signed_in: TestClient):
-    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="first-token"):
         signed_in.post("/api/pairing-token/generate")
 
-    with patch("toolkit_web.app.mint_pairing_token", return_value="second-token"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="second-token"):
         response = signed_in.post("/api/pairing-token/generate")
 
     assert response.json()["token"] == "second-token"
@@ -122,12 +122,12 @@ def test_generating_a_token_retires_the_one_it_replaces(signed_in: TestClient):
     """The whole point. Every old token used to stay valid forever, so a plugin still holding
     one went on syncing into a pairing this app had stopped reading — silently, on both ends,
     and minting another to fix it only added a third."""
-    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="first-token"):
         signed_in.post("/api/pairing-token/generate")
 
     with (
-        patch("toolkit_web.app.mint_pairing_token", return_value="second-token"),
-        patch("toolkit_web.app.revoke_pairing_token", return_value=True) as revoke,
+        patch("toolkit_web.routes.account.mint_pairing_token", return_value="second-token"),
+        patch("toolkit_web.routes.account.revoke_pairing_token", return_value=True) as revoke,
         patch("toolkit_web.importing.RuneLiteSyncImporter"),
     ):
         body = signed_in.post("/api/pairing-token/generate").json()
@@ -140,8 +140,8 @@ def test_generating_a_token_retires_the_one_it_replaces(signed_in: TestClient):
 
 def test_the_first_token_has_nothing_to_retire(signed_in: TestClient):
     with (
-        patch("toolkit_web.app.mint_pairing_token", return_value="first-token"),
-        patch("toolkit_web.app.revoke_pairing_token") as revoke,
+        patch("toolkit_web.routes.account.mint_pairing_token", return_value="first-token"),
+        patch("toolkit_web.routes.account.revoke_pairing_token") as revoke,
     ):
         body = signed_in.post("/api/pairing-token/generate").json()
 
@@ -152,12 +152,12 @@ def test_the_first_token_has_nothing_to_retire(signed_in: TestClient):
 def test_the_old_token_survives_a_mint_that_failed(signed_in: TestClient):
     """Revoking before the replacement exists would strand an account with no working token
     at all, for a service outage that changed nothing else."""
-    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="first-token"):
         signed_in.post("/api/pairing-token/generate")
 
     with (
-        patch("toolkit_web.app.mint_pairing_token", return_value=None),
-        patch("toolkit_web.app.revoke_pairing_token") as revoke,
+        patch("toolkit_web.routes.account.mint_pairing_token", return_value=None),
+        patch("toolkit_web.routes.account.revoke_pairing_token") as revoke,
         patch("toolkit_web.importing.RuneLiteSyncImporter"),
     ):
         assert signed_in.post("/api/pairing-token/generate").status_code == 502
@@ -168,12 +168,12 @@ def test_the_old_token_survives_a_mint_that_failed(signed_in: TestClient):
 def test_what_the_plugin_already_sent_is_drained_before_the_token_dies(signed_in: TestClient):
     """Events still queued under the old token become unreachable the moment it is revoked —
     no credential will ever name them again — so they are imported first."""
-    with patch("toolkit_web.app.mint_pairing_token", return_value="first-token"):
+    with patch("toolkit_web.routes.account.mint_pairing_token", return_value="first-token"):
         signed_in.post("/api/pairing-token/generate")
 
     with (
-        patch("toolkit_web.app.mint_pairing_token", return_value="second-token"),
-        patch("toolkit_web.app.revoke_pairing_token", return_value=True),
+        patch("toolkit_web.routes.account.mint_pairing_token", return_value="second-token"),
+        patch("toolkit_web.routes.account.revoke_pairing_token", return_value=True),
         patch("toolkit_web.importing.RuneLiteSyncImporter") as importer,
     ):
         signed_in.post("/api/pairing-token/generate")

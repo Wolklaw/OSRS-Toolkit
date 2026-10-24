@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% set page_title = error_title %}
+{% set page_sub = error_sub %}
+{% set main_class = "narrow" %}
+
+{% block content %}
+
+<div class="panel">
+  <div class="prose">
+    <p class="error-code">{{ status_code }}</p>
+    {% if error_detail %}<p>{{ error_detail }}</p>
+    {% else %}<p>Nothing is served at <code>{{ error_path }}</code>.</p>{% endif %}
+    <div class="row" style="margin-top:0.9rem">
+      <button type="button" class="button" onclick="history.back()">Go back</button>
+      <a class="button secondary" href="/">{% if account %}Dashboard{% else %}Home{% endif %}</a>
+      {% if not account %}<a class="button secondary" href="/help">Help</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

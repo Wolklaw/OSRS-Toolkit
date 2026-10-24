@@ -61,7 +61,7 @@ def test_version_still_answers_when_the_sync_service_is_unreachable(
     service must mean "no events this pass", not a mirror that stops working: the desktop's
     own journal is on disk and is still the right answer.
     """
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
     response = signed_in.get("/api/journal/version")
@@ -79,7 +79,7 @@ def test_the_desktops_own_poll_drains_the_plugins_queue(signed_in: TestClient) -
     pull only follows a version that moved, and with nothing importing, the version never
     moves. So the version poll is the thing that has to drain the queue.
     """
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
     with patch("toolkit_web.importing.RuneLiteSyncImporter") as importer:

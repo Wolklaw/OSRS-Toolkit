@@ -85,8 +85,8 @@ def test_a_callback_discord_never_confirmed_is_rejected(client: TestClient):
     state = login.cookies["oauth_state"]
 
     with (
-        patch("toolkit_web.app.discord_oauth.exchange_code", return_value="access-token"),
-        patch("toolkit_web.app.discord_oauth.fetch_user", return_value=None),
+        patch("toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"),
+        patch("toolkit_web.routes.account.discord_oauth.fetch_user", return_value=None),
     ):
         response = client.get(
             "/auth/discord/callback",
@@ -105,8 +105,8 @@ def test_a_successful_callback_signs_the_user_in(client: TestClient):
     user = DiscordUser(id="111", username="Wolklaw", avatar_url=None)
 
     with (
-        patch("toolkit_web.app.discord_oauth.exchange_code", return_value="access-token"),
-        patch("toolkit_web.app.discord_oauth.fetch_user", return_value=user),
+        patch("toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"),
+        patch("toolkit_web.routes.account.discord_oauth.fetch_user", return_value=user),
     ):
         response = client.get(
             "/auth/discord/callback",
@@ -131,7 +131,7 @@ def test_a_successful_callback_signs_the_user_in(client: TestClient):
 
 
 def test_setting_a_pairing_token_that_the_service_accepts(signed_in: TestClient):
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         response = signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     assert response.json() == {"ok": True, "verified": True}
@@ -139,7 +139,7 @@ def test_setting_a_pairing_token_that_the_service_accepts(signed_in: TestClient)
 
 
 def test_setting_a_pairing_token_the_service_rejects(signed_in: TestClient):
-    with patch("toolkit_web.app.probe_token", return_value=False):
+    with patch("toolkit_web.routes.account.probe_token", return_value=False):
         response = signed_in.put("/api/pairing-token", json={"token": "bad-token"})
 
     assert response.status_code == 422
@@ -149,7 +149,7 @@ def test_setting_a_pairing_token_the_service_rejects(signed_in: TestClient):
 def test_a_token_saved_while_the_service_cannot_be_reached_is_still_kept(signed_in: TestClient):
     """A network hiccup at the exact moment of saving is not evidence the token was wrong —
     rejecting it here would lose a token that works fine as soon as the outage clears."""
-    with patch("toolkit_web.app.probe_token", return_value=None):
+    with patch("toolkit_web.routes.account.probe_token", return_value=None):
         response = signed_in.put("/api/pairing-token", json={"token": "some-token"})
 
     assert response.status_code == 200
@@ -158,7 +158,7 @@ def test_a_token_saved_while_the_service_cannot_be_reached_is_still_kept(signed_
 
 
 def test_clearing_the_pairing_token(signed_in: TestClient):
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     signed_in.delete("/api/pairing-token")
@@ -286,7 +286,7 @@ def test_characters_is_empty_without_a_pairing_token(signed_in: TestClient):
 
 
 def test_characters_delegates_to_the_sync_service_once_paired(signed_in: TestClient):
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     known = [{"account_hash": "abc", "account_name": "Wolklaw", "last_seen": "..."}]
@@ -300,7 +300,7 @@ def test_a_live_ge_offer_shows_on_the_dashboard(signed_in: TestClient):
     """The sync service has carried live offer-slot state since before this app existed to
     read it — the dashboard just never asked. Pins that asking for it, and rendering what
     comes back, actually works end to end."""
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     slot_payload = {
