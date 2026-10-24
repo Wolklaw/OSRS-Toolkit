@@ -131,6 +131,7 @@ def test_ge_fill_import_sizes_new_position_to_the_offers_total_quantity(tmp_path
     position instead of each spawning their own."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     event = _event(
         "ge_fill",
         {
@@ -165,6 +166,7 @@ def test_ge_fill_import_seeds_the_live_suggestion_for_an_untracked_position(
     suggestion, so a fill nobody pre-tracked still gets a real profit estimate."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     event = _event(
         "ge_fill",
         {
@@ -195,6 +197,7 @@ def test_offer_opened_import_seeds_the_live_suggestion_for_an_untracked_position
 ) -> None:
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     event = _event(
         "ge_offer_opened",
         {
@@ -693,6 +696,7 @@ def test_offer_is_opened_before_its_fills_even_when_file_names_disagree(tmp_path
     Journal rows — one from the fill, one from the opening that followed it."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     # Named so sorting by file name puts the fill first, while time puts the opening first.
     _write_event(
         root,
@@ -759,6 +763,7 @@ def test_cancelling_a_part_filled_buy_resizes_the_position_to_what_bought(
 ) -> None:
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     _write_event(
         root,
         _offer_event(
@@ -804,6 +809,7 @@ def test_a_final_fill_still_lands_when_it_shares_a_timestamp_with_the_cancellati
     arrived, and the fill would then have nowhere left to go."""
     root = tmp_path / "sync"
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session(started_at="2000-01-01T00:00:00+00:00")
     _write_event(
         root,
         _offer_event(

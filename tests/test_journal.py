@@ -554,6 +554,7 @@ def test_ge_fill_buy_with_no_match_sizes_the_new_position_to_the_offer_total(
     later fills of the same offer keep accumulating onto it rather than each spawning
     their own position."""
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session()
 
     first = repository.apply_synced_ge_fill(
         item_id=2,
@@ -590,6 +591,7 @@ def test_ge_fill_buy_with_no_match_seeds_the_live_suggestion_as_the_sell_estimat
     """An untracked fill still gets a real profit estimate when a live market suggestion is
     available, instead of one that always reads as guaranteed break-even."""
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session()
 
     position_id = repository.apply_synced_ge_fill(
         item_id=2,
@@ -646,6 +648,7 @@ def test_offer_opened_buy_starts_tracking_before_anything_fills(tmp_path: Path) 
     """Placing a buy offer should show up in the Journal immediately, not only once the
     first fill lands — nothing has been bought yet, but the player has committed to it."""
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session()
 
     position_id = repository.apply_offer_opened(
         item_id=24_615,
@@ -684,6 +687,7 @@ def test_offer_opened_buy_with_no_plan_seeds_the_live_suggestion_as_the_sell_est
     tmp_path: Path,
 ) -> None:
     repository = JournalRepository(tmp_path / "journal.db")
+    repository.start_trading_session()
 
     position_id = repository.apply_offer_opened(
         item_id=1,

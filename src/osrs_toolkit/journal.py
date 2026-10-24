@@ -8,7 +8,7 @@ import sys
 import uuid
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import ClassVar
@@ -43,6 +43,17 @@ BUSY_TIMEOUT_SECONDS = 15.0
 # bound to cut away old rows cheaply. Callers still filter exactly on what comes back.
 NOT_BEFORE_SAFETY_MARGIN = timedelta(days=1)
 
+# Supplies-first: a synced buy is a flip only inside a declared trading session. The other
+# mode, 'always', is the pre-session behaviour kept for anyone whose journal was built on it.
+DEFAULT_FLIP_TRACKING_MODE = "session"
+
+
+def _instant(raw: str) -> datetime:
+    """A stored timestamp as a comparable instant; a value without a zone is read as UTC."""
+    parsed = datetime.fromisoformat(raw)
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
 def _chunks(values: Sequence[int], size: int) -> Iterator[Sequence[int]]:
     for start in range(0, len(values), size):
         yield values[start : start + size]
@@ -68,6 +79,35 @@ def _fills_for(
             ).fetchall()
         )
     return rows
+
+
+def _trading_session(row: sqlite3.Row) -> TradingSession:
+    return TradingSession(
+        session_id=int(row["session_id"]),
+        account_hash=str(row["account_hash"]) if row["account_hash"] is not None else None,
+        label=str(row["label"]),
+        started_at=str(row["started_at"]),
+        ended_at=str(row["ended_at"]) if row["ended_at"] is not None else None,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class TradingSession:
+    """A stretch of time the player declared they were flipping.
+
+    Outside one, a Grand Exchange buy the plugin reports is filed as Supplies rather than
+    opened as a flip -- see ``JournalRepository._new_position_status``.
+    """
+
+    session_id: int
+    account_hash: str | None
+    label: str
+    started_at: str
+    ended_at: str | None
+
+    @property
+    def is_open(self) -> bool:
+        return self.ended_at is None
 
 
 @dataclass(frozen=True, slots=True)
@@ -574,6 +614,7 @@ class RetagResult:
 
 class JournalRepository:
     _TERMINAL_STATUSES = frozenset({"Completed", "Cancelled"})
+    FLIP_TRACKING_MODES: ClassVar[frozenset[str]] = frozenset({"session", "always"})
     #: Every status a tracked position can be filed under, so a bulk retag can refuse a
     #: typo rather than writing a status nothing else in the app knows how to read.
     _ALL_STATUSES = frozenset(
@@ -933,6 +974,7 @@ class JournalRepository:
             self._create_loadout_tables(connection)
             self._create_timeseries_tables(connection)
             self._create_position_tables(connection)
+            self._create_session_tables(connection)
             self._install_touch_triggers(connection)
 
     def _create_trade_tables(self, connection: sqlite3.Connection) -> None:
@@ -1290,6 +1332,168 @@ class JournalRepository:
             "ON tracked_trades(deleted_at, account_hash)"
         )
 
+    def _create_session_tables(self, connection: sqlite3.Connection) -> None:
+        """Create trading sessions, and this journal's own settings, and migrate what an older journal already holds."""
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trading_sessions (
+                session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_hash TEXT,
+                label TEXT NOT NULL DEFAULT '',
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS trading_sessions_open "
+            "ON trading_sessions(ended_at, account_hash)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS journal_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+
+    def _setting(self, key: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM journal_settings WHERE key = ?", (key,)
+            ).fetchone()
+        return str(row["value"]) if row is not None else None
+
+    def _write_setting(self, key: str, value: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO journal_settings (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def flip_tracking_mode(self) -> str:
+        """Whether a Grand Exchange buy the plugin reports is a flip or a supply run.
+
+        'session' only opens a flip while a trading session is running, and files everything
+        else as Supplies. 'always' is how this worked before sessions existed: every buy
+        became a tracked flip, which filed a trip's worth of brews and runes as losing
+        trades and dragged the performance pages down with them.
+        """
+        value = self._setting("flip_tracking_mode")
+        return value if value in self.FLIP_TRACKING_MODES else DEFAULT_FLIP_TRACKING_MODE
+
+    def set_flip_tracking_mode(self, mode: str) -> None:
+        if mode not in self.FLIP_TRACKING_MODES:
+            raise ValueError("mode must be 'session' or 'always'")
+        self._write_setting("flip_tracking_mode", mode)
+
+    def start_trading_session(
+        self,
+        account_hash: str | None = None,
+        label: str = "",
+        started_at: str | None = None,
+    ) -> TradingSession:
+        """Open a session, closing whatever was already running for the same character.
+
+        Two open sessions for one character would make "am I flipping right now" ambiguous
+        and leave the older one to be closed by hand, so starting one is also how you
+        restart one.
+
+        ``started_at`` backdates the session. Offers reach the journal through a queue, so
+        someone who flipped for an hour before remembering to press the button can still say
+        so, and the buys already imported as supplies are the ones they were.
+        """
+        now = _now()
+        opened_at = started_at or now
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE trading_sessions SET ended_at = ?"
+                " WHERE ended_at IS NULL AND (account_hash IS ? OR account_hash IS NULL)",
+                (now, account_hash),
+            )
+            cursor = connection.execute(
+                "INSERT INTO trading_sessions (account_hash, label, started_at)"
+                " VALUES (?, ?, ?)",
+                (account_hash, label.strip(), opened_at),
+            )
+            session_id = int(cursor.lastrowid)
+        return TradingSession(session_id, account_hash, label.strip(), opened_at, None)
+
+    def end_trading_session(self, account_hash: str | None = None) -> TradingSession | None:
+        """Close the session covering this character, if one is running."""
+        running = self.active_trading_session(account_hash)
+        if running is None:
+            return None
+        ended_at = _now()
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE trading_sessions SET ended_at = ? WHERE session_id = ?",
+                (ended_at, running.session_id),
+            )
+        return replace(running, ended_at=ended_at)
+
+    def active_trading_session(self, account_hash: str | None = None) -> TradingSession | None:
+        """The open session covering this character, newest first.
+
+        A session with no character of its own covers every character, the same way an
+        untagged position belongs to all of them.
+        """
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM trading_sessions"
+                " WHERE ended_at IS NULL AND (account_hash IS ? OR account_hash IS NULL)"
+                " ORDER BY started_at DESC, session_id DESC LIMIT 1",
+                (account_hash,),
+            ).fetchone()
+        return _trading_session(row) if row is not None else None
+
+    def list_trading_sessions(
+        self, account_hash: str | None = None, limit: int = 50
+    ) -> list[TradingSession]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM trading_sessions"
+                " WHERE account_hash IS ? OR account_hash IS NULL OR ? IS NULL"
+                " ORDER BY started_at DESC, session_id DESC LIMIT ?",
+                (account_hash, account_hash, max(1, limit)),
+            ).fetchall()
+        return [_trading_session(row) for row in rows]
+
+    def _new_position_status(
+        self, account_hash: str | None, occurred_at: str | None = None
+    ) -> str:
+        """What a position opened from a plugin event should start life as.
+
+        A Grand Exchange buy is only a flip while the player says they are flipping.
+        Everything else bought is a consumable, and filing those as flips is what put a
+        trip's supplies through the performance pages as losses.
+
+        Judged against when the offer happened rather than when this import ran: events sit
+        in the sync queue until a page load drains them, so a session closed in the meantime
+        would otherwise retag the flips it was opened for.
+        """
+        if self.flip_tracking_mode() == "always":
+            return "Pending buy"
+        return "Pending buy" if self._session_covers(account_hash, occurred_at) else "Supplies"
+
+    def _session_covers(self, account_hash: str | None, occurred_at: str | None) -> bool:
+        if occurred_at is None:
+            return self.active_trading_session(account_hash) is not None
+        try:
+            moment = _instant(occurred_at)
+        except ValueError:
+            # An unparseable stamp is the plugin's, not ours to reject here; fall back to
+            # the live answer rather than silently filing the buy as supplies.
+            return self.active_trading_session(account_hash) is not None
+        for session in self.list_trading_sessions(account_hash, limit=200):
+            if _instant(session.started_at) > moment:
+                continue
+            if session.ended_at is None or _instant(session.ended_at) >= moment:
+                return True
+        return False
+
     def add(self, item_name: str, quantity: int, buy_price: int, sell_price: int) -> int:
         with self._connect() as connection:
             # Named at birth, not when synced — a trade recorded offline needs its final
@@ -1609,6 +1813,7 @@ class JournalRepository:
         total_quantity: int | None = None,
         suggested_sell_price: int | None = None,
         account_hash: str | None = None,
+        occurred_at: str | None = None,
     ) -> int | None:
         """Match a synced GE fill to the oldest eligible tracked position and record it as a
         buy or sale fill, transitioning status when it completes a side.
@@ -1722,6 +1927,14 @@ class JournalRepository:
             unit_price,
             account_hash=account_hash,
         )
+        opened_as = self._new_position_status(account_hash, occurred_at)
+        if opened_as == "Supplies":
+            # Not a flip, so it gets no sell suggestion: a Supplies row mirrors its sell
+            # price to what was paid precisely so nothing reads a profit into it.
+            self.update_tracked(
+                position_id, "Supplies", None, None, None, [(quantity, unit_price)]
+            )
+            return position_id
         status = "Bought" if quantity == total_quantity else "Pending buy"
         self.update_tracked(position_id, status, None, None, None, [(quantity, unit_price)])
         if suggested_sell_price is not None and suggested_sell_price > unit_price:
@@ -1738,6 +1951,7 @@ class JournalRepository:
         suggested_sell_price: int | None = None,
         restored: bool = False,
         account_hash: str | None = None,
+        occurred_at: str | None = None,
     ) -> int | None:
         """Start (or advance) tracking the moment an offer is placed, before anything fills.
 
@@ -1806,6 +2020,9 @@ class JournalRepository:
                     offer_price,
                     account_hash=account_hash,
                 )
+                if self._new_position_status(account_hash, occurred_at) == "Supplies":
+                    self.update_tracked(position_id, "Supplies", None, None)
+                    return position_id
                 if suggested_sell_price is not None and suggested_sell_price > offer_price:
                     self.review_suggestion(position_id, offer_price, suggested_sell_price)
                 return position_id

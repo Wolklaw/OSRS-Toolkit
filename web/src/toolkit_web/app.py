@@ -564,6 +564,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "desktop_last_seen": desktop_last_seen,
                 "offer_rows": offer_rows,
                 "offer_screen": serialize(offer_screen) if offer_screen else None,
+                **trading_session_context(account, filter_hash),
                 **switcher,
             },
         )
@@ -1421,6 +1422,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"ok": True}
 
     # -- auth ----------------------------------------------------------------------------
+
+    def trading_session_context(account: Account, filter_hash: str | None) -> dict:
+        repository = journal_for(settings, account)
+        running = repository.active_trading_session(filter_hash)
+        return {
+            "trading_session": serialize(running) if running else None,
+            "flip_tracking_mode": repository.flip_tracking_mode(),
+        }
+
+    @app.get("/api/trading-session")
+    def read_trading_session(
+        account: Account = CurrentAccount, active: str | None = ActiveCharacter
+    ) -> dict:
+        repository = journal_for(settings, account)
+        running = repository.active_trading_session(active)
+        return {
+            "active": serialize(running) if running else None,
+            "mode": repository.flip_tracking_mode(),
+            "recent": [serialize(entry) for entry in repository.list_trading_sessions(active, 10)],
+        }
+
+    @app.post("/api/trading-session", status_code=201)
+    def begin_trading_session(
+        payload: dict | None = None,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> dict:
+        """Declare that Grand Exchange buys from here on are flips, not supplies.
+
+        ``started_at`` backdates it, for the usual case of remembering the button an hour
+        in; it is clamped to a day so a stray value cannot retag a whole journal.
+        """
+        payload = payload or {}
+        label = str(payload.get("label") or "").strip()[:80]
+        started_at = None
+        raw_minutes = payload.get("backdate_minutes")
+        if raw_minutes is not None:
+            try:
+                minutes = int(raw_minutes)
+            except (TypeError, ValueError) as error:
+                raise HTTPException(
+                    status_code=422, detail="backdate_minutes must be a whole number"
+                ) from error
+            minutes = max(0, min(minutes, 24 * 60))
+            started_at = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+        repository = journal_for(settings, account)
+        session = repository.start_trading_session(active, label, started_at)
+        return {"active": serialize(session)}
+
+    @app.delete("/api/trading-session")
+    def finish_trading_session(
+        account: Account = CurrentAccount, active: str | None = ActiveCharacter
+    ) -> dict:
+        repository = journal_for(settings, account)
+        ended = repository.end_trading_session(active)
+        return {"ended": serialize(ended) if ended else None}
+
+    @app.put("/api/flip-tracking-mode")
+    def set_flip_tracking_mode(payload: dict, account: Account = CurrentAccount) -> dict:
+        mode = str(payload.get("mode") or "")
+        repository = journal_for(settings, account)
+        try:
+            repository.set_flip_tracking_mode(mode)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"mode": mode}
 
     @app.get("/auth/discord/login")
     def discord_login() -> Response:
