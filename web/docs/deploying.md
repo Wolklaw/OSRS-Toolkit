@@ -124,6 +124,29 @@ The `journalctl` line is not optional garnish. A 200 on `/` says nothing about t
 desktop app uses, and those are the ones a half-applied domain-layer bump breaks — check the
 main PID changed too, or you will read the old process's errors and think they are new ones.
 
+### Is anything actually down?
+
+One block, all three hostnames. Mind the scope: the tunnel and the web app are **user**
+units, cockpit is the one **system** unit, and a bare `systemctl is-active cloudflared`
+reports `inactive` for a tunnel that is running perfectly well — it is looking for a system
+unit that does not exist.
+
+```bash
+systemctl --user is-active cloudflared toolkit-web osrs-sync osrs-discord-bot; systemctl is-active cockpit.socket; ss -lnt | grep -E '8000|8100|9090'
+```
+
+From anywhere else, what each hostname should answer:
+
+| URL | Healthy response |
+|---|---|
+| `https://runescope.app` | `200`, the landing page or your dashboard |
+| `https://sync.runescope.app` | `307` to `runescope.app` — it has no page of its own |
+| `https://cockpit.runescope.app` | `302` to a Cloudflare Access sign-in, **then** the console |
+
+That last one catches people out: the machine's web console sits behind Zero Trust, so the
+first thing it serves is a login screen that belongs to Cloudflare, not to cockpit. A sign-in
+prompt there is the system working, not the console being down.
+
 and from anywhere:
 
 ```bash
