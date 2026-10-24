@@ -42,7 +42,7 @@ def test_version_is_steady_when_nothing_happens(signed_in: TestClient) -> None:
 def test_version_still_answers_when_the_sync_service_is_unreachable(
     signed_in: TestClient,
 ) -> None:
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
     response = signed_in.get("/api/journal/version")
@@ -52,7 +52,7 @@ def test_version_still_answers_when_the_sync_service_is_unreachable(
 
 
 def test_the_desktops_own_poll_drains_the_plugins_queue(signed_in: TestClient) -> None:
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "a-pairing-token"})
 
     with patch("toolkit_web.importing.RuneLiteSyncImporter") as importer:

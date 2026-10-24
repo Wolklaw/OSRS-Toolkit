@@ -41,7 +41,7 @@ def test_an_unpaired_account_is_offered_the_connect_flow(signed_in: TestClient):
 def test_a_paired_account_is_not_asked_to_connect_again(signed_in: TestClient):
     from unittest.mock import patch
 
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     response = signed_in.get("/")

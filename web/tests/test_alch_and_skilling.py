@@ -81,7 +81,7 @@ def test_the_skilling_page_shows_a_lookup_error_for_an_unknown_character(
     signed_in: TestClient,
 ):
     with patch(
-        "toolkit_web.app.fetch_player",
+        "toolkit_web.routes.market.fetch_player",
         side_effect=AccountLookupError("Character was not found on the OSRS hiscores."),
     ):
         response = signed_in.get("/skilling", params={"character": "nobody12345"})
@@ -93,7 +93,7 @@ def test_the_skilling_page_shows_a_lookup_error_for_an_unknown_character(
 def test_the_skilling_page_marks_methods_eligible_once_looked_up(signed_in: TestClient):
     profile = PlayerProfile(name="Wolklaw", skills={"Overall": 500, "Cooking": 99})
     with (
-        patch("toolkit_web.app.fetch_player", return_value=profile),
+        patch("toolkit_web.routes.market.fetch_player", return_value=profile),
         _patched_market(),
     ):
         response = signed_in.get("/skilling", params={"character": "Wolklaw"})

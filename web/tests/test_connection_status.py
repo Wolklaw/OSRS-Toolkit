@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from toolkit_web import importing
-from toolkit_web.app import _desktop_activity
 from toolkit_web.importing import plugin_activity
+from toolkit_web.presentation import _desktop_activity
 
 
 @pytest.fixture(autouse=True)
@@ -68,13 +68,13 @@ def test_an_unreachable_service_is_not_reported_as_idle(settings):
 
 
 def test_the_dashboard_says_sending_only_when_the_plugin_is_sending(signed_in: TestClient):
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
-    with patch("toolkit_web.app.plugin_activity", return_value="live"):
+    with patch("toolkit_web.routes.pages.plugin_activity", return_value="live"):
         assert badge_text(signed_in.get("/").text) == "Sending now"
 
-    with patch("toolkit_web.app.plugin_activity", return_value="idle"):
+    with patch("toolkit_web.routes.pages.plugin_activity", return_value="idle"):
         page = signed_in.get("/").text
     assert badge_text(page) != "Sending now"
     assert "Idle" in page
@@ -83,10 +83,10 @@ def test_the_dashboard_says_sending_only_when_the_plugin_is_sending(signed_in: T
 def test_an_unreachable_sync_service_says_so_rather_than_blaming_the_plugin(
     signed_in: TestClient,
 ):
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
-    with patch("toolkit_web.app.plugin_activity", return_value="unreachable"):
+    with patch("toolkit_web.routes.pages.plugin_activity", return_value="unreachable"):
         page = signed_in.get("/").text
 
     assert "No answer" in page

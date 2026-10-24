@@ -165,7 +165,7 @@ def test_check_alerts_fires_a_triggered_alert(alerting_client: TestClient):
 
     with (
         _patched_market(sell_price=1_600_000, buy_price=1_500_000),
-        patch("toolkit_web.app.send_webhook_message", return_value=True) as sender,
+        patch("toolkit_web.routes.internal.send_webhook_message", return_value=True) as sender,
     ):
         response = alerting_client.post(
             "/internal/check-alerts", headers={"X-Internal-Token": "test-internal-token"}
@@ -183,7 +183,7 @@ def test_check_alerts_does_not_fire_before_the_target_is_reached(alerting_client
 
     with (
         _patched_market(sell_price=1_600_000, buy_price=1_500_000),
-        patch("toolkit_web.app.send_webhook_message", return_value=True) as sender,
+        patch("toolkit_web.routes.internal.send_webhook_message", return_value=True) as sender,
     ):
         response = alerting_client.post(
             "/internal/check-alerts", headers={"X-Internal-Token": "test-internal-token"}
@@ -198,7 +198,7 @@ def test_check_alerts_respects_the_cooldown_after_firing(alerting_client: TestCl
 
     with (
         _patched_market(sell_price=1_600_000, buy_price=1_500_000),
-        patch("toolkit_web.app.send_webhook_message", return_value=True) as sender,
+        patch("toolkit_web.routes.internal.send_webhook_message", return_value=True) as sender,
     ):
         first = alerting_client.post(
             "/internal/check-alerts", headers={"X-Internal-Token": "test-internal-token"}

@@ -27,7 +27,7 @@ def _response(payload: object) -> MagicMock:
 
 
 def _paired(client: TestClient) -> TestClient:
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         assert client.put("/api/pairing-token", json={"token": "good-token"}).status_code == 200
     return client
 

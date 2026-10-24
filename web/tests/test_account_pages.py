@@ -57,7 +57,7 @@ def test_the_profile_page_says_whether_the_plugin_is_connected(signed_in: TestCl
     assert "Not connected" in signed_in.get("/profile").text
     assert "Replace token" not in signed_in.get("/profile").text
 
-    with patch("toolkit_web.app.probe_token", return_value=True):
+    with patch("toolkit_web.routes.account.probe_token", return_value=True):
         signed_in.put("/api/pairing-token", json={"token": "good-token"})
 
     page = signed_in.get("/profile").text

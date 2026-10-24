@@ -95,7 +95,7 @@ def test_two_created_accounts_never_collide(client: TestClient):
 
 
 def test_a_recovery_account_never_collides_with_a_discord_id(client: TestClient):
-    from toolkit_web.app import _recovery_account_id
+    from toolkit_web.presentation import _recovery_account_id
 
     assert not _recovery_account_id("anything").removeprefix("local:").isdigit()
 

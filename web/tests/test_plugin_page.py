@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from toolkit_web.app import PLUGIN_BRANCH, PLUGIN_HUB_NAME, PLUGIN_SOURCE_URL
+from toolkit_web.routes.pages import PLUGIN_BRANCH, PLUGIN_HUB_NAME, PLUGIN_SOURCE_URL
 
 
 def test_the_plugin_page_reads_signed_out(client: TestClient):
