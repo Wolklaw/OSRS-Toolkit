@@ -6,6 +6,13 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **A cancelled-offers report.** `/performance` now shows, per strategy and side, how many offers
+  you placed, how many you cancelled, the share that is, and the median wait before you gave
+  up. Every opening and cancellation is now kept in a new `offer_events` table, additive like
+  every other migration, tagged with the strategy of the position it touched. History starts
+  the day this ships: the plugin sends the same events as before and nothing older was kept.
+  Offers restored on login are left out of the rate and the wait, because their opening is
+  the login, not the moment you placed them.
 - **Price slippage on Performance.** `/performance` now shows your offer price against what each
   Grand Exchange fill actually cost or paid, by item and by side, with the net gp the
   exchange gave you over what you asked. It is computed from the `offer_price` every fill

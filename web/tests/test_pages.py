@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
-from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade
+from osrs_toolkit.journal import (
+    JournalRepository,
+    OfferCancelled,
+    OfferOpened,
+    SyncedItem,
+    SyncedTrade,
+)
 
 from toolkit_web.config import Settings
 
@@ -273,3 +279,25 @@ def test_the_performance_page_reports_slippage_once_an_item_has_enough_fills(
     assert "Price slippage" in page
     assert "Abyssal whip" in page
     assert "+3,000" in page
+
+
+def test_the_performance_page_lists_cancelled_offers_with_the_wait(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    now = datetime.now(UTC)
+    repository.record_offer_event(
+        OfferOpened(
+            "o1", "h", "n", (now - timedelta(minutes=6)).isoformat(), "buy", 1, "Coal", 100, 50
+        ),
+        "Overnight",
+    )
+    repository.record_offer_event(
+        OfferCancelled("c1", "h", "n", now.isoformat(), "buy", 1, "Coal", 100, 50), "Overnight"
+    )
+
+    page = signed_in.get("/performance").text
+
+    assert "Cancelled offers" in page
+    assert "Overnight" in page
+    assert "6 min" in page

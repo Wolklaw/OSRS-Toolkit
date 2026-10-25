@@ -185,6 +185,44 @@
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">
+      <h2>Cancelled offers</h2>
+      <p class="hint tight">What you pull back, how long you waited first, and under which strategy.
+        Counted from the day offers started being kept, so older cancellations are not here.
+        {% if cancellation_summary.median_wait_minutes is not none %}Median wait before cancelling:
+        {{ "%.0f"|format(cancellation_summary.median_wait_minutes) }} min.{% endif %}</p>
+    </div>
+  </div>
+  {% if cancellations %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th>Side</th><th class="num">Placed</th><th class="num">Cancelled</th><th class="num">Cancel rate</th><th class="num">Median wait</th></tr>
+      </thead>
+      <tbody>
+        {% for row in cancellations %}
+        <tr>
+          <td class="name">{{ row.label }}</td>
+          <td><span class="badge {{ row.side }}">{{ row.side | capitalize }}</span></td>
+          <td class="num">{{ row.opened }}</td>
+          <td class="num">{{ row.cancelled }}</td>
+          <td class="num">{% if row.cancel_rate is not none %}{{ "%.0f"|format(row.cancel_rate) }}%{% else %}—{% endif %}</td>
+          <td class="num">{% if row.median_wait_minutes is not none %}{{ "%.0f"|format(row.median_wait_minutes) }} min{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>No offers kept in this period yet</strong>
+    Offers you place and cancel while the plugin is running start showing up here.
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
       <h2>Plan vs. actual</h2>
       <p class="hint tight">Where the plan and the outcome parted company. Hover a row for the detail.</p>
     </div>

@@ -731,6 +731,38 @@ def test_cancelling_a_buy_that_never_filled_removes_the_position_it_opened(
     assert repository.list_tracked() == []
 
 
+def test_openings_and_cancellations_are_kept_with_the_strategy_of_their_position(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "sync"
+    repository = JournalRepository(tmp_path / "journal.db")
+    _write_event(
+        root,
+        _offer_event(
+            "ge_offer_opened",
+            "aaaaaaaa-0000-4000-8000-000000000001",
+            "2026-08-11T05:00:00Z",
+            dict(_COAL_OFFER),
+        ),
+    )
+    _write_event(
+        root,
+        _offer_event(
+            "ge_offer_cancelled",
+            "bbbbbbbb-0000-4000-8000-000000000002",
+            "2026-08-11T05:06:00Z",
+            dict(_COAL_OFFER),
+        ),
+    )
+
+    RuneLiteSyncImporter(root).import_pending(repository)
+
+    events = repository.list_offer_events()
+    assert [event.kind for event in events] == ["opened", "cancelled"]
+    assert all(event.strategy for event in events)
+    assert events[0].offer_price == _COAL_OFFER["offer_price"]
+
+
 def test_cancelling_a_part_filled_buy_resizes_the_position_to_what_bought(
     tmp_path: Path,
 ) -> None:

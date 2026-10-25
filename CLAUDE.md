@@ -229,8 +229,10 @@ lands the sooner history starts accumulating.
   everything for 30 days, the newest of each day out to a year, then the newest of each week.
   Item-level deltas against the previous snapshot are still the fallback if size becomes
   real.
-- **Retain the offer lifecycle.** A real table for openings and cancellations, with price,
-  quantity, side and `restored`, not just a dedupe id. Add `filled_at` to both fill tables.
+- **Retain the offer lifecycle.** *Openings and cancellations landed 2026-10-25* in `offer_events`,
+  with price, quantity, side, `restored` and the strategy of the position touched, and feed the
+  cancelled-offers report on `/performance`. Still to do: `filled_at` on both fill tables, which
+  observed fill time needs.
 - **Stamp market context onto a fill.** The 5m and 1h point at the moment of import, stored
   beside the fill, so every fill becomes a labelled observation instead of a bare price.
 

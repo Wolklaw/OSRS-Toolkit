@@ -298,6 +298,7 @@ class RuneLiteSyncImporter:
         event: OfferOpened | OfferCancelled,
         suggested_sell_prices: Mapping[int, int],
     ) -> bool:
+        touched: int | None = None
         try:
             if isinstance(event, OfferOpened):
                 touched = repository.apply_offer_opened(
@@ -320,7 +321,9 @@ class RuneLiteSyncImporter:
                     account_hash=event.account_hash,
                 )
         except ValueError:
-            return False
+            touched = None
+        strategy = repository.position_strategy(touched) if touched is not None else None
+        repository.record_offer_event(event, strategy)
         return touched is not None
 
     @staticmethod

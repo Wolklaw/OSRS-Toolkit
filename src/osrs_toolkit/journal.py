@@ -418,6 +418,21 @@ class OfferCancelled:
     total_quantity: int
 
 
+@dataclass(frozen=True, slots=True)
+class OfferEventRecord:
+    event_id: str
+    account_hash: str
+    occurred_at: str
+    kind: str
+    side: str
+    item_id: int
+    item_name: str
+    offer_price: int
+    total_quantity: int
+    restored: bool
+    strategy: str | None
+
+
 def _is_newer(incoming: object, existing: object) -> bool:
     return _as_moment(incoming) >= _as_moment(existing)
 
@@ -811,6 +826,26 @@ class JournalRepository:
                 applied_at TEXT NOT NULL
             )
             """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS offer_events (
+                event_id TEXT PRIMARY KEY,
+                account_hash TEXT NOT NULL,
+                occurred_at TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (kind IN ('opened', 'cancelled')),
+                side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+                item_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                offer_price INTEGER NOT NULL,
+                total_quantity INTEGER NOT NULL,
+                restored INTEGER NOT NULL DEFAULT 0,
+                strategy TEXT
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS offer_events_occurred ON offer_events(occurred_at)"
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
@@ -1865,6 +1900,66 @@ class JournalRepository:
 
     def add_synced_trade(self, trade: SyncedTrade) -> bool:
         return self.add_synced_trades([trade])[0]
+
+    def record_offer_event(
+        self, event: OfferOpened | OfferCancelled, strategy: str | None = None
+    ) -> bool:
+        opened = isinstance(event, OfferOpened)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO offer_events (
+                    event_id, account_hash, occurred_at, kind, side, item_id, item_name,
+                    offer_price, total_quantity, restored, strategy
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.account_hash,
+                    event.occurred_at,
+                    "opened" if opened else "cancelled",
+                    event.side,
+                    event.item_id,
+                    event.item_name,
+                    event.offer_price,
+                    event.total_quantity,
+                    1 if opened and event.restored else 0,
+                    strategy,
+                ),
+            )
+            return cursor.rowcount > 0
+
+    def position_strategy(self, position_id: int) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT strategy FROM tracked_trades WHERE position_id = ?", (position_id,)
+            ).fetchone()
+        return str(row["strategy"]) if row else None
+
+    def list_offer_events(self, account_hash: str | None = None) -> list[OfferEventRecord]:
+        clause = " WHERE account_hash = ?" if account_hash is not None else ""
+        parameters = (account_hash,) if account_hash is not None else ()
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM offer_events{clause} ORDER BY occurred_at ASC, event_id ASC",
+                parameters,
+            ).fetchall()
+        return [
+            OfferEventRecord(
+                event_id=str(row["event_id"]),
+                account_hash=str(row["account_hash"]),
+                occurred_at=str(row["occurred_at"]),
+                kind=str(row["kind"]),
+                side=str(row["side"]),
+                item_id=int(row["item_id"]),
+                item_name=str(row["item_name"]),
+                offer_price=int(row["offer_price"]),
+                total_quantity=int(row["total_quantity"]),
+                restored=bool(row["restored"]),
+                strategy=str(row["strategy"]) if row["strategy"] else None,
+            )
+            for row in rows
+        ]
 
     def claim_offer_event(self, event_id: str) -> bool:
         with self._connect() as connection:

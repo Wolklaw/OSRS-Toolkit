@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
+from osrs_toolkit.cancellations import cancellation_groups, summarize_cancellations
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS
@@ -229,6 +230,9 @@ def build(deps: Deps) -> APIRouter:
             period,
             now,
         )
+        cancel_groups = cancellation_groups(
+            repository.list_offer_events(switcher["active_character"]), period, now
+        )
         return templates.TemplateResponse(
             request,
             "performance.html",
@@ -240,6 +244,8 @@ def build(deps: Deps) -> APIRouter:
                 "by_strategy": [serialize(row) for row in by_strategy(results)],
                 "by_item": [serialize(row) for row in by_item(results)],
                 "calibration": [serialize(row) for row in calibration(tracked, period, now)],
+                "cancellations": [serialize(row) for row in cancel_groups],
+                "cancellation_summary": serialize(summarize_cancellations(cancel_groups)),
                 "slippage": serialize(summarize_slippage(fills)),
                 "slippage_items": [serialize(row) for row in by_item_slippage(fills)],
                 **switcher,
