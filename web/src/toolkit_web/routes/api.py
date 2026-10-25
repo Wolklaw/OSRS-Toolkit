@@ -89,7 +89,7 @@ def build(deps: Deps) -> APIRouter:
 
     @router.get("/api/journal/version")
     def journal_version(account: Account = CurrentAccount) -> dict:
-        return journal_for(settings, account).sync_version()
+        return journal_for(settings, account, force=True).sync_version()
 
     @router.get("/api/journal/pull")
     def journal_pull(account: Account = CurrentAccount, since: str | None = None) -> dict:

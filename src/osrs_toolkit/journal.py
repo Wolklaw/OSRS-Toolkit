@@ -1244,6 +1244,20 @@ class JournalRepository:
             ).fetchone()
         return str(row["sync_uid"]) if row and row["sync_uid"] else None
 
+    def count_trades(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS n FROM trades WHERE deleted_at IS NULL"
+            ).fetchone()
+        return int(row["n"])
+
+    def count_tracked(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS n FROM tracked_trades WHERE deleted_at IS NULL"
+            ).fetchone()
+        return int(row["n"])
+
     def list_all(self) -> list[TradeRecord]:
         with self._connect() as connection:
             rows = connection.execute(

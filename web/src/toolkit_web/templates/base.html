@@ -168,7 +168,7 @@
     }
 
     * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
       background: var(--bg);
@@ -277,9 +277,8 @@
       display: flex; align-items: center; gap: 0.55rem;
       padding: 0.6rem 1.6rem;
       border-bottom: 1px solid var(--border);
-      background: color-mix(in srgb, var(--bg) 86%, transparent);
-      backdrop-filter: blur(10px);
-      position: sticky; top: 0; z-index: 20;
+      background: var(--bg);
+            position: sticky; top: 0; z-index: 20;
     }
     .topbar .brand { padding: 0; font-size: 1.02rem; }
     .topbar .spacer { flex: 1; }
@@ -381,6 +380,7 @@
     .panel.flush > h2, .panel.flush > .panel-note { padding-left: 1.25rem; padding-right: 1.25rem; }
 
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1.1rem; }
+    .grid-2 { margin-bottom: 1.1rem; }
     .grid-2 > .panel { margin-bottom: 0; }
 
 
@@ -841,6 +841,7 @@
 {%- elif name == "counterparties" -%}<circle cx="8" cy="12" r="5"/><circle cx="16" cy="12" r="5"/>
 {%- elif name == "limits" -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
 {%- elif name == "performance" -%}<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
+{%- elif name == "quests" -%}<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z"/><path d="M4 5.5v15"/><path d="M20 5.5v15"/>
 {%- elif name == "pvm" -%}<path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/>
 {%- elif name == "loot" -%}<path d="M6 9l6-6 6 6"/><path d="M6 9l6 12 6-12"/><path d="M6 9h12"/>
 {%- elif name == "death" -%}<path d="M7 21V11a5 5 0 0 1 10 0v10"/><path d="M7 21h10"/><path d="M10 21v-3"/><path d="M14 21v-3"/>

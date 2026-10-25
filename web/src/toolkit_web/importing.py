@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+from pathlib import Path
 
 from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.runelite_sync import GEOfferScreen, GEOfferSlot, RuneLiteSyncImporter
@@ -11,17 +12,55 @@ from osrs_toolkit.sync_source import HttpSyncSource
 from toolkit_web.accounts_db import Account
 from toolkit_web.config import Settings
 
+_IMPORT_INTERVAL_SECONDS = 4
+_IMPORT_BACKOFF_SECONDS = 30
+_SLOW_IMPORT_SECONDS = 3
 
-def journal_for(settings: Settings, account: Account) -> JournalRepository:
-    repository = JournalRepository(settings.journal_path(account.discord_user_id))
-    if account.pairing_token:
-        source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
-        RuneLiteSyncImporter(source=source).import_pending(repository)
-    return repository
+_repositories: dict[Path, JournalRepository] = {}
+_repositories_lock = threading.Lock()
+_import_due: dict[str, float] = {}
+_import_lock = threading.Lock()
 
 
 def stored_journal(settings: Settings, account: Account) -> JournalRepository:
-    return JournalRepository(settings.journal_path(account.discord_user_id))
+    path = settings.journal_path(account.discord_user_id)
+    with _repositories_lock:
+        repository = _repositories.get(path)
+        if repository is None:
+            repository = _repositories[path] = JournalRepository(path)
+    return repository
+
+
+def _claim_import(key: str) -> bool:
+    now = time.monotonic()
+    with _import_lock:
+        if now < _import_due.get(key, 0.0):
+            return False
+        _import_due[key] = now + _IMPORT_BACKOFF_SECONDS
+        return True
+
+
+def _schedule_import(key: str, started: float) -> None:
+    elapsed = time.monotonic() - started
+    delay = _IMPORT_BACKOFF_SECONDS if elapsed > _SLOW_IMPORT_SECONDS else _IMPORT_INTERVAL_SECONDS
+    with _import_lock:
+        _import_due[key] = time.monotonic() + delay
+
+
+def journal_for(settings: Settings, account: Account, *, force: bool = False) -> JournalRepository:
+    repository = stored_journal(settings, account)
+    if not account.pairing_token:
+        return repository
+    key = _activity_key(account.pairing_token)
+    if not force and not _claim_import(key):
+        return repository
+    started = time.monotonic()
+    try:
+        source = HttpSyncSource(settings.sync_base_url, account.pairing_token)
+        RuneLiteSyncImporter(source=source).import_pending(repository)
+    finally:
+        _schedule_import(key, started)
+    return repository
 
 
 _CHARACTERS_TTL_SECONDS = 60

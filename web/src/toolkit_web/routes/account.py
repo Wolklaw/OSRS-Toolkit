@@ -52,8 +52,8 @@ def build(deps: Deps) -> APIRouter:
                     serialize(character)
                     for character in accounts.list_characters(account.discord_user_id)
                 ],
-                "position_count": len(repository.list_tracked()),
-                "trade_count": len(repository.list_all()),
+                "position_count": repository.count_tracked(),
+                "trade_count": repository.count_trades(),
                 "watchlist_count": len(accounts.list_watchlist_item_ids(account.discord_user_id)),
                 "desktop_tokens": [
                     {
@@ -276,7 +276,7 @@ def build(deps: Deps) -> APIRouter:
     def generate_pairing_token(account: Account = BrowserAccount) -> dict:
         previous = account.pairing_token
         if previous:
-            journal_for(settings, account)
+            journal_for(settings, account, force=True)
         token = mint_pairing_token(settings.sync_base_url, settings.sync_invite_code)
         if token is None:
             raise HTTPException(
