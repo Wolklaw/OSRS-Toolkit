@@ -383,3 +383,35 @@ def test_the_trip_ledger_nets_a_trips_loot_against_the_supplies_that_left(
 
 def test_the_trip_ledger_asks_for_a_character_when_none_is_selected(signed_in: TestClient):
     assert "No character selected" in signed_in.get("/trips").text
+
+
+def test_the_drop_rates_page_lists_monsters_and_how_long_an_item_has_been_dry(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    now = datetime.now(UTC)
+    for index in range(5):
+        items = [LoadoutItem(1, "Dragon bones", 2, 2_000)]
+        if index == 0:
+            items.append(LoadoutItem(9, "Draconic visage", 1, 5_000_000))
+        repository.add_npc_loot_event(
+            NpcLootRecord(
+                f"drop-{index}",
+                (now - timedelta(minutes=10 - index)).isoformat(),
+                "abc123",
+                "Wolklaw",
+                "Vorkath",
+                tuple(items),
+            )
+        )
+    signed_in.cookies.set("active_character", "abc123")
+
+    page = signed_in.get("/drops").text
+
+    assert "Vorkath" in page
+    assert "Draconic visage" in page
+    assert "20.00%" in page
+
+
+def test_the_drop_rates_page_asks_for_a_character_when_none_is_selected(signed_in: TestClient):
+    assert "No character selected" in signed_in.get("/drops").text

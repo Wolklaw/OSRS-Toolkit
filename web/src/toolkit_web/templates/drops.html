@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set page_title = "Drop Rates" %}
+{% set page_sub = "What each monster has actually dropped for you, how rare it has been, and how long you have gone without it." %}
+
+{% block content %}
+
+{% if not character_selected %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No character selected</strong>
+    Pick a character in the top bar to see its drops.
+  </div>
+</div>
+{% elif not npcs %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No kills recorded yet</strong>
+    Turn on loot syncing in the plugin and kill something. <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% else %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Monsters</h2>
+      <p class="hint tight">Every kill the plugin has reported, most killed first.</p>
+    </div>
+    <input type="search" class="filter-input" placeholder="Filter monsters…"
+           oninput="filterTable(this, 'npc-table')" aria-label="Filter monsters">
+    <span class="table-note" id="npc-table-note"></span>
+  </div>
+  <div class="table-wrap" style="max-height: 18rem; overflow-y: auto">
+    <table id="npc-table" class="table-dense">
+      <thead><tr><th>Monster</th><th class="num">Kills</th><th class="num">Loot</th><th>Last kill</th></tr></thead>
+      <tbody>
+        {% for npc in npcs %}
+        <tr>
+          <td class="name"><a href="/drops?npc={{ npc.npc_name | urlencode }}">{{ npc.npc_name }}</a></td>
+          <td class="num">{{ "{:,}".format(npc.kills) }}</td>
+          <td class="num">{{ "{:,}".format(npc.value) }}</td>
+          <td class="table-note">{{ npc.last_kill_at[:10] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if table %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>{{ table.npc_name }}</h2>
+      <p class="hint tight">{{ "{:,}".format(table.kills) }} kills. Rarest first. A rate needs several kills to mean
+        much, and "vs usual wait" only shows once an item has dropped twice.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Item</th><th class="num">Drops</th><th class="num">Quantity</th><th class="num">Rate</th><th class="num">About 1 in</th><th class="num">Dry for</th><th class="num">Longest dry</th><th class="num">vs usual wait</th></tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>
+          <td class="name">{{ row.item_name }}<div class="table-note">last {{ row.last_seen_at[:10] }}</div></td>
+          <td class="num">{{ row.kills_with }}</td>
+          <td class="num">{{ "{:,}".format(row.quantity) }}</td>
+          <td class="num">{{ "{:.2f}".format(row.rate_percent) }}%</td>
+          <td class="num">{{ "{:,.0f}".format(row.one_in) }}</td>
+          <td class="num">{{ "{:,}".format(row.kills_since) }}</td>
+          <td class="num">{{ "{:,}".format(row.longest_dry) }}</td>
+          <td class="num {{ 'negative' if row.dry_ratio is not none and row.dry_ratio >= 2 else '' }}">{% if row.dry_ratio is not none %}{{ "{:.1f}".format(row.dry_ratio) }}&times;{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

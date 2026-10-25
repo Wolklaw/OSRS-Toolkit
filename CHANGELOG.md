@@ -6,6 +6,12 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Drop Rates.** A new page under Companion lists every monster you have killed and, for the one
+  you pick, every item it has dropped for you: how many kills it appeared in, the rate and
+  roughly "1 in N", how many kills you have gone without it, the longest dry streak, and how
+  that wait compares with its usual one once it has dropped twice. Rarest drops come first.
+  It reads the kill lists the site already stores, across your whole history rather than the
+  loot log's 90 days, so there is no plugin or schema change.
 - **Trip Ledger.** A new page under Companion groups your kills, deaths and training into trips,
   split wherever you went quiet for half an hour, and shows what each one actually paid: loot
   received, the supplies that left your account between the bank visits either side of it,

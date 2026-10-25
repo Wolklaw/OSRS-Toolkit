@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from osrs_toolkit.cancellations import cancellation_groups, summarize_cancellations
 from osrs_toolkit.csv_export import journal_csv
+from osrs_toolkit.drops import drop_table, npc_summaries
 from osrs_toolkit.fill_times import fill_observations, fill_time_groups
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS
@@ -405,6 +406,37 @@ def build(deps: Deps) -> APIRouter:
                 "character_selected": live_hash is not None,
                 "trips": [serialize(trip) for trip in trips],
                 "window_days": TRIP_WINDOW_DAYS,
+                **switcher,
+            },
+        )
+
+    @router.get("/drops", response_class=HTMLResponse)
+    def drops_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        npc: str | None = None,
+    ) -> HTMLResponse:
+        switcher = deps.character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        synced = switcher["synced_characters"]
+        live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        npcs: list = []
+        table = None
+        if live_hash:
+            events = journal_for(settings, account).list_npc_loot_events(account_hash=live_hash)
+            npcs = npc_summaries(events)
+            names = {entry.npc_name for entry in npcs}
+            chosen = npc if npc in names else (npcs[0].npc_name if npcs else None)
+            table = drop_table(events, chosen) if chosen else None
+        return templates.TemplateResponse(
+            request,
+            "drops.html",
+            {
+                "account": account,
+                "character_selected": live_hash is not None,
+                "npcs": [serialize(entry) for entry in npcs],
+                "table": serialize(table) if table is not None else None,
                 **switcher,
             },
         )

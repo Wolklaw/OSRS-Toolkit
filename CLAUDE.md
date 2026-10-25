@@ -273,7 +273,7 @@ theoretical; this is yours.
   refuses to guess at.
 - **Per NPC**: net gp/hr rather than gross, cost per kill, kills per trip.
 - **Drop tracking.** Kills and their item lists are already stored per event: observed rates,
-  dry streaks, "n kills since the last one".
+  dry streaks, "n kills since the last one". *Landed 2026-10-25* as `drops.py` and `/drops`.
 
 ### Phase 3 — net worth attribution
 
