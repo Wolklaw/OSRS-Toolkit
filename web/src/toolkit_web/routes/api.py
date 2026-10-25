@@ -235,6 +235,30 @@ def build(deps: Deps) -> APIRouter:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"ok": True}
 
+    @router.post("/api/positions/bulk")
+    def bulk_positions(payload: dict, account: Account = CurrentAccount) -> dict:
+        action = payload.get("action")
+        raw_ids = payload.get("position_ids")
+        if action not in ("supplies", "remove"):
+            raise HTTPException(status_code=422, detail="action must be supplies or remove")
+        if (
+            not isinstance(raw_ids, list)
+            or not raw_ids
+            or not all(isinstance(entry, int) and not isinstance(entry, bool) for entry in raw_ids)
+        ):
+            raise HTTPException(
+                status_code=422, detail="position_ids must be a list of whole numbers"
+            )
+        repository = journal_for(settings, account)
+        owned = {trade.position_id for trade in repository.list_tracked()}
+        wanted = [position_id for position_id in dict.fromkeys(raw_ids) if position_id in owned]
+        if action == "supplies":
+            result = repository.retag_positions(wanted, status="Supplies")
+            return {"ok": True, "updated": result.updated}
+        for position_id in wanted:
+            repository.delete_tracked(position_id)
+        return {"ok": True, "updated": len(wanted)}
+
     @router.delete("/api/positions/{position_id}")
     def remove_position(position_id: int, account: Account = CurrentAccount) -> dict:
         repository = journal_for(settings, account)

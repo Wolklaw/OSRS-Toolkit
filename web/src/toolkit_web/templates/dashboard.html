@@ -240,10 +240,27 @@
     {% endif %}
   </div>
   {% if positions %}
+  <div class="panel-head" id="bulk-bar">
+    <div class="grow">
+      <span class="table-note" id="bulk-count">Tick positions to change several at once.</span>
+      <div class="status-msg" id="bulk-status"></div>
+    </div>
+    <label class="table-note" for="bulk-age">Select open positions older than</label>
+    <select id="bulk-age" onchange="selectOlderThan(this.value)" aria-label="Select open positions by age">
+      <option value="">…</option>
+      <option value="3">3 days</option>
+      <option value="7">7 days</option>
+      <option value="14">14 days</option>
+      <option value="30">30 days</option>
+    </select>
+    <button class="button secondary small" id="bulk-supplies" onclick="bulkPositions('supplies')" disabled>Mark as supplies</button>
+    <button class="button ghost small link-danger" id="bulk-remove" onclick="bulkPositions('remove')" disabled>Remove</button>
+  </div>
   <div class="table-wrap">
     <table id="positions-table">
       <thead>
         <tr>
+          <th><input type="checkbox" id="bulk-all" onchange="toggleAllPositions(this.checked)" aria-label="Select every shown position"></th>
           <th>Item</th>
           <th>Status</th>
           <th class="num">Sold</th>
@@ -255,7 +272,8 @@
       </thead>
       <tbody>
         {% for position in positions %}
-        <tr>
+        <tr data-created="{{ position.created_at }}" data-open="{{ 0 if position.status in ('Completed', 'Cancelled', 'Supplies') else 1 }}">
+          <td><input type="checkbox" class="bulk-pick" value="{{ position.position_id }}" onchange="updateBulkBar()" aria-label="Select {{ position.item_name }}"></td>
           <td class="name">
             {% if position.item_id %}
             <a href="/item/{{ position.item_id }}">{{ position.item_name }}</a>
@@ -474,6 +492,52 @@
     });
     if (!result.ok) {
       setStatus('position-modal-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+
+  function pickedPositions() {
+    return [...document.querySelectorAll('.bulk-pick:checked')];
+  }
+
+  function updateBulkBar() {
+    const count = pickedPositions().length;
+    document.getElementById('bulk-count').textContent =
+      count ? count + ' selected' : 'Tick positions to change several at once.';
+    document.getElementById('bulk-supplies').disabled = !count;
+    document.getElementById('bulk-remove').disabled = !count;
+  }
+
+  function toggleAllPositions(checked) {
+    for (const box of document.querySelectorAll('.bulk-pick')) {
+      box.checked = checked && !box.closest('tr').hidden;
+    }
+    updateBulkBar();
+  }
+
+  function selectOlderThan(days) {
+    if (!days) { return; }
+    const cutoff = Date.now() - Number(days) * 86400000;
+    for (const box of document.querySelectorAll('.bulk-pick')) {
+      const row = box.closest('tr');
+      box.checked = !row.hidden && row.dataset.open === '1'
+        && Date.parse(row.dataset.created) < cutoff;
+    }
+    document.getElementById('bulk-age').value = '';
+    updateBulkBar();
+  }
+
+  async function bulkPositions(action) {
+    const ids = pickedPositions().map((box) => Number(box.value));
+    if (!ids.length) { return; }
+    const message = action === 'remove'
+      ? 'Remove ' + ids.length + ' positions? This does not undo anything in game.'
+      : 'Mark ' + ids.length + ' positions as supplies? They stop counting as flips.';
+    if (!confirm(message)) { return; }
+    const result = await api('POST', '/api/positions/bulk', { action, position_ids: ids });
+    if (!result.ok) {
+      setStatus('bulk-status', result.error, 'error');
       return;
     }
     location.reload();
