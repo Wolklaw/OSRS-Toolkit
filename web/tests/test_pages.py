@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from osrs_toolkit.journal import (
@@ -13,6 +15,7 @@ from osrs_toolkit.journal import (
     SyncedItem,
     SyncedTrade,
 )
+from osrs_toolkit.runelite_sync import GEOfferSlot
 
 from toolkit_web.config import Settings
 
@@ -463,3 +466,64 @@ def test_the_net_worth_page_asks_for_two_snapshots_when_it_has_one(
     signed_in.cookies.set("active_character", "abc123")
 
     assert "Two bank snapshots needed" in signed_in.get("/net-worth").text
+
+
+def _stale_position(settings: Settings, item_id: int, minutes_old: int) -> None:
+    path = settings.journal_path("111")
+    repository = JournalRepository(path)
+    position_id = repository.track(item_id, "Coal", 100, 150, 200, account_hash="abc123")
+    created = (datetime.now(UTC) - timedelta(minutes=minutes_old)).isoformat(timespec="seconds")
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "UPDATE tracked_trades SET created_at = ? WHERE position_id = ?",
+            (created, position_id),
+        )
+
+
+def _dashboard(signed_in: TestClient, state: str, slots: dict) -> str:
+    signed_in.cookies.set("active_character", "abc123")
+    with (
+        patch("toolkit_web.routes.pages.plugin_activity", return_value=state),
+        patch("toolkit_web.routes.pages.live_offer_state", return_value=(slots, None)),
+    ):
+        return signed_in.get("/").text
+
+
+def test_a_position_with_no_offer_in_a_live_grand_exchange_is_flagged(
+    signed_in: TestClient, settings: Settings
+):
+    _stale_position(settings, 453, minutes_old=120)
+
+    page = _dashboard(signed_in, "live", {})
+
+    assert "Not in GE" in page
+    assert "not in my Grand Exchange (1)" in page
+    assert 'data-not-in-ge="1"' in page
+
+
+def test_a_fresh_position_or_an_idle_plugin_is_never_flagged(
+    signed_in: TestClient, settings: Settings
+):
+    _stale_position(settings, 453, minutes_old=2)
+    assert "Not in GE" not in _dashboard(signed_in, "live", {})
+
+    _stale_position(settings, 454, minutes_old=300)
+    assert "Not in GE" not in _dashboard(signed_in, "idle", {})
+
+
+def test_a_position_with_a_matching_live_offer_is_not_flagged(
+    signed_in: TestClient, settings: Settings
+):
+    _stale_position(settings, 453, minutes_old=120)
+    slot = GEOfferSlot(
+        slot=0,
+        item_id=453,
+        item_name="Coal",
+        offer_price=150,
+        total_quantity=100,
+        quantity_filled=10,
+        spent_gp=1_500,
+        state="BUYING",
+    )
+
+    assert "Not in GE" not in _dashboard(signed_in, "live", {0: slot})

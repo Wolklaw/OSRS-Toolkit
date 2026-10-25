@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -29,6 +29,21 @@ PLUGIN_BRANCH = "main"
 PLUGIN_SOURCE_URL = f"{PLUGIN_REPO_URL}/tree/{PLUGIN_BRANCH}"
 
 PLUGIN_HUB_NAME = "osrs-toolkit-sync"
+
+
+OFFER_EXPECTED_SIDE = {"Pending buy": "buy", "Listed for sale": "sell", "Partially sold": "sell"}
+OFFER_GRACE_MINUTES = 15
+
+
+def not_in_grand_exchange(position, live_slots, now: datetime) -> bool:
+    side = OFFER_EXPECTED_SIDE.get(position.status)
+    if side is None or position.item_id is None:
+        return False
+    if now - datetime.fromisoformat(position.created_at).astimezone(UTC) < timedelta(
+        minutes=OFFER_GRACE_MINUTES
+    ):
+        return False
+    return not any(slot.item_id == position.item_id and slot.side == side for slot in live_slots)
 
 
 def build(deps: Deps) -> APIRouter:
@@ -75,9 +90,15 @@ def build(deps: Deps) -> APIRouter:
             live_sell_targets = {point.item_id: offer_targets(point)[1] for point in market_points}
         except MarketDataError:
             live_sell_targets = {}
+        plugin_state = plugin_activity(settings, account)
+        offers_known = live_hash is not None and plugin_state == "live"
+        now = datetime.now(UTC)
         position_rows = []
         for position in positions:
             row = serialize(position)
+            row["not_in_ge"] = offers_known and not_in_grand_exchange(
+                position, offer_slots.values(), now
+            )
             row["needs_attention"] = trade_needs_attention(
                 position.status,
                 position.asking_price,
@@ -107,6 +128,7 @@ def build(deps: Deps) -> APIRouter:
                 "statuses": list(POSITION_STATUSES),
                 "open_count": len(open_positions),
                 "attention_count": sum(1 for row in position_rows if row["needs_attention"]),
+                "not_in_ge_count": sum(1 for row in position_rows if row["not_in_ge"]),
                 "total_invested": total_invested,
                 "total_estimated_profit": sum(
                     position.estimated_profit for position in open_positions
@@ -116,7 +138,8 @@ def build(deps: Deps) -> APIRouter:
                 "net_worth_composition": net_worth_composition,
                 "session_summary": serialize(session_summary) if session_summary else None,
                 "live_character_selected": live_hash is not None,
-                "plugin_state": plugin_activity(settings, account),
+                "plugin_state": plugin_state,
+                "offers_known": offers_known,
                 "desktop_state": desktop_state,
                 "desktop_last_seen": desktop_last_seen,
                 "offer_rows": offer_rows,

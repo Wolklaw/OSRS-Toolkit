@@ -6,6 +6,13 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Find the positions your Grand Exchange no longer has.** While the plugin is live, a position
+  that expects an offer (a pending buy, a listing, a part-sold listing) and has no matching
+  offer in your eight slots now carries a "Not in GE" badge, and the bulk picker on the
+  dashboard can select all of them in one go. A position younger than fifteen minutes, and
+  every position while the plugin is idle or unreachable, is never flagged, because the
+  slots would be unknown or not caught up. The picker also now highlights what it ticked and
+  scrolls to it.
 - **Net Worth attribution.** A new page under Progress compares your latest bank snapshot with
   one from 7, 30 or 90 days earlier and splits the change into loot received, what the market
   did to the items you already held, what deaths cost, and everything else, with the

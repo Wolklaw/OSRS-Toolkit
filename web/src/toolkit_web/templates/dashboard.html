@@ -245,13 +245,14 @@
       <span class="table-note" id="bulk-count">Tick positions to change several at once.</span>
       <div class="status-msg" id="bulk-status"></div>
     </div>
-    <label class="table-note" for="bulk-age">Select open positions older than</label>
+    <label class="table-note" for="bulk-age">Select open positions</label>
     <select id="bulk-age" onchange="selectOlderThan(this.value)" aria-label="Select open positions by age">
       <option value="">…</option>
-      <option value="3">3 days</option>
-      <option value="7">7 days</option>
-      <option value="14">14 days</option>
-      <option value="30">30 days</option>
+      {% if offers_known %}<option value="ge">not in my Grand Exchange ({{ not_in_ge_count }})</option>{% endif %}
+      <option value="3">older than 3 days</option>
+      <option value="7">older than 7 days</option>
+      <option value="14">older than 14 days</option>
+      <option value="30">older than 30 days</option>
     </select>
     <button class="button secondary small" id="bulk-supplies" onclick="bulkPositions('supplies')" disabled>Mark as supplies</button>
     <button class="button ghost small link-danger" id="bulk-remove" onclick="bulkPositions('remove')" disabled>Remove</button>
@@ -272,7 +273,7 @@
       </thead>
       <tbody>
         {% for position in positions %}
-        <tr data-created="{{ position.created_at }}" data-open="{{ 0 if position.status in ('Completed', 'Cancelled', 'Supplies') else 1 }}">
+        <tr data-created="{{ position.created_at }}" data-open="{{ 0 if position.status in ('Completed', 'Cancelled', 'Supplies') else 1 }}" data-not-in-ge="{{ 1 if position.not_in_ge else 0 }}">
           <td><input type="checkbox" class="bulk-pick" value="{{ position.position_id }}" onchange="updateBulkBar()" aria-label="Select {{ position.item_name }}"></td>
           <td class="name">
             {% if position.item_id %}
@@ -284,6 +285,9 @@
           </td>
           <td>
             <span class="badge {{ 'ok' if position.status == 'Completed' else ('bad' if position.status == 'Cancelled' else 'accent') }}">{{ position.status }}</span>
+            {% if position.not_in_ge %}
+            <span class="badge" title="The plugin is live and no offer for this item is in your Grand Exchange slots, so this position is probably left over.">Not in GE</span>
+            {% endif %}
             {% if position.needs_attention %}
             <span class="badge bad" title="Your ask is at least 2% above what the market now suggests. Relist nearer the suggestion to clear this.">Stale ask</span>
             {% endif %}
@@ -519,18 +523,22 @@
     updateBulkBar();
   }
 
-  function selectOlderThan(days) {
-    if (!days) { return; }
-    const cutoff = Date.now() - Number(days) * 86400000;
+  function selectOlderThan(choice) {
+    if (!choice) { return; }
+    const cutoff = choice === 'ge' ? null : Date.now() - Number(choice) * 86400000;
     for (const box of document.querySelectorAll('.bulk-pick')) {
       const row = box.closest('tr');
-      box.checked = !row.hidden && row.dataset.open === '1'
-        && Date.parse(row.dataset.created) < cutoff;
+      const matches = cutoff === null
+        ? row.dataset.notInGe === '1'
+        : row.dataset.open === '1' && Date.parse(row.dataset.created) < cutoff;
+      box.checked = !row.hidden && matches;
     }
     updateBulkBar();
     const first = pickedPositions()[0];
     if (!first) {
-      toast('No open positions are older than ' + days + ' days.');
+      toast(choice === 'ge'
+        ? 'Every open position has an offer in your Grand Exchange.'
+        : 'No open positions are older than ' + choice + ' days.');
       return;
     }
     first.closest('tr').scrollIntoView({ block: 'center' });
