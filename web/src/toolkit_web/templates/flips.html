@@ -30,6 +30,13 @@
         {% endfor %}
       </select>
     </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <label class="check" style="display:flex;gap:.45rem;align-items:center;min-height:2.4rem" title="List every item with a positive margin after tax, not only the ones that clear the strategy's bar.">
+        <input type="checkbox" name="every_flip" value="1" {% if every_flip %}checked{% endif %}>
+        <span>Show every flip</span>
+      </label>
+    </div>
     <button class="button" type="submit">Update</button>
   </form>
   <p class="hint">Prices are completed transactions, not offers sitting on the book. Anything
@@ -141,8 +148,8 @@
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">
-      <h2>All ranked candidates</h2>
-      <p class="hint tight">The top {{ candidates | length }} by score. Confidence weighs volume
+      <h2>{{ "Every flip" if every_flip else "All ranked candidates" }}</h2>
+      <p class="hint tight">{% if every_flip %}{{ candidates | length }} items with a positive margin after tax, best score first. Dimmed rows miss this strategy's bar and are never recommended.{% else %}The top {{ candidates | length }} by score.{% endif %} Confidence weighs volume
         and how recently the item traded.</p>
     </div>
     {% if candidates %}
@@ -168,9 +175,10 @@
       </thead>
       <tbody>
         {% for candidate in candidates %}
-        <tr>
+        <tr{% if not candidate.meets_strategy %} style="opacity:.55"{% endif %}>
           <td class="name">
             <a href="/item/{{ candidate.item_id }}">{{ candidate.name }}</a>
+            {% if not candidate.meets_strategy %}<span class="badge" title="Misses this strategy's bar: thin margin, stale or unsteady prices, or a thin market.">Misses bar</span>{% endif %}
             {% if candidate.item_id in exempt_ids %}<span class="badge ok" title="The Grand Exchange never taxes this item, whatever it sells for.">Tax-exempt</span>{% endif %}
           </td>
           <td class="num" style="color:var(--buy)">{{ "{:,}".format(candidate.buy_price) }}</td>

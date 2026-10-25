@@ -24,6 +24,8 @@ from toolkit_web.importing import journal_for, live_offer_state
 from toolkit_web.presentation import _buy_limit_room
 from toolkit_web.serialize import serialize
 
+EVERY_FLIP_ROWS = 1500
+
 
 def build(deps: Deps) -> APIRouter:
     router = APIRouter()
@@ -43,6 +45,7 @@ def build(deps: Deps) -> APIRouter:
         cash_stack: int | None = None,
         strategy: str = "Balanced (1–4h)",
         slots: int | None = None,
+        every_flip: bool = False,
     ) -> HTMLResponse:
         switcher = deps.character_switcher_context(account, active)
         filter_hash = switcher["active_character"]
@@ -78,6 +81,7 @@ def build(deps: Deps) -> APIRouter:
             "strategy": strategy,
             "cash_stack": cash_stack,
             "slots": slots,
+            "every_flip": every_flip,
             "cash_stack_prefilled": cash_stack_prefilled,
             "slots_prefilled": slots_prefilled,
             "watched_ids": set(accounts.list_watchlist_item_ids(account.discord_user_id)),
@@ -97,8 +101,13 @@ def build(deps: Deps) -> APIRouter:
             strategy=strategy,
             slot_count=slots,
             remaining_limits=limit_room,
+            include_all=every_flip,
         )
-        portfolio = plan_flip_portfolio(candidates, cash_stack, slot_count=slots)
+        portfolio = plan_flip_portfolio(
+            [candidate for candidate in candidates if candidate.meets_strategy],
+            cash_stack,
+            slot_count=slots,
+        )
         return templates.TemplateResponse(
             request,
             "flips.html",
@@ -112,7 +121,10 @@ def build(deps: Deps) -> APIRouter:
                     if is_tax_exempt(candidate.item_id, candidate.name)
                 },
                 "portfolio": [serialize(candidate) for candidate in portfolio],
-                "candidates": [serialize(candidate) for candidate in candidates[:30]],
+                "candidates": [
+                    serialize(candidate)
+                    for candidate in candidates[: EVERY_FLIP_ROWS if every_flip else 30]
+                ],
             },
         )
 

@@ -7,6 +7,7 @@ import shutil
 import sys
 from collections.abc import Callable, Hashable, Iterable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import ClassVar, NamedTuple
 
@@ -63,6 +64,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -239,6 +242,21 @@ class MarketWorker(QObject):
             self.finished.emit(mappings, points, client.used_cache)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
+
+
+class MirrorWorker(QObject):
+    finished = Signal(object, object)
+    failed = Signal(object, str)
+
+    def __init__(self, mirror: JournalMirror) -> None:
+        super().__init__()
+        self.mirror = mirror
+
+    def run(self) -> None:
+        try:
+            self.finished.emit(self.mirror, self.mirror.sync())
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(self.mirror, str(exc))
 
 
 class AccountWorker(QObject):
@@ -2010,17 +2028,72 @@ class GEOfferSlotCard(QFrame):
             widget.style().polish(widget)
 
 
+NAV_GROUP_ROLE = Qt.ItemDataRole.UserRole + 1
+NAV_GROUP_CAPTION_HEIGHT = 30
+
+
+class NavDelegate(QStyledItemDelegate):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.caption_color = QColor("#8a93a3")
+
+    def sizeHint(self, option, index):  # type: ignore[no-untyped-def]
+        size = super().sizeHint(option, index)
+        if index.data(NAV_GROUP_ROLE):
+            size.setHeight(size.height() + NAV_GROUP_CAPTION_HEIGHT)
+        return size
+
+    def paint(self, painter, option, index):  # type: ignore[no-untyped-def]
+        caption = index.data(NAV_GROUP_ROLE)
+        if caption:
+            painter.save()
+            font = QFont(option.font)
+            font.setPointSizeF(max(7.0, font.pointSizeF() * 0.8))
+            font.setBold(True)
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.2)
+            painter.setFont(font)
+            painter.setPen(self.caption_color)
+            painter.drawText(
+                option.rect.adjusted(14, 8, 0, 0),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
+                str(caption).upper(),
+            )
+            painter.restore()
+            option = QStyleOptionViewItem(option)
+            option.rect = option.rect.adjusted(0, NAV_GROUP_CAPTION_HEIGHT, 0, 0)
+        super().paint(painter, option, index)
+
+
 class MainWindow(QMainWindow):
-    NAV_ITEMS: ClassVar[list[str]] = [
-        "GE Flipper",
-        "Watchlist",
-        "Trade Journal",
-        "Performance",
-        "Alch Finder",
-        "Skilling Profit",
-        "PvM Readiness",
-        *REPORTS,
-    ]
+    NAV_GROUPS: ClassVar[tuple[tuple[str, tuple[str, ...]], ...]] = (
+        ("Market", ("GE Flipper", "Watchlist", "Alch Finder", "Skilling Profit")),
+        (
+            "Trading",
+            (
+                "Overview",
+                "Trade Journal",
+                "Performance",
+                "Flip Insights",
+                "Activity",
+                "Counterparties",
+            ),
+        ),
+        (
+            "Progress",
+            (
+                "Session",
+                "Net Worth",
+                "Trips",
+                "Drops",
+                "Skills & Bank",
+                "Skill Goals",
+                "Achievements",
+                "Quests",
+                "PvM Readiness",
+            ),
+        ),
+    )
+    NAV_ITEMS: ClassVar[list[str]] = [name for _group, names in NAV_GROUPS for name in names]
 
     def __init__(self) -> None:
         super().__init__()
@@ -2055,6 +2128,7 @@ class MainWindow(QMainWindow):
         except OSError:
             self._journal = JournalRepository()
         self._sync_importer = build_sync_importer()
+        self._poll_sync_state_in_background()
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
         self._market_client = WikiMarketClient()
         self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
@@ -2108,6 +2182,8 @@ class MainWindow(QMainWindow):
         self._mirror_timer = QTimer(self)
         self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
         self._mirror_timer.timeout.connect(self._mirror_journal)
+        self._mirror_thread: QThread | None = None
+        self._mirror_worker: MirrorWorker | None = None
         self._report_pickers: dict[str, QComboBox] = {}
         self._report_bodies: dict[str, QVBoxLayout] = {}
         self._build_ui()
@@ -2134,7 +2210,9 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def page_shortcut(index: int) -> str:
-        return f"Ctrl+{index + 1}" if index < 9 else f"Ctrl+Shift+{index - 8}"
+        if index < 9:
+            return f"Ctrl+{index + 1}"
+        return f"Ctrl+Shift+{(index - 8) % 10}"
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -2162,7 +2240,11 @@ class MainWindow(QMainWindow):
         self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.nav.setUniformItemSizes(True)
         self.nav.setSpacing(2)
+        self._nav_delegate = NavDelegate(self.nav)
+        self.nav.setItemDelegate(self._nav_delegate)
         self.nav.addItems(self.NAV_ITEMS)
+        for _group, names in self.NAV_GROUPS:
+            self.nav.item(self.NAV_ITEMS.index(names[0])).setData(NAV_GROUP_ROLE, _group)
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._change_page)
         for index, title in enumerate(self.NAV_ITEMS):
@@ -2198,15 +2280,18 @@ class MainWindow(QMainWindow):
         layout.addLayout(top)
 
         self.pages = QStackedWidget()
-        self.pages.addWidget(self._build_flip_page())
-        self.pages.addWidget(self._build_watchlist_page())
-        self.pages.addWidget(self._build_journal_page())
-        self.pages.addWidget(self._build_performance_page())
-        self.pages.addWidget(self._build_alch_page())
-        self.pages.addWidget(self._build_skilling_page())
-        self.pages.addWidget(self._build_pvm_page())
-        for key in REPORTS:
-            self.pages.addWidget(self._build_report_page(key))
+        builders: dict[str, Callable[[], QWidget]] = {
+            "GE Flipper": self._build_flip_page,
+            "Watchlist": self._build_watchlist_page,
+            "Trade Journal": self._build_journal_page,
+            "Performance": self._build_performance_page,
+            "Alch Finder": self._build_alch_page,
+            "Skilling Profit": self._build_skilling_page,
+            "PvM Readiness": self._build_pvm_page,
+            **{key: partial(self._build_report_page, key) for key in REPORTS},
+        }
+        for name in self.NAV_ITEMS:
+            self.pages.addWidget(builders[name]())
         layout.addWidget(self.pages, 1)
         outer.addWidget(content, 1)
         self.setCentralWidget(root)
@@ -2413,6 +2498,14 @@ class MainWindow(QMainWindow):
         controls.addWidget(QLabel("GE slots"))
         controls.addWidget(self.slots)
         controls.addWidget(self.strategy)
+        self.show_all_flips = QCheckBox("Every flip")
+        self.show_all_flips.setToolTip(
+            "List every item with a positive margin after tax, not only the ones that clear\n"
+            "the strategy's bar. Rows that miss the bar are dimmed; recommendations still\n"
+            "come only from the ones that clear it."
+        )
+        self.show_all_flips.toggled.connect(self._show_all_flips_changed)
+        controls.addWidget(self.show_all_flips)
         layout.addLayout(controls)
         recommendation = QFrame(objectName="recommendation")
         recommendation_layout = QVBoxLayout(recommendation)
@@ -3546,7 +3639,11 @@ class MainWindow(QMainWindow):
             return
         QSettings().setValue(WEB_BASE_URL_KEY, base_url)
         QSettings().setValue(WEB_TOKEN_KEY, token)
+        stop = getattr(self._sync_importer.source, "stop_background", None)
+        if stop is not None:
+            stop()
         self._sync_importer = build_sync_importer()
+        self._poll_sync_state_in_background()
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
         self._last_sync_message = ""
         self._last_mirror_message = ""
@@ -3683,14 +3780,7 @@ class MainWindow(QMainWindow):
         self._mappings, self._points = mappings, points
         self._refresh_watchlist_completer()
         self._refresh_overnight_suggestions()
-        self._flips = rank_flips(
-            mappings,
-            points,
-            cash_stack=self.cash.value(),
-            strategy=self.strategy.currentText(),
-            slot_count=self.slots.value(),
-        )
-        self._plan_portfolio()
+        self._rerank()
         for button in self._market_buttons:
             button.setEnabled(True)
             button.setText("Refresh market")
@@ -3710,27 +3800,15 @@ class MainWindow(QMainWindow):
     def _cash_changed(self) -> None:
         if not self._points:
             return
-        self._flips = rank_flips(
-            self._mappings,
-            self._points,
-            cash_stack=self.cash.value(),
-            strategy=self.strategy.currentText(),
-            slot_count=self.slots.value(),
-        )
-        self._plan_portfolio()
+        self._rerank()
         self._render_flips()
 
     def _slots_changed(self, slot_count: int) -> None:
         QSettings().setValue("market/ge_slots", slot_count)
         if self._points:
-            self._flips = rank_flips(
-                self._mappings,
-                self._points,
-                cash_stack=self.cash.value(),
-                strategy=self.strategy.currentText(),
-                slot_count=slot_count,
-            )
-        self._plan_portfolio()
+            self._rerank(slot_count=slot_count)
+        else:
+            self._plan_portfolio()
         self._render_flips()
 
     def _alch_settings_changed(self, _value: object) -> None:
@@ -3741,19 +3819,29 @@ class MainWindow(QMainWindow):
     def _strategy_changed(self, strategy: str) -> None:
         if not self._points:
             return
+        self._rerank(strategy=strategy)
+        self._render_flips()
+
+    def _show_all_flips_changed(self, _checked: bool) -> None:
+        if not self._points:
+            return
+        self._rerank()
+        self._render_flips()
+
+    def _rerank(self, *, strategy: str | None = None, slot_count: int | None = None) -> None:
         self._flips = rank_flips(
             self._mappings,
             self._points,
             cash_stack=self.cash.value(),
-            strategy=strategy,
-            slot_count=self.slots.value(),
+            strategy=strategy or self.strategy.currentText(),
+            slot_count=slot_count or self.slots.value(),
+            include_all=self.show_all_flips.isChecked(),
         )
         self._plan_portfolio()
-        self._render_flips()
 
     def _plan_portfolio(self) -> None:
         self._portfolio = plan_flip_portfolio(
-            self._flips,
+            [candidate for candidate in self._flips if candidate.meets_strategy],
             cash_stack=self.cash.value(),
             slot_count=self.slots.value(),
         )
@@ -3765,7 +3853,7 @@ class MainWindow(QMainWindow):
         remaining = [
             candidate
             for candidate in self._flips
-            if candidate.item_id not in self._excluded_item_ids
+            if candidate.meets_strategy and candidate.item_id not in self._excluded_item_ids
         ]
         alternative = plan_flip_portfolio(
             remaining,
@@ -3796,7 +3884,8 @@ class MainWindow(QMainWindow):
 
     def _render_flips(self) -> None:
         query = self.search.text().strip().casefold()
-        rows = [item for item in self._flips if query in item.name.casefold()][:250]
+        limit = len(self._flips) if self.show_all_flips.isChecked() else 250
+        rows = [item for item in self._flips if query in item.name.casefold()][:limit]
         values = [
             [
                 item.name,
@@ -3818,6 +3907,13 @@ class MainWindow(QMainWindow):
             colour, reading = self._confidence_reading(rows[row_index].confidence, floor)
             cell = self.flip_table.item(row_index, 9)
             cell.setForeground(QColor(colour))
+            if not rows[row_index].meets_strategy:
+                for column in range(self.flip_table.columnCount()):
+                    self.flip_table.item(row_index, column).setForeground(QColor(self._muted_color))
+                self.flip_table.item(row_index, 0).setToolTip(
+                    f"Misses the {self.strategy.currentText()} bar: too little margin, stale or "
+                    "unsteady prices, or too thin a market. Shown because Every flip is on."
+                )
             cell.setToolTip(
                 f"How much recent trading backs this margin: volume, how fresh the\n"
                 f"prices are, and how steady they have been.\n"
@@ -4308,13 +4404,39 @@ class MainWindow(QMainWindow):
             prices[point.item_id] = sell_price
         return prices
 
+    def _poll_sync_state_in_background(self) -> None:
+        start = getattr(self._sync_importer.source, "start_background", None)
+        if start is not None:
+            start()
+
     def _mirror_journal(self) -> None:
-        if not self._journal_mirror.client.configured:
+        if self._mirror_thread is not None or not self._journal_mirror.client.configured:
             return
-        try:
-            result = self._journal_mirror.sync()
-        except Exception as exc:  # noqa: BLE001
-            self._last_mirror_message = f" • journal sync paused: {exc}"
+        thread = QThread(self)
+        worker = MirrorWorker(self._journal_mirror)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._mirror_finished)
+        worker.failed.connect(self._mirror_failed)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._mirror_stopped)
+        self._mirror_thread = thread
+        self._mirror_worker = worker
+        thread.start()
+
+    def _mirror_stopped(self) -> None:
+        self._mirror_thread = None
+        self._mirror_worker = None
+
+    def _mirror_failed(self, mirror: object, message: str) -> None:
+        if mirror is self._journal_mirror:
+            self._last_mirror_message = f" • journal sync paused: {message}"
+
+    def _mirror_finished(self, mirror: object, result: MirrorResult) -> None:
+        if mirror is not self._journal_mirror:
             return
         self._last_mirror_message = "" if result.checked_only else f" • {result.describe()}"
         self._update_runelite_status()
@@ -5303,6 +5425,9 @@ class MainWindow(QMainWindow):
         self._profit_color = palette.profit
         self._loss_color = palette.loss
         self._muted_color = palette.muted
+        if hasattr(self, "_nav_delegate"):
+            self._nav_delegate.caption_color = QColor(palette.muted)
+            self.nav.viewport().update()
         self._text_color = palette.text
         self._link_color = palette.link
         self._journal_status_colors = {
@@ -5370,7 +5495,7 @@ class MainWindow(QMainWindow):
             #geSlot[flash="on"] #geSlotNumber, #geSlot[flash="on"] #geSlotStatus, #geSlot[flash="on"] #geSlotItem {{ color: {palette.flash}; }}
             #geSlot[flash="on"] #geSlotProgress::chunk {{ background: {palette.flash}; }}
             #nav {{ background: transparent; border: 0; outline: 0; padding-top: 16px; }}
-            #nav::item {{ padding: 11px 12px; border-radius: {control}; margin: 1px 2px; }}
+            #nav::item {{ padding: 8px 12px; border-radius: {control}; margin: 1px 2px; }}
             #nav::item:selected {{ background: {palette.header}; color: {palette.nav_selected_text}; }}
             /* Styled through QAbstractSpinBox, not QSpinBox: a type selector matches
                subclasses, and GpSpinBox is a sibling of QSpinBox rather than a child of
@@ -5478,7 +5603,15 @@ class MainWindow(QMainWindow):
         QSettings().setValue(WINDOW_GEOMETRY_KEY, self.saveGeometry())
         self._journal_flasher.stop()
         self._slot_flasher.stop()
-        for thread in (self._thread, self._account_thread, self._update_thread):
+        stop = getattr(self._sync_importer.source, "stop_background", None)
+        if stop is not None:
+            stop()
+        for thread in (
+            self._thread,
+            self._account_thread,
+            self._update_thread,
+            self._mirror_thread,
+        ):
             if thread is not None and thread.isRunning():
                 thread.quit()
                 thread.wait(2_000)

@@ -344,3 +344,14 @@ def test_the_cash_stack_input_accepts_any_whole_number(signed_in: TestClient):
 
     assert 'step="1"' in response.text
     assert 'value="19935127"' in response.text
+
+
+def test_every_flip_lists_the_candidates_page_even_when_the_bar_is_missed(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get(
+            "/flips", params={"every_flip": "1", "strategy": "Quick (up to 1h)"}
+        )
+
+    assert response.status_code == 200
+    assert "Every flip" in response.text
+    assert "Abyssal whip" in response.text

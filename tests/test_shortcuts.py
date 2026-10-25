@@ -42,3 +42,10 @@ def test_pressing_the_number_changes_the_page(window: MainWindow, qt_app: QAppli
 
     assert window.pages.currentIndex() == journal
     assert window.nav.currentRow() == journal
+
+
+def test_no_two_pages_share_a_shortcut() -> None:
+    keys = [MainWindow.page_shortcut(index) for index in range(len(MainWindow.NAV_ITEMS))]
+
+    assert len(set(keys)) == len(keys)
+    assert all(QKeySequence(key).count() == 1 for key in keys)

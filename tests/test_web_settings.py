@@ -29,6 +29,19 @@ class StubSettings:
         self._values.pop(key, None)
 
 
+def _mirror(window) -> None:
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    window._mirror_journal()
+    deadline = time.monotonic() + 5
+    while window._mirror_thread is not None and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
+    QApplication.processEvents()
+
+
 @pytest.fixture
 def settings(monkeypatch):
     StubSettings._values.clear()
@@ -119,7 +132,7 @@ def test_no_token_means_the_mirror_never_reaches_out(window):
     calls = []
     window._journal_mirror.client.get = lambda path, **params: calls.append(path)
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert calls == []
 
@@ -142,7 +155,7 @@ def test_a_failing_sync_does_not_break_the_ui_loop(window):
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     window._journal_mirror.sync = explode
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert "journal sync paused" in window._last_mirror_message
 
@@ -166,7 +179,7 @@ def test_a_sync_that_changed_something_redraws_the_journal(window):
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     window._journal_mirror.sync = lambda: MirrorResult(reached=True, pulled=3)
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert redrawn == ["journal", "performance"]
 
@@ -180,7 +193,7 @@ def test_a_quiet_sync_redraws_nothing(window):
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     window._journal_mirror.sync = lambda: MirrorResult(reached=True, checked_only=True)
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert redrawn == []
 
@@ -191,7 +204,7 @@ def test_a_sync_shows_up_beside_the_connection_status(window):
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     window._journal_mirror.sync = lambda: MirrorResult(reached=True, pulled=3, pushed=1)
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert "Synced 3 in, 1 out" in window.runelite_status.text()
 
@@ -202,7 +215,7 @@ def test_a_quiet_pass_leaves_the_line_clean(window):
     window._save_website_settings(DEFAULT_BASE_URL, "a-desktop-token")
     window._journal_mirror.sync = lambda: MirrorResult(reached=True, checked_only=True)
 
-    window._mirror_journal()
+    _mirror(window)
 
     assert "Synced" not in window.runelite_status.text()
 

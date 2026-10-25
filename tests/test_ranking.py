@@ -352,3 +352,20 @@ def test_ranker_drops_an_item_whose_buy_limit_is_already_spent() -> None:
     assert rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={1: 0}, now=now) == []
     untouched = rank_flips(mappings, [point], cash_stack=100_000, remaining_limits={}, now=now)
     assert untouched[0].suggested_quantity == 25
+
+
+def test_every_flip_keeps_the_stale_one_and_marks_it_as_missing_the_bar() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Test item", True, 100, None)}
+    fresh = MarketPoint(1, 1_200, 1_000, now - 60, now - 90, 50, 600, 1_090, 1_080)
+    stale = MarketPoint(2, 2_000, 1_000, now - 4_000, now - 4_000, 50, 600)
+    mappings[2] = ItemMapping(2, "Stale item", True, 100, None)
+
+    everything = rank_flips(mappings, [fresh, stale], cash_stack=100_000, now=now, include_all=True)
+
+    by_name = {candidate.name: candidate for candidate in everything}
+    assert by_name["Test item"].meets_strategy is True
+    assert by_name["Stale item"].meets_strategy is False
+    assert [c.name for c in rank_flips(mappings, [fresh, stale], cash_stack=100_000, now=now)] == [
+        "Test item"
+    ]

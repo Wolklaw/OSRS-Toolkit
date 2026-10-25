@@ -307,3 +307,31 @@ def test_check_complains_when_the_token_is_refused():
             assert "Profile page" in str(error)
         else:
             raise AssertionError("a refused token should be reported, not swallowed")
+
+
+def test_a_background_source_never_calls_the_network_from_the_caller():
+    import threading
+    import time
+
+    source = _source()
+    callers: list[str] = []
+    answered = threading.Event()
+
+    def fetch(path: str, **_params: str) -> dict:
+        callers.append(threading.current_thread().name)
+        answered.set()
+        return {"offers": {"0": {"item_id": 4151}}}
+
+    source.client.get = fetch
+    source.start_background(interval=0.05)
+    try:
+        assert source.offer_state_payload("abc") in (None, {"0": {"item_id": 4151}})
+        assert answered.wait(2)
+        deadline = time.monotonic() + 2
+        while source.offer_state_payload("abc") is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert source.offer_state_payload("abc") == {"0": {"item_id": 4151}}
+    finally:
+        source.stop_background()
+
+    assert set(callers) == {"sync-state-poller"}

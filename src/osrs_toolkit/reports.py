@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from osrs_toolkit.achievements import container_rows, summarise_progress
 from osrs_toolkit.cancellations import cancellation_groups, summarize_cancellations
 from osrs_toolkit.drops import drop_table, npc_summaries
 from osrs_toolkit.fill_times import fill_observations, fill_time_groups
@@ -544,6 +545,69 @@ def skill_goals(context: ReportContext, _choice: str | None = None) -> list[Sect
     ]
 
 
+def achievements(context: ReportContext, _choice: str | None = None) -> list[Section]:
+    if context.account_hash is None:
+        return _no_character()
+    journal = context.journal
+    record = journal.get_progress(context.account_hash)
+    sections: list[Section] = []
+    if record is None:
+        sections.append(
+            Section(
+                "No progress yet",
+                'Turn on "Track quests, diaries and Slayer" in the plugin\'s settings. '
+                "Needs plugin 1.2.0.",
+            )
+        )
+    else:
+        summary = summarise_progress(record)
+        slayer = summary.slayer
+        sections.append(
+            Section(
+                "Progress",
+                f"As of {_day(summary.captured_at)} UTC.",
+                ("Measure", "Value"),
+                (
+                    ("Quest points", _n(summary.quest_points)),
+                    ("Quests finished", _n(summary.quests_finished)),
+                    ("Quests in progress", _n(summary.quests_in_progress)),
+                    (
+                        "Diary tiers",
+                        f"{summary.diary_tiers_complete} of {summary.diary_tiers_total}",
+                    ),
+                    (
+                        "Combat achievement points",
+                        f"{_n(summary.combat_points)} ({summary.combat_tier or 'no tier yet'})",
+                    ),
+                    (
+                        "Slayer task",
+                        f"{slayer.task}, {_n(slayer.remaining)} left" if slayer.task else "No task",
+                    ),
+                    ("Slayer points", _n(slayer.points)),
+                    ("Slayer tasks completed", _n(slayer.tasks_completed)),
+                ),
+            )
+        )
+        sections.append(
+            Section(
+                "Achievement diaries",
+                headers=("Region", "Highest tier done"),
+                rows=tuple((row.region, row.label) for row in summary.diaries),
+            )
+        )
+    containers = container_rows(journal.list_container_items(context.account_hash))
+    sections.append(
+        Section(
+            "Containers",
+            f"Worth {_n(sum(row.value for row in containers))} gp in all.",
+            ("Container", "Stacks", "Value"),
+            tuple((row.label, _n(row.stacks), _n(row.value)) for row in containers),
+            empty="No looting bag, seed vault, seed box or tackle box recorded yet.",
+        )
+    )
+    return sections
+
+
 def flip_insights(context: ReportContext, _choice: str | None = None) -> list[Section]:
     journal = context.journal
     hash_ = context.account_hash
@@ -645,6 +709,11 @@ REPORTS: dict[str, ReportDefinition] = {
         "Skill Goals",
         "How far each skill is from 99, and what its next levels unlock.",
         skill_goals,
+    ),
+    "Achievements": ReportDefinition(
+        "Achievements",
+        "Quest points, diaries, combat achievements, Slayer and what your containers hold.",
+        achievements,
     ),
     "Flip Insights": ReportDefinition(
         "Flip Insights",

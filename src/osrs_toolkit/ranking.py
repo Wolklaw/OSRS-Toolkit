@@ -137,6 +137,7 @@ def rank_flips(
     slot_count: int = 8,
     remaining_limits: Mapping[int, int] | None = None,
     now: int | None = None,
+    include_all: bool = False,
 ) -> list[FlipCandidate]:
     settings = STRATEGIES.get(strategy, STRATEGIES["Balanced (1–4h)"])
     required_roi = float(settings["min_roi"] if min_roi is None else min_roi)
@@ -145,25 +146,29 @@ def rank_flips(
     for point in points:
         item = mappings.get(point.item_id)
         buy_price, sell_price = offer_targets(point)
-        if (
-            item is None
-            or buy_price > cash_stack
-            or sell_price <= buy_price
-            or not _has_two_sided_liquidity(point)
-        ):
+        if item is None or buy_price > cash_stack or sell_price <= buy_price:
+            continue
+        meets_strategy = _has_two_sided_liquidity(point)
+        if not meets_strategy and not include_all:
             continue
         age = current_time - min(point.high_time, point.low_time)
         tax = ge_tax(sell_price, exempt=is_tax_exempt(point.item_id, item.name))
         profit = sell_price - buy_price - tax
         roi = profit / buy_price * 100
-        if profit <= 0 or roi < required_roi or age < 0 or age > max_age_seconds:
+        if profit <= 0:
             continue
+        if roi < required_roi or age < 0 or age > max_age_seconds:
+            meets_strategy = False
+            if not include_all:
+                continue
         adverse_buffer = max(
             int(settings["adverse_ticks"]),
             math.ceil(buy_price * float(settings["adverse_rate"])),
         )
         if profit <= adverse_buffer:
-            continue
+            meets_strategy = False
+            if not include_all:
+                continue
 
         freshness = max(0.0, 1.0 - age / max_age_seconds)
         liquidity = min(1.0, math.log1p(point.volume_1h) / math.log1p(20_000))
@@ -172,7 +177,9 @@ def rank_flips(
         if confidence < int(settings["min_confidence"]) or stability < float(
             settings["min_stability"]
         ):
-            continue
+            meets_strategy = False
+            if not include_all:
+                continue
         slot_fraction = 1 / max(1, slot_count)
         capital_fraction = max(float(settings["capital_fraction"]), slot_fraction)
         position_budget = max(buy_price, int(cash_stack * capital_fraction))
@@ -220,6 +227,7 @@ def rank_flips(
                 confidence=confidence,
                 age_seconds=age,
                 score=score,
+                meets_strategy=meets_strategy,
             )
         )
     return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)

@@ -4,8 +4,20 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-25
+
 ### Highlights
 
+- **The desktop app no longer freezes.** It used to ask the website for the live Grand Exchange
+  slots every three seconds, and sync the journal every minute, on the same thread that draws the
+  window, so a slow reply meant "not responding". Both now run in the background and the window
+  only ever reads what has already arrived.
+- **A sidebar that scales.** The nineteen pages are grouped under Market, Trading and Progress,
+  with captions, tighter rows and a scrollbar only when the window is too short for them.
+- **Every flip.** The GE Flipper has a "Every flip" switch on both the website and the desktop
+  that lists every item with a positive margin after tax, not only the ones that clear the chosen
+  strategy's bar. Rows that miss the bar are dimmed and labelled, and recommendations still come
+  only from the ones that clear it.
 - **Achievements.** A new page under Progress shows quest points, achievement diary tiers by
   region, combat achievement points and the tier they reach, your Slayer task with kills
   remaining, and what the looting bag, seed vault, seed box and tackle box hold. Finished quests

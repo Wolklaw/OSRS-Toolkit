@@ -64,3 +64,4 @@ class FlipCandidate:
     confidence: int
     age_seconds: int
     score: float
+    meets_strategy: bool = True

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -131,30 +132,71 @@ class WebAppSource:
         self._cached: dict[str, tuple[float, dict]] = {}
         self._last_good: dict[str, dict] = {}
         self._consecutive_failures: dict[str, int] = {}
+        self._lock = threading.Lock()
+        self._wanted: set[str] = {""}
+        self._wake = threading.Event()
+        self._stopping = threading.Event()
+        self._poller: threading.Thread | None = None
 
     @property
     def configured(self) -> bool:
         return self.client.configured
+
+    def start_background(self, interval: float = STATE_CACHE_SECONDS) -> None:
+        if self._poller is not None:
+            return
+        self._stopping.clear()
+        self._poller = threading.Thread(
+            target=self._poll_forever, args=(interval,), name="sync-state-poller", daemon=True
+        )
+        self._poller.start()
+
+    def stop_background(self) -> None:
+        self._stopping.set()
+        self._wake.set()
+        self._poller = None
+
+    def _poll_forever(self, interval: float) -> None:
+        while not self._stopping.is_set():
+            with self._lock:
+                wanted = list(self._wanted)
+            for account_hash in wanted:
+                if self._stopping.is_set():
+                    return
+                self._refresh(account_hash, time.monotonic())
+            self._wake.wait(interval)
+            self._wake.clear()
 
     @property
     def last_error(self) -> str | None:
         return self.client.last_error
 
     def _state(self, account_hash: str = "") -> dict:
+        if self._poller is not None:
+            with self._lock:
+                cached = self._cached.get(account_hash)
+                if account_hash not in self._wanted:
+                    self._wanted.add(account_hash)
+                    self._wake.set()
+            return cached[1] if cached is not None else {}
         now = time.monotonic()
         cached = self._cached.get(account_hash)
         if cached is not None and now - cached[0] < STATE_CACHE_SECONDS:
             return cached[1]
+        return self._refresh(account_hash, now)
+
+    def _refresh(self, account_hash: str, now: float) -> dict:
         fetched = self.client.get("/api/sync-state", account_hash=account_hash)
-        if isinstance(fetched, dict):
-            self._consecutive_failures[account_hash] = 0
-            self._last_good[account_hash] = fetched
-            payload = fetched
-        else:
-            failures = self._consecutive_failures.get(account_hash, 0) + 1
-            self._consecutive_failures[account_hash] = failures
-            payload = self._last_good.get(account_hash, {}) if failures <= 1 else {}
-        self._cached[account_hash] = (now, payload)
+        with self._lock:
+            if isinstance(fetched, dict):
+                self._consecutive_failures[account_hash] = 0
+                self._last_good[account_hash] = fetched
+                payload = fetched
+            else:
+                failures = self._consecutive_failures.get(account_hash, 0) + 1
+                self._consecutive_failures[account_hash] = failures
+                payload = self._last_good.get(account_hash, {}) if failures <= 1 else {}
+            self._cached[account_hash] = (now, payload)
         return payload
 
     def status_payload(self) -> tuple[bool, dict | None, bool]:
