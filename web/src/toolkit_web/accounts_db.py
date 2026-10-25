@@ -275,7 +275,6 @@ class AccountsDB:
                 (discord_user_id,),
             )
 
-
     def add_character(self, discord_user_id: str, name: str) -> Character | None:
         try:
             with self._transaction() as connection:
@@ -335,7 +334,6 @@ class AccountsDB:
                 (discord_user_id,),
             ).fetchall()
         return {row["trade_sync_uid"]: row["character_id"] for row in rows}
-
 
     def add_watchlist_item(self, discord_user_id: str, item_id: int) -> bool:
         with self._transaction() as connection:
@@ -430,7 +428,6 @@ class AccountsDB:
                 " WHERE discord_user_id = ? AND item_id = ?",
                 (_stamp(), discord_user_id, item_id),
             )
-
 
     def create_desktop_token(self, discord_user_id: str, label: str) -> str:
         token = secrets.token_urlsafe(32)

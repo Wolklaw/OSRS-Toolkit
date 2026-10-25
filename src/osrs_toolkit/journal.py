@@ -49,8 +49,7 @@ def _fills_for(
         placeholders = ",".join("?" * len(chunk))
         rows.extend(
             connection.execute(
-                f"SELECT * FROM {table} WHERE position_id IN ({placeholders})"
-                " ORDER BY fill_id ASC",
+                f"SELECT * FROM {table} WHERE position_id IN ({placeholders}) ORDER BY fill_id ASC",
                 tuple(chunk),
             ).fetchall()
         )
@@ -817,8 +816,7 @@ class JournalRepository:
             "CREATE INDEX IF NOT EXISTS synced_trades_occurred ON synced_trades(occurred_at)"
         )
         connection.execute(
-            "CREATE INDEX IF NOT EXISTS synced_trade_items_event "
-            "ON synced_trade_items(event_id)"
+            "CREATE INDEX IF NOT EXISTS synced_trade_items_event ON synced_trade_items(event_id)"
         )
 
     def _create_activity_tables(self, connection: sqlite3.Connection) -> None:
@@ -847,8 +845,7 @@ class JournalRepository:
             """
         )
         connection.execute(
-            "CREATE INDEX IF NOT EXISTS npc_loot_events_occurred "
-            "ON npc_loot_events(occurred_at)"
+            "CREATE INDEX IF NOT EXISTS npc_loot_events_occurred ON npc_loot_events(occurred_at)"
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS npc_loot_items_event ON npc_loot_items(event_id)"
@@ -884,8 +881,7 @@ class JournalRepository:
             "ON player_death_events(occurred_at)"
         )
         connection.execute(
-            "CREATE INDEX IF NOT EXISTS player_death_items_event "
-            "ON player_death_items(event_id)"
+            "CREATE INDEX IF NOT EXISTS player_death_items_event ON player_death_items(event_id)"
         )
 
     def _create_loadout_tables(self, connection: sqlite3.Connection) -> None:
@@ -1012,9 +1008,7 @@ class JournalRepository:
         }
         for column, definition in column_migrations.items():
             if column not in tracked_columns:
-                connection.execute(
-                    f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}"
-                )
+                connection.execute(f"ALTER TABLE tracked_trades ADD COLUMN {column} {definition}")
         self._migrate_sync_columns(connection, "tracked_trades", "position_id", "created_at")
         connection.execute(
             """
@@ -1163,8 +1157,7 @@ class JournalRepository:
                 (now, account_hash),
             )
             cursor = connection.execute(
-                "INSERT INTO trading_sessions (account_hash, label, started_at)"
-                " VALUES (?, ?, ?)",
+                "INSERT INTO trading_sessions (account_hash, label, started_at) VALUES (?, ?, ?)",
                 (account_hash, label.strip(), opened_at),
             )
             session_id = int(cursor.lastrowid)
@@ -1204,9 +1197,7 @@ class JournalRepository:
             ).fetchall()
         return [_trading_session(row) for row in rows]
 
-    def _new_position_status(
-        self, account_hash: str | None, occurred_at: str | None = None
-    ) -> str:
+    def _new_position_status(self, account_hash: str | None, occurred_at: str | None = None) -> str:
         if self.flip_tracking_mode() == "always":
             return "Pending buy"
         return "Pending buy" if self._session_covers(account_hash, occurred_at) else "Supplies"
@@ -1590,9 +1581,7 @@ class JournalRepository:
         )
         opened_as = self._new_position_status(account_hash, occurred_at)
         if opened_as == "Supplies":
-            self.update_tracked(
-                position_id, "Supplies", None, None, None, [(quantity, unit_price)]
-            )
+            self.update_tracked(position_id, "Supplies", None, None, None, [(quantity, unit_price)])
             return position_id
         status = "Bought" if quantity == total_quantity else "Pending buy"
         self.update_tracked(position_id, status, None, None, None, [(quantity, unit_price)])
@@ -1739,9 +1728,7 @@ class JournalRepository:
             self.list_tracked(account_hash, item_id), key=lambda trade: trade.created_at
         )
         if side == "sell":
-            candidate = next(
-                (trade for trade in by_age if trade.status == "Listed for sale"), None
-            )
+            candidate = next((trade for trade in by_age if trade.status == "Listed for sale"), None)
             if candidate is None:
                 return None
             self.update_tracked(
@@ -2349,9 +2336,7 @@ class JournalRepository:
             )
 
     @staticmethod
-    def _prune_loadout_snapshot_history(
-        connection: sqlite3.Connection, account_hash: str
-    ) -> None:
+    def _prune_loadout_snapshot_history(connection: sqlite3.Connection, account_hash: str) -> None:
         rows = connection.execute(
             "SELECT entry_id, captured_at FROM loadout_snapshot_history WHERE account_hash = ?",
             (account_hash,),

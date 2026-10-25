@@ -67,9 +67,7 @@ def test_a_nonsense_backdate_is_refused(signed_in: TestClient):
     assert response.status_code == 422
 
 
-def test_the_tracking_mode_can_be_put_back_to_how_it_was(
-    signed_in: TestClient, settings: Settings
-):
+def test_the_tracking_mode_can_be_put_back_to_how_it_was(signed_in: TestClient, settings: Settings):
     assert signed_in.put("/api/flip-tracking-mode", json={"mode": "always"}).status_code == 200
 
     repository = JournalRepository(settings.journal_path("111"))

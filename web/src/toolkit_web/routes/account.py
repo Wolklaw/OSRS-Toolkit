@@ -125,6 +125,7 @@ def build(deps: Deps) -> APIRouter:
         return response
 
     if settings.dev_login_enabled:
+
         @router.post("/auth/dev-login")
         def dev_login(payload: dict) -> Response:
             discord_user_id = payload.get("discord_user_id")

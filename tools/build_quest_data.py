@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -39,7 +41,7 @@ TRAINABLE_SKILLS = frozenset(
         "Woodcutting",
     }
 )
-SKILL_SPAN =re.compile(r'data-skill="([^"]+)"\s+data-level="(\d+)"')
+SKILL_SPAN = re.compile(r'data-skill="([^"]+)"\s+data-level="(\d+)"')
 LINK = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 DIRECT_LINE = re.compile(r"^\*\*(?!\*)\s*(.*)$")
 SINGLE_LINE = re.compile(r"^\*(?!\*)\s*(?:Completion of|Completed)\b(.*)$", re.IGNORECASE)
@@ -184,6 +186,7 @@ def main() -> None:
     quests = build()
     body = json.dumps(quests, indent=1, ensure_ascii=False)
     TARGET.write_text(f"from __future__ import annotations\n\nQUESTS = {body}\n", encoding="utf-8")
+    subprocess.run([sys.executable, "-m", "ruff", "format", str(TARGET)], check=True)
     print(f"{len(quests)} quests written to {TARGET}")
 
 

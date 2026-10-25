@@ -161,8 +161,10 @@ def assess_quests(levels: Mapping[str, int], completed: Iterable[str]) -> list[Q
 
 def _difficulty_rank(guide: QuestGuide) -> int:
     difficulty = guide.quest.difficulty
-    return DIFFICULTY_ORDER.index(difficulty) if difficulty in DIFFICULTY_ORDER else len(
-        DIFFICULTY_ORDER
+    return (
+        DIFFICULTY_ORDER.index(difficulty)
+        if difficulty in DIFFICULTY_ORDER
+        else len(DIFFICULTY_ORDER)
     )
 
 
@@ -193,9 +195,7 @@ def nearly_ready(
     return close[:limit]
 
 
-def best_for_skill(
-    guides: Iterable[QuestGuide], skill: str, limit: int = 5
-) -> list[QuestGuide]:
+def best_for_skill(guides: Iterable[QuestGuide], skill: str, limit: int = 5) -> list[QuestGuide]:
     rewarding = [
         guide
         for guide in guides

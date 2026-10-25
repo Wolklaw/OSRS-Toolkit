@@ -83,7 +83,9 @@ def test_a_callback_discord_never_confirmed_is_rejected(client: TestClient):
     state = login.cookies["oauth_state"]
 
     with (
-        patch("toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"),
+        patch(
+            "toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"
+        ),
         patch("toolkit_web.routes.account.discord_oauth.fetch_user", return_value=None),
     ):
         response = client.get(
@@ -103,7 +105,9 @@ def test_a_successful_callback_signs_the_user_in(client: TestClient):
     user = DiscordUser(id="111", username="Wolklaw", avatar_url=None)
 
     with (
-        patch("toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"),
+        patch(
+            "toolkit_web.routes.account.discord_oauth.exchange_code", return_value="access-token"
+        ),
         patch("toolkit_web.routes.account.discord_oauth.fetch_user", return_value=user),
     ):
         response = client.get(
