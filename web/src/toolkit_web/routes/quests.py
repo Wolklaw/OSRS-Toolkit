@@ -19,6 +19,10 @@ from toolkit_web.deps import Deps
 from toolkit_web.importing import journal_for
 
 QUEST_NAMES = frozenset(quest.name for quest in all_quests())
+COUNTED_QUEST_NAMES = frozenset(
+    quest.name for quest in all_quests() if quest.quest_points_awarded > 0
+)
+TOTAL_QUEST_POINTS = quest_points(COUNTED_QUEST_NAMES)
 
 
 def build(deps: Deps) -> APIRouter:
@@ -73,8 +77,9 @@ def build(deps: Deps) -> APIRouter:
                 "next_up": do_next(guides),
                 "almost": nearly_ready(guides),
                 "skill_picks": {skill: rows for skill, rows in skill_picks.items() if rows},
-                "done_count": len(completed & QUEST_NAMES),
-                "total_count": len(QUEST_NAMES),
+                "done_count": len(completed & COUNTED_QUEST_NAMES),
+                "total_count": len(COUNTED_QUEST_NAMES),
+                "total_quest_points": TOTAL_QUEST_POINTS,
                 "ready_count": sum(1 for guide in guides if guide.state == "Ready"),
                 "quest_points": quest_points(completed),
                 **switcher,
