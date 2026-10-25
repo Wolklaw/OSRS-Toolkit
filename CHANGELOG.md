@@ -4,6 +4,22 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+### Highlights
+
+- **A Quest Guide that reads your levels.** `/quests` lists every quest you can start right
+  now, ranked by how many other quests finishing it opens, then the ones that are only a few
+  levels away, the biggest experience rewards you can claim per skill, and a checklist to
+  tick off what you have done. Ticking a quest ticks everything it needs; unticking one
+  unticks everything that needed it. Levels come from the loadout snapshots the plugin
+  already sends, so there is no plugin change, and nothing is fetched from WikiSync, whose
+  owners ask third parties not to use it. Quest requirements and rewards are a bundled
+  snapshot of the OSRS Wiki, rebuilt with `tools/build_quest_data.py`. Quest progress lives
+  in a new `quest_progress` table, additive like every other migration. Combat-level
+  requirements are not checked yet, and the desktop window does not show the guide yet.
+- **Re-file or remove many positions at once on the website.** The dashboard's Positions
+  table has checkboxes, a picker that selects open positions older than 3, 7, 14 or 30 days,
+  and Mark as supplies and Remove buttons. The desktop window already had the same thing.
+
 ## [1.4.0] - 2026-10-24
 
 ### Highlights

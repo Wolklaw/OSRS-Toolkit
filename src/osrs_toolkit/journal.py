@@ -969,6 +969,16 @@ class JournalRepository:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS skills_history_captured ON skills_history(captured_at)"
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS quest_progress (
+                account_hash TEXT NOT NULL,
+                quest_name TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                PRIMARY KEY (account_hash, quest_name)
+            )
+            """
+        )
 
     def _create_position_tables(self, connection: sqlite3.Connection) -> None:
         connection.execute(
@@ -2440,6 +2450,33 @@ class JournalRepository:
             )
             for row in rows
         ]
+
+    def list_completed_quests(self, account_hash: str) -> frozenset[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT quest_name FROM quest_progress WHERE account_hash = ?",
+                (account_hash,),
+            ).fetchall()
+        return frozenset(str(row["quest_name"]) for row in rows)
+
+    def set_quests_completed(
+        self, account_hash: str, quest_names: Sequence[str], completed: bool
+    ) -> None:
+        names = list(dict.fromkeys(quest_names))
+        if not names:
+            return
+        with self._connect() as connection:
+            if completed:
+                connection.executemany(
+                    "INSERT OR IGNORE INTO quest_progress (account_hash, quest_name, completed_at)"
+                    " VALUES (?, ?, ?)",
+                    [(account_hash, name, _now()) for name in names],
+                )
+            else:
+                connection.executemany(
+                    "DELETE FROM quest_progress WHERE account_hash = ? AND quest_name = ?",
+                    [(account_hash, name) for name in names],
+                )
 
     def list_skills_history(self, account_hash: str | None = None) -> list[SkillsPoint]:
         with self._connect() as connection:

@@ -190,7 +190,7 @@ roughly 75 days of six-hour average price and volume history per item.
 `/flips`, `/watchlist` with price alerts to a Discord webhook, `/trades`, `/activity`,
 `/counterparties`, `/loot-log` (90-day rollup with observed gp/hr per NPC), `/death-log`,
 `/performance` (by strategy, by item, plan vs. actual), `/session`, `/loadout`, `/pvm`,
-`/buy-limits`, `/alch`, `/skilling`, `/savings-goal`, `/item/{id}`.
+`/quests`, `/buy-limits`, `/alch`, `/skilling`, `/savings-goal`, `/item/{id}`.
 
 ### What we are throwing away
 

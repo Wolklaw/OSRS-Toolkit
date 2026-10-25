@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% set page_title = "Quest Guide" %}
+{% set page_sub = "What to do next at your levels, from the quests you have ticked off. Requirements and rewards come from the OSRS Wiki." %}
+
+{% macro wiki_link(name) -%}
+<a href="https://oldschool.runescape.wiki/w/{{ name.replace(' ', '_') | urlencode }}" target="_blank" rel="noopener">{{ name }}</a>
+{%- endmacro %}
+
+{% macro xp_list(experience) -%}
+{%- for skill, amount in experience.items() -%}{{ skill }} {{ "{:,}".format(amount) }}{% if not loop.last %}, {% endif %}{%- endfor -%}
+{%- endmacro %}
+
+{% block content %}
+
+{% if not has_character %}
+<div class="panel">
+  <div class="empty">
+    <strong>No character yet</strong>
+    Sync a character with the RuneLite plugin first, so the guide knows your levels.
+    <a href="/plugin">Set up the plugin</a>.
+  </div>
+</div>
+{% else %}
+
+{% if not has_levels %}
+<div class="panel">
+  <div class="empty">
+    <strong>No levels yet</strong>
+    Open your bank in game once with the plugin running. Until then every quest looks
+    blocked, because your levels are unknown. <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Where you are</h2>
+      <p class="hint tight">
+        {{ done_count }} of {{ total_count }} quests ticked &middot;
+        {{ quest_points }} quest points &middot;
+        {{ ready_count }} ready to start right now
+      </p>
+    </div>
+  </div>
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Do next</h2>
+      <p class="hint tight">Quests you can start now. The ones that open the most other quests
+        come first.</p>
+    </div>
+  </div>
+  {% if next_up %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Quest</th><th>Difficulty</th><th>Length</th><th class="num">Opens</th><th class="num">QP</th><th>XP reward</th></tr>
+      </thead>
+      <tbody>
+        {% for guide in next_up %}
+        <tr>
+          <td class="name">{{ wiki_link(guide.quest.name) }}<div class="table-note">{{ guide.quest.start }}</div></td>
+          <td>{{ guide.quest.difficulty }}</td>
+          <td>{{ guide.quest.length }}</td>
+          <td class="num">{{ guide.unlocks }}</td>
+          <td class="num">{{ guide.quest.quest_points_awarded }}</td>
+          <td class="wrap table-note">{% if guide.quest.experience %}{{ xp_list(guide.quest.experience) }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>Nothing ready</strong>
+    Tick the quests you have already finished below, or train toward one in the next list.
+  </div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Almost there</h2>
+      <p class="hint tight">Quests where the only thing missing is levels, nearest first.</p>
+    </div>
+  </div>
+  {% if almost %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Quest</th><th>Levels you need</th><th class="num">Levels short</th><th class="num">Opens</th></tr>
+      </thead>
+      <tbody>
+        {% for guide in almost %}
+        <tr>
+          <td class="name">{{ wiki_link(guide.quest.name) }}</td>
+          <td class="wrap table-note">{% for gap in guide.skill_gaps %}{{ gap.skill }} {{ gap.have }}/{{ gap.need }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td class="num">{{ guide.levels_short }}</td>
+          <td class="num">{{ guide.unlocks }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty"><strong>Nothing within reach</strong>No unticked quest is only a few levels away.</div>
+  {% endif %}
+</div>
+
+{% if skill_picks %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Quests that train a skill</h2>
+      <p class="hint tight">The biggest experience rewards you can claim right now, per skill.</p>
+    </div>
+    <input type="search" class="filter-input" placeholder="Filter by skill…"
+           oninput="filterTable(this, 'skill-picks-table')" aria-label="Filter by skill">
+    <span class="table-note" id="skill-picks-table-note"></span>
+  </div>
+  <div class="table-wrap">
+    <table id="skill-picks-table">
+      <thead><tr><th>Skill</th><th>Best ready quests</th></tr></thead>
+      <tbody>
+        {% for skill, rows in skill_picks.items() %}
+        <tr>
+          <td class="name">{{ skill }}</td>
+          <td class="wrap table-note">{% for guide in rows %}{{ wiki_link(guide.quest.name) }} ({{ "{:,}".format(guide.quest.experience[skill]) }} xp){% if not loop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Your quests</h2>
+      <p class="hint tight">Tick what you have finished. Ticking a quest also ticks everything
+        it needs; unticking one unticks everything that needs it.</p>
+      <div class="status-msg" id="quest-status"></div>
+    </div>
+    <input type="search" class="filter-input" placeholder="Filter quests…"
+           oninput="filterTable(this, 'quests-table')" aria-label="Filter quests">
+    <span class="table-note" id="quests-table-note"></span>
+  </div>
+  <div class="table-wrap">
+    <table id="quests-table">
+      <thead>
+        <tr><th>Done</th><th>Quest</th><th>Difficulty</th><th>Status</th><th>Blocked by</th></tr>
+      </thead>
+      <tbody>
+        {% for guide in guides %}
+        <tr>
+          <td><input type="checkbox" {% if guide.state == 'Done' %}checked{% endif %}
+                     data-quest="{{ guide.quest.name }}" onchange="toggleQuest(this)"
+                     aria-label="{{ guide.quest.name }} finished"></td>
+          <td class="name">{{ wiki_link(guide.quest.name) }}</td>
+          <td>{{ guide.quest.difficulty }}</td>
+          <td><span class="badge {{ 'ok' if guide.state == 'Done' else ('accent' if guide.state == 'Ready' else 'bad') }}">{{ guide.state }}</span></td>
+          <td class="wrap table-note">
+            {% if guide.state == 'Blocked' %}
+              {% for gap in guide.skill_gaps %}{{ gap.skill }} {{ gap.have }}/{{ gap.need }}{% if not loop.last or guide.missing_quests or guide.quest_point_gap %}, {% endif %}{% endfor %}
+              {% for name in guide.missing_quests %}{{ name }}{% if not loop.last or guide.quest_point_gap %}, {% endif %}{% endfor %}
+              {% if guide.quest_point_gap %}{{ guide.quest_point_gap }} more quest points{% endif %}
+            {% else %}&mdash;{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function toggleQuest(box) {
+    box.disabled = true;
+    const result = await api('POST', '/api/quests', {
+      quest_names: [box.dataset.quest],
+      completed: box.checked,
+    });
+    if (!result.ok) {
+      box.checked = !box.checked;
+      box.disabled = false;
+      setStatus('quest-status', result.error, 'error');
+      return;
+    }
+    location.reload();
+  }
+</script>
+{% endblock %}

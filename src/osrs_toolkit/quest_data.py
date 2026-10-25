@@ -1,0 +1,3405 @@
+from __future__ import annotations
+
+QUESTS = [
+ {
+  "name": "A Kingdom Divided",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "Talk to Martin Holt at the entrance to Kourend Castle in Kingstown.",
+  "skills": {
+   "Agility": 54,
+   "Crafting": 38,
+   "Herblore": 50,
+   "Magic": 35,
+   "Mining": 42,
+   "Thieving": 52,
+   "Woodcutting": 52
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Depths of Despair",
+   "The Queen of Thieves",
+   "The Ascent of Arceuus",
+   "The Forsaken Tower",
+   "Tale of the Righteous"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "A Night at the Theatre",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to the Mysterious Stranger inside Ver Sinhaza, south-east of Meiyerditch.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "A Taste of Hope"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "A Porcine of Interest",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Read the town notice board in Draynor Village, behind Fortunato's Wine Shop.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "A Ruff Situation",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Talia in the Dog Shelter just south-west of the Edgeville Monastery.",
+  "skills": {
+   "Crafting": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "A Soul's Bane",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Launa east of Varrock, just south of the Earth Altar.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "A Tail of Two Cats",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Unferth at his house in Burthorpe.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Icthlarin's Little Helper"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "A Taste of Hope",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Garth in Ver Sinhaza by the entrance to the Theatre of Blood.",
+  "skills": {
+   "Agility": 45,
+   "Attack": 40,
+   "Crafting": 48,
+   "Herblore": 40,
+   "Slayer": 38
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Darkness of Hallowvale"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Alfred Grimhand's Barcrawl",
+  "difficulty": "Novice",
+  "length": "Medium",
+  "start": "Speak to the barbarian guard at the entrance of the Barbarian Agility Training Course.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Animal Magnetism",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Ava in Draynor Manor.",
+  "skills": {
+   "Crafting": 19,
+   "Ranged": 30,
+   "Slayer": 18,
+   "Woodcutting": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Restless Ghost",
+   "Ernest the Chicken",
+   "Priest in Peril"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Another Slice of H.A.M.",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Ur-tag in Dorgesh-Kaan.",
+  "skills": {
+   "Attack": 15,
+   "Prayer": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Death to the Dorgeshuun",
+   "The Giant Dwarf",
+   "The Dig Site"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Mining": 3000
+  }
+ },
+ {
+  "name": "Architectural Alliance",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "Speak to Hosa by the statue outside Kourend Castle.",
+  "skills": {
+   "Mining": 42
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "At First Light",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Guildmaster Apatura at the Hunter Guild.",
+  "skills": {
+   "Construction": 27,
+   "Herblore": 30,
+   "Hunter": 46
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun",
+   "Eagles' Peak"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Construction": 800,
+   "Herblore": 500,
+   "Hunter": 4500
+  }
+ },
+ {
+  "name": "Barbarian Training",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Speak to Otto Godblessed in his grotto at the lake atop Baxtorian Falls.",
+  "skills": {
+   "Agility": 15,
+   "Crafting": 11,
+   "Farming": 15,
+   "Firemaking": 35,
+   "Fishing": 55,
+   "Herblore": 4,
+   "Smithing": 5,
+   "Strength": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Tai Bwo Wannai Trio"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Bear Your Soul",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Speak to Aretha after reading a book called Soul Journey in the Arceuus Library.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Below Ice Mountain",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Willow on the path south of Ice Mountain.",
+  "skills": {},
+  "quest_points_required": 16,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Beneath Cursed Sands",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Jamila at her stall in Sophanem.",
+  "skills": {
+   "Agility": 62,
+   "Crafting": 55,
+   "Firemaking": 55
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Contact!"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Between a Rock...",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Dondakan the Dwarf at the Keldagrim south-west mine.",
+  "skills": {
+   "Defence": 30,
+   "Mining": 40,
+   "Smithing": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Dwarf Cannon",
+   "Fishing Contest"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Big Chompy Bird Hunting",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "",
+  "skills": {
+   "Cooking": 30,
+   "Fletching": 5,
+   "Ranged": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {
+   "Fletching": 262
+  }
+ },
+ {
+  "name": "Biohazard",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Elena in her house in East Ardougne.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Plague City"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Black Knights' Fortress",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "",
+  "skills": {},
+  "quest_points_required": 12,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Bone Voyage",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Curator Haig Halen in the Varrock Museum.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Dig Site"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Cabin Fever",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to Bill Teach at The Green Ghost inn in Port Phasmatys.",
+  "skills": {
+   "Agility": 42,
+   "Crafting": 45,
+   "Ranged": 40,
+   "Smithing": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Pirate's Treasure",
+   "Rum Deal"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Children of the Sun",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Noah or Alina in Varrock square.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Client of Kourend",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Veos at Port Piscarilius.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "X Marks the Spot"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Clock Tower",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Brother Kojo in the Clock Tower south of East Ardougne.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Cold War",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Larry at Ardougne Zoo.",
+  "skills": {
+   "Agility": 30,
+   "Construction": 34,
+   "Crafting": 30,
+   "Hunter": 10,
+   "Thieving": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Contact!",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to the High Priest of Icthlarin in Sophanem.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Prince Ali Rescue",
+   "Icthlarin's Little Helper"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Cook's Assistant",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to the Cook in the kitchen of Lumbridge Castle.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Cooking": 300
+  }
+ },
+ {
+  "name": "Crab Quest",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Sail to Dognose Island (north-west of the Great Conch) and drink from the strange bottle to start the quest.",
+  "skills": {
+   "Fishing": 30,
+   "Sailing": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Creature of Fenkenstrain",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Read the signpost in the middle of Canifis.",
+  "skills": {
+   "Crafting": 20,
+   "Thieving": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Current Affairs",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Arhein on the Catherby docks.",
+  "skills": {
+   "Fishing": 10,
+   "Sailing": 22
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Pandemonium"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Curse of the Empty Lord",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to the mysterious ghost (Valdez) near Glarial's Tomb.",
+  "skills": {
+   "Prayer": 31,
+   "Thieving": 53
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Daddy's Home",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Speak to Marlo in the Estate Agent's house in north-east Varrock.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Darkness of Hallowvale",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "Talk to Veliaf Hurtz in the basement of the Burgh de Rott inn.",
+  "skills": {
+   "Agility": 26,
+   "Construction": 5,
+   "Crafting": 32,
+   "Magic": 33,
+   "Mining": 20,
+   "Strength": 40,
+   "Thieving": 22
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "In Aid of the Myreque"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Death Plateau",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Denulth in his tent in Burthorpe.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Death on the Isle",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Patzi by the entrance to Villa Lucens.",
+  "skills": {
+   "Agility": 32,
+   "Thieving": 34
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Death to the Dorgeshuun",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Mistag in the Dorgesh-Kaan mine.",
+  "skills": {
+   "Agility": 23,
+   "Thieving": 23
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Lost Tribe"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Defender of Varrock",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Elias White in the Jolly Boar Inn.",
+  "skills": {
+   "Hunter": 52,
+   "Smithing": 55
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Shield of Arrav",
+   "Temple of Ikov",
+   "Below Ice Mountain",
+   "Family Crest",
+   "Garden of Tranquillity",
+   "What Lies Below",
+   "Romeo & Juliet",
+   "Demon Slayer"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {
+   "Hunter": 15000,
+   "Smithing": 15000
+  }
+ },
+ {
+  "name": "Demon Slayer",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Aris in the tent on the western side of Varrock Square.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Desert Treasure I",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to Asgarnia Smith at the Bedabin Camp.",
+  "skills": {
+   "Firemaking": 50,
+   "Magic": 50,
+   "Slayer": 10,
+   "Thieving": 53
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Dig Site",
+   "Temple of Ikov",
+   "The Tourist Trap",
+   "Troll Stronghold",
+   "Priest in Peril",
+   "Waterfall Quest"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Desert Treasure II - The Fallen Empire",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Investigate the Ancient Vault north-east of Nardah.",
+  "skills": {
+   "Construction": 60,
+   "Firemaking": 75,
+   "Herblore": 62,
+   "Magic": 75,
+   "Runecraft": 60,
+   "Thieving": 70
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Desert Treasure I",
+   "Secrets of the North",
+   "Enakhra's Lament",
+   "Temple of the Eye",
+   "The Garden of Death",
+   "Below Ice Mountain",
+   "His Faithful Servants"
+  ],
+  "quest_points_awarded": 5,
+  "experience": {}
+ },
+ {
+  "name": "Devious Minds",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to the monk outside the Paterdomus Temple, at the northern end of the River Salve.",
+  "skills": {
+   "Fletching": 50,
+   "Runecraft": 50,
+   "Smithing": 65
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Wanted!",
+   "Troll Stronghold",
+   "Doric's Quest"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Doric's Quest",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Doric in the small house north of Falador, just outside the east gate of Taverley.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Dragon Slayer I",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to the Guildmaster in the Champions' Guild.",
+  "skills": {},
+  "quest_points_required": 32,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Dragon Slayer II",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Talk to Alec Kincade outside the Myths' Guild.",
+  "skills": {
+   "Agility": 60,
+   "Construction": 50,
+   "Crafting": 62,
+   "Hitpoints": 50,
+   "Magic": 75,
+   "Mining": 68,
+   "Smithing": 70,
+   "Thieving": 60
+  },
+  "quest_points_required": 200,
+  "prerequisites": [
+   "Legends' Quest",
+   "Dream Mentor",
+   "A Tail of Two Cats",
+   "Animal Magnetism",
+   "Ghosts Ahoy",
+   "Bone Voyage",
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 5,
+  "experience": {
+   "Smithing": 80000
+  }
+ },
+ {
+  "name": "Dream Mentor",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to the fallen man in the small cave in the Lunar Isle mine.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Lunar Diplomacy",
+   "Eadgar's Ruse"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Druidic Ritual",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Kaqemeex in the stone circle north of Taverley.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Dwarf Cannon",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Captain Lawgof, south of the Coal Trucks, north-west of the Fishing Guild.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Eadgar's Ruse",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "",
+  "skills": {
+   "Herblore": 31
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Druidic Ritual",
+   "Troll Stronghold"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Eagles' Peak",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Charlie at the Ardougne Zoo.",
+  "skills": {
+   "Hunter": 27
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {
+   "Hunter": 2500
+  }
+ },
+ {
+  "name": "Elemental Workshop I",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Search the bookcase in the house immediately south-west of the Seers' Village bank.",
+  "skills": {
+   "Crafting": 20,
+   "Mining": 20,
+   "Smithing": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Elemental Workshop II",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Search the bookcases in the Exam Centre's library.",
+  "skills": {
+   "Magic": 20,
+   "Smithing": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Elemental Workshop I"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Enakhra's Lament",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Lazim just north-east of the Desert Quarry.",
+  "skills": {
+   "Crafting": 50,
+   "Firemaking": 45,
+   "Magic": 39,
+   "Prayer": 43
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Enlightened Journey",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Auguste on Entrana.",
+  "skills": {
+   "Crafting": 36,
+   "Farming": 30,
+   "Firemaking": 20
+  },
+  "quest_points_required": 20,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Enter the Abyss",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Speak to the Mage of Zamorak at the end of the River Lum in the Wilderness (Roams levels 4-7).",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Rune Mysteries"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Ernest the Chicken",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Veronica, south of Draynor Manor by the gate.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Ethically Acquired Antiquities",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Inspect the empty display on the ground floor of the Grand Museum in Civitas illa Fortis.",
+  "skills": {
+   "Thieving": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun",
+   "Shield of Arrav"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Fairytale I - Growing Pains",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Martin the Master Gardener by the pig pen in Draynor Village.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Lost City",
+   "Nature Spirit"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Fairytale II - Cure a Queen",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Martin the Master Gardener by the pig pen in Draynor Village.",
+  "skills": {
+   "Farming": 49,
+   "Herblore": 57,
+   "Thieving": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Fairytale I - Growing Pains"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Fairytale III - Nexus of Power",
+  "difficulty": "Master",
+  "length": "",
+  "start": "",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Fallen From Grace",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to Cormac, the mayor of Auchrie, on the island of Wyrmscraig.",
+  "skills": {
+   "Crafting": 60,
+   "Mining": 53,
+   "Runecraft": 47,
+   "Sailing": 62
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Pandemonium"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Family Crest",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Dimintheis in south-eastern Varrock.",
+  "skills": {
+   "Crafting": 40,
+   "Magic": 59,
+   "Mining": 40,
+   "Smithing": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Family Pest",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Speak to Dimintheis in south-east Varrock.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Fight Arena",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Lady Servil west of the Ardougne Monastery, just outside the north-eastern corner of the Gnome Maze.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Fishing Contest",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Austri east of White Wolf Mountain or Vestri to the west of it, by either tunnel entrance.",
+  "skills": {
+   "Fishing": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Fool's Gold",
+  "difficulty": "Master",
+  "length": "",
+  "start": "",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Forgettable Tale...",
+  "difficulty": "Intermediate",
+  "length": "Long",
+  "start": "Talk to Commander Veldaban in the Dwarven Black Guard headquarters in Keldagrim.",
+  "skills": {
+   "Cooking": 22,
+   "Farming": 17
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Giant Dwarf",
+   "Fishing Contest"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Garden of Tranquillity",
+  "difficulty": "Intermediate",
+  "length": "Long",
+  "start": "Talk to Queen Ellamaria in the garden of Varrock Palace.",
+  "skills": {
+   "Farming": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Creature of Fenkenstrain"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Gertrude's Cat",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Gertrude in her house just west of Varrock.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Getting Ahead",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Gordon on his farm south of the Farming Guild.",
+  "skills": {
+   "Construction": 26,
+   "Crafting": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Construction": 3200,
+   "Crafting": 4000
+  }
+ },
+ {
+  "name": "Ghosts Ahoy",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Velorina in Port Phasmatys.",
+  "skills": {
+   "Agility": 25,
+   "Cooking": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril",
+   "The Restless Ghost"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Goblin Diplomacy",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to General Bentnoze or General Wartface in Goblin Village.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 5,
+  "experience": {}
+ },
+ {
+  "name": "Grim Tales",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Sylas in Taverley, just south of the house portal.",
+  "skills": {
+   "Agility": 59,
+   "Farming": 45,
+   "Herblore": 52,
+   "Thieving": 58,
+   "Woodcutting": 71
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Witch's House"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Haunted Mine",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to the Zealot by the Abandoned Mine in the south-western corner of Morytania.",
+  "skills": {
+   "Crafting": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Hazeel Cult",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Ceril Carnillean in East Ardougne, just north of the Clock Tower.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Heroes' Quest",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Achietties by the entrance to the Heroes' Guild, between Taverley and Burthorpe.",
+  "skills": {
+   "Cooking": 53,
+   "Fishing": 53,
+   "Herblore": 25,
+   "Mining": 50
+  },
+  "quest_points_required": 55,
+  "prerequisites": [
+   "Shield of Arrav",
+   "Lost City",
+   "Merlin's Crystal",
+   "Dragon Slayer I"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "His Faithful Servants",
+  "difficulty": "Experienced",
+  "length": "Very Short",
+  "start": "Speak to the Strange Old Man wandering in the Barrows, east of Mort'ton.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Holy Grail",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to King Arthur in Camelot.",
+  "skills": {
+   "Attack": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Merlin's Crystal"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Hopespear's Will",
+  "difficulty": "Master",
+  "length": "Short",
+  "start": "Speak to Hopespear in the crypt of the Goblin Temple.",
+  "skills": {
+   "Prayer": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Desert Treasure I",
+   "Fairytale II - Cure a Queen",
+   "Land of the Goblins"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Horror from the Deep",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Larrissa outside the Lighthouse north of Barbarian Outpost.",
+  "skills": {
+   "Agility": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Alfred Grimhand's Barcrawl"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Icthlarin's Little Helper",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to the wanderer in the camp west of the Agility Pyramid.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Gertrude's Cat"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Imp Catcher",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Wizard Mizgog on the top floor of the Wizards' Tower.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "In Aid of the Myreque",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Veliaf Hurtz in the Myreque Hideout below the Canifis pub.",
+  "skills": {
+   "Agility": 25,
+   "Crafting": 25,
+   "Magic": 7,
+   "Mining": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "In Search of the Myreque"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "In Search of Knowledge",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Brother Aimeri, towards the south-eastern end of the Forthos Dungeon.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "In Search of the Myreque",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Vanstrom Klause at the Hair of the Dog tavern in Canifis.",
+  "skills": {
+   "Agility": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Nature Spirit"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Into the Tombs",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Maisa inside Osmumten's tomb at the Necropolis.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Beneath Cursed Sands"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Jungle Potion",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Trufitus in Tai Bwo Wannai.",
+  "skills": {
+   "Herblore": 3
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Druidic Ritual"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "King's Ransom",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to the Gossip outside Sinclair Mansion.",
+  "skills": {
+   "Defence": 65,
+   "Magic": 45
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Black Knights' Fortress",
+   "Holy Grail",
+   "Murder Mystery",
+   "One Small Favour"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Lair of Tarn Razorlor",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Enter the Lair of Tarn Razorlor.",
+  "skills": {
+   "Slayer": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Land of the Goblins",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Grubfoot in the Dorgesh-Kaan mine.",
+  "skills": {
+   "Agility": 38,
+   "Fishing": 40,
+   "Herblore": 48,
+   "Thieving": 45
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Another Slice of H.A.M.",
+   "Fishing Contest"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Learning the Ropes",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to the Quest Guide on Tutorial Island.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Legends' Quest",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to the Legends' Guards just outside of the Legends' Guild.",
+  "skills": {
+   "Agility": 50,
+   "Crafting": 50,
+   "Herblore": 45,
+   "Magic": 56,
+   "Mining": 52,
+   "Prayer": 42,
+   "Smithing": 50,
+   "Strength": 50,
+   "Thieving": 50,
+   "Woodcutting": 50
+  },
+  "quest_points_required": 107,
+  "prerequisites": [
+   "Family Crest",
+   "Heroes' Quest",
+   "Shilo Village",
+   "Underground Pass",
+   "Waterfall Quest"
+  ],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Lost City",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to the warrior in the north-western corner of the Lumbridge Swamp.",
+  "skills": {
+   "Crafting": 31,
+   "Woodcutting": 36
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Lunar Diplomacy",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "Talk to Lokar Searunner at the westernmost dock of Rellekka.",
+  "skills": {
+   "Crafting": 61,
+   "Defence": 40,
+   "Firemaking": 49,
+   "Herblore": 5,
+   "Magic": 65,
+   "Mining": 60,
+   "Woodcutting": 55
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Fremennik Trials",
+   "Lost City",
+   "Rune Mysteries",
+   "Shilo Village"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Mage Arena I",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Speak to Kolodion at the Mage Arena bank located in level 53 Wilderness.",
+  "skills": {
+   "Magic": 60
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Mage Arena II",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Speak to Kolodion at the Mage Arena bank located in level 53 Wilderness.",
+  "skills": {
+   "Magic": 75
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Mage Arena I"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Making Friends with My Arm",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Burntmeat in the Troll Stronghold's kitchen.",
+  "skills": {
+   "Agility": 68,
+   "Construction": 35,
+   "Firemaking": 66,
+   "Mining": 72
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "My Arm's Big Adventure",
+   "Swan Song",
+   "Cold War",
+   "Romeo & Juliet"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Making History",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Jorral in the outpost north-west of West Ardougne.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril",
+   "The Restless Ghost"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Meat and Greet",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to Emelio at his home in Outer Fortis.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Merlin's Crystal",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to King Arthur in Camelot.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 6,
+  "experience": {}
+ },
+ {
+  "name": "Misthalin Mystery",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Abigale or Hewey in the south-eastern corner of Lumbridge Swamp, near the fishing spots.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Monk's Friend",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Brother Omad at the Ardougne Monastery south of East Ardougne.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Monkey Madness I",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to King Narnode Shareen in the Grand Tree.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Grand Tree",
+   "Tree Gnome Village"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Monkey Madness II",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Talk to King Narnode Shareen in the Grand Tree.",
+  "skills": {
+   "Agility": 55,
+   "Crafting": 70,
+   "Firemaking": 60,
+   "Hunter": 60,
+   "Slayer": 69,
+   "Thieving": 55
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Enlightened Journey",
+   "The Eyes of Glouphrie",
+   "Recipe for Disaster/Freeing King Awowogei",
+   "Troll Stronghold",
+   "Watchtower"
+  ],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Mountain Daughter",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Hamal the Chieftain in the Mountain Camp east of Rellekka (to access the camp, see below)",
+  "skills": {
+   "Agility": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Mourning's End Part I",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Eluned inside the elven woods of Isafdar.",
+  "skills": {
+   "Ranged": 60,
+   "Thieving": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Roving Elves",
+   "Big Chompy Bird Hunting",
+   "Sheep Herder"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Mourning's End Part II",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to Arianwyn in Lletya.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Mourning's End Part I"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Murder Mystery",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to any guard around the Sinclair Mansion, north of Seers' Village and Camelot.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "My Arm's Big Adventure",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Burntmeat in the Troll Stronghold kitchen.",
+  "skills": {
+   "Farming": 29,
+   "Woodcutting": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Eadgar's Ruse",
+   "The Feud",
+   "Jungle Potion"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Nature Spirit",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Drezel in the basement of the Paterdomus Temple by the northern end of the River Salve.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril",
+   "The Restless Ghost"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Observatory Quest",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to the Observatory professor in the Observatory Reception Room north of Castle Wars.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Olaf's Quest",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Olaf Hradson east of Rellekka, just south of the Rellekka Hunter area.",
+  "skills": {
+   "Firemaking": 40,
+   "Woodcutting": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Fremennik Trials"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "One Small Favour",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "Talk to Yanni Salika in Shilo Village.",
+  "skills": {
+   "Agility": 36,
+   "Crafting": 25,
+   "Herblore": 18,
+   "Smithing": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Rune Mysteries",
+   "Shilo Village"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Pandemonium",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Will and Anne on the docks of Port Sarim.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Perilous Moons",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Zuma or Attala at the entrance to Cam Torum.",
+  "skills": {
+   "Construction": 10,
+   "Fishing": 20,
+   "Hunter": 20,
+   "Runecraft": 20,
+   "Slayer": 48
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Twilight's Promise"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Pirate's Treasure",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Redbeard Frank at the northernmost dock at Port Sarim, just outside The Rusty Anchor.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Plague City",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Edmond in the most north-western house of East Ardougne.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Priest in Peril",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to King Roald in the Varrock Palace.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Prince Ali Rescue",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Hassan in the palace at Al Kharid.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Prying Times",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to 'Squawking' Steve Beanie at The Pandemonium pub.",
+  "skills": {
+   "Sailing": 12,
+   "Smithing": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Pandemonium",
+   "The Knight's Sword"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Rag and Bone Man I",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to the Odd Old Man in Silvarea north-east of Varrock, by the Limestone Mine.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Rag and Bone Man II",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to the Odd Old Man in Silvarea north-east of Varrock, by the Limestone Mine.",
+  "skills": {
+   "Defence": 20,
+   "Slayer": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Rag and Bone Man I",
+   "Skippy and the Mogres"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Ratcatchers",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Gertrude west of Varrock.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Icthlarin's Little Helper"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster",
+  "difficulty": "Special",
+  "length": "Very Long",
+  "start": "Talk to the Cook in the kitchen of Lumbridge Castle.",
+  "skills": {
+   "Agility": 48,
+   "Cooking": 70,
+   "Crafting": 40,
+   "Firemaking": 50,
+   "Fishing": 53,
+   "Fletching": 10,
+   "Herblore": 25,
+   "Magic": 59,
+   "Mining": 50,
+   "Ranged": 40,
+   "Smithing": 40,
+   "Thieving": 53,
+   "Woodcutting": 36
+  },
+  "quest_points_required": 175,
+  "prerequisites": [
+   "Cook's Assistant",
+   "Fishing Contest",
+   "Goblin Diplomacy",
+   "Big Chompy Bird Hunting",
+   "Murder Mystery",
+   "Nature Spirit",
+   "Witch's House",
+   "Gertrude's Cat",
+   "Shadow of the Storm",
+   "Legends' Quest",
+   "Monkey Madness I",
+   "Desert Treasure I",
+   "Horror from the Deep"
+  ],
+  "quest_points_awarded": 10,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Another Cook's Quest",
+  "difficulty": "Special",
+  "length": "Short",
+  "start": "Talk to the Cook in Lumbridge Castle's kitchen.",
+  "skills": {
+   "Cooking": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Cook's Assistant"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Defeating the Culinaromancer",
+  "difficulty": "Special",
+  "length": "Short",
+  "start": "Release each member of the council from the Culinaromancer's spell.",
+  "skills": {},
+  "quest_points_required": 175,
+  "prerequisites": [
+   "Desert Treasure I",
+   "Horror from the Deep",
+   "Recipe for Disaster/Freeing Evil Dave",
+   "Recipe for Disaster/Freeing the Goblin generals",
+   "Recipe for Disaster/Freeing the Lumbridge Guide",
+   "Recipe for Disaster/Freeing the Mountain Dwarf",
+   "Recipe for Disaster/Freeing Pirate Pete",
+   "Recipe for Disaster/Freeing Sir Amik Varze",
+   "Recipe for Disaster/Freeing Skrach Uglogwee",
+   "Recipe for Disaster/Freeing King Awowogei"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing Evil Dave",
+  "difficulty": "Special",
+  "length": "Medium",
+  "start": "Inspect Evil Dave in the Lumbridge Castle dining room.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Gertrude's Cat",
+   "Recipe for Disaster/Another Cook's Quest",
+   "Shadow of the Storm"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing King Awowogei",
+  "difficulty": "Special",
+  "length": "Long",
+  "start": "Inspect Awowogei in the Lumbridge Castle dining room.",
+  "skills": {
+   "Agility": 48,
+   "Cooking": 70
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Monkey Madness I",
+   "Recipe for Disaster/Another Cook's Quest"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing Pirate Pete",
+  "difficulty": "Special",
+  "length": "Medium",
+  "start": "Inspect Pirate Pete in the Lumbridge Castle dining room.",
+  "skills": {
+   "Cooking": 31
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Recipe for Disaster/Another Cook's Quest"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing Sir Amik Varze",
+  "difficulty": "Special",
+  "length": "Medium",
+  "start": "Inspect Sir Amik Varze in the Lumbridge Castle dining room.",
+  "skills": {},
+  "quest_points_required": 107,
+  "prerequisites": [
+   "Family Crest",
+   "Heroes' Quest",
+   "Recipe for Disaster/Another Cook's Quest",
+   "Shilo Village",
+   "Underground Pass",
+   "Waterfall Quest"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing Skrach Uglogwee",
+  "difficulty": "Special",
+  "length": "Medium",
+  "start": "Inspect Skrach Uglogwee in the Lumbridge Castle dining room.",
+  "skills": {
+   "Cooking": 41,
+   "Firemaking": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Big Chompy Bird Hunting",
+   "Recipe for Disaster/Another Cook's Quest"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing the Goblin generals",
+  "difficulty": "Special",
+  "length": "Short",
+  "start": "Inspect one of the goblin generals in the Lumbridge Castle dining room.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Recipe for Disaster/Another Cook's Quest",
+   "Goblin Diplomacy"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing the Lumbridge Guide",
+  "difficulty": "Special",
+  "length": "Short",
+  "start": "Inspect the Lumbridge Guide in the Lumbridge Castle dining room.",
+  "skills": {
+   "Cooking": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Big Chompy Bird Hunting",
+   "Biohazard",
+   "Demon Slayer",
+   "Murder Mystery",
+   "Nature Spirit",
+   "Recipe for Disaster/Another Cook's Quest",
+   "Witch's House"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recipe for Disaster/Freeing the Mountain Dwarf",
+  "difficulty": "Special",
+  "length": "Short",
+  "start": "Inspect the frozen dwarf in the Lumbridge Castle dining room.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Recipe for Disaster/Another Cook's Quest",
+   "Fishing Contest"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Recruitment Drive",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Black Knights' Fortress",
+   "Druidic Ritual"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Regicide",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "",
+  "skills": {
+   "Agility": 56,
+   "Crafting": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Underground Pass"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Romeo & Juliet",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Romeo in Varrock Square.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 5,
+  "experience": {}
+ },
+ {
+  "name": "Roving Elves",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Talk to Islwyn inside the elven woods of Isafdar.",
+  "skills": {
+   "Agility": 56
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Regicide",
+   "Waterfall Quest"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Royal Trouble",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Advisor Ghrim in Miscellania Castle.",
+  "skills": {
+   "Agility": 40,
+   "Slayer": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Throne of Miscellania"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Rum Deal",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Pirate Pete on the dock north of Port Phasmatys.",
+  "skills": {
+   "Crafting": 42,
+   "Farming": 40,
+   "Fishing": 50,
+   "Prayer": 47,
+   "Slayer": 42
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Zogre Flesh Eaters",
+   "Priest in Peril"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Rune Mysteries",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Scorpion Catcher",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Thormac at the top floor of the Sorcerer's Tower, south-east of the Ranging Guild.",
+  "skills": {
+   "Prayer": 31
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Alfred Grimhand's Barcrawl"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Scrambled!",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Alan at the temple of Tal Teok north of Tal Teklan.",
+  "skills": {
+   "Construction": 38,
+   "Cooking": 36,
+   "Smithing": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Construction": 5000
+  }
+ },
+ {
+  "name": "Sea Slug",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Caroline just north of Witchaven.",
+  "skills": {
+   "Firemaking": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Secrets of the North",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to the guard outside of the Carnillean Mansion in the south-western corner of East Ardougne.",
+  "skills": {
+   "Agility": 69,
+   "Hunter": 56,
+   "Thieving": 64
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Making Friends with My Arm",
+   "The General's Shadow",
+   "Devious Minds",
+   "Hazeel Cult"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {
+   "Agility": 60000,
+   "Hunter": 40000,
+   "Thieving": 50000
+  }
+ },
+ {
+  "name": "Shades of Mort'ton",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Search the shelf in the southern-western house of Mort'ton.",
+  "skills": {
+   "Crafting": 20,
+   "Firemaking": 5,
+   "Herblore": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Priest in Peril"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Shadow of the Storm",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Father Reen south of Al Kharid bank.",
+  "skills": {
+   "Crafting": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Golem",
+   "Demon Slayer"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Shadows of Custodia",
+  "difficulty": "Experienced",
+  "length": "Short",
+  "start": "Read the notice board in Auburn Pub.",
+  "skills": {
+   "Construction": 41,
+   "Fishing": 45,
+   "Hunter": 36,
+   "Slayer": 54
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Sheep Herder",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Councillor Halgrive outside of the East Ardougne church.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Sheep Shearer",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Fred the Farmer in the house by the sheep pen north of Lumbridge Castle.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Shield of Arrav",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Reldo in the Varrock library, located within the northern end of Varrock Castle.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Shilo Village",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Mosol Rei outside of Shilo Village in the south part of Karamja.",
+  "skills": {
+   "Agility": 32,
+   "Crafting": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Jungle Potion"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Sins of the Father",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to Veliaf Hurtz outside the church in Slepe.",
+  "skills": {
+   "Agility": 52,
+   "Attack": 50,
+   "Crafting": 56,
+   "Fletching": 60,
+   "Magic": 49,
+   "Slayer": 50,
+   "Woodcutting": 62
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Vampyre Slayer",
+   "A Taste of Hope"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Skippy and the Mogres",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Speak to Skippy located south-east of the town of Rimmington.",
+  "skills": {
+   "Cooking": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Sleeping Giants",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to Kovac at the Giants' Plateau, east of Al Kharid.",
+  "skills": {
+   "Smithing": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Song of the Elves",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Talk to Edmond in East Ardougne, at his home north of the Flying Horse Inn.",
+  "skills": {
+   "Agility": 70,
+   "Construction": 70,
+   "Farming": 70,
+   "Herblore": 70,
+   "Hunter": 70,
+   "Mining": 70,
+   "Smithing": 70,
+   "Woodcutting": 70
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Mourning's End Part II",
+   "Making History",
+   "Druidic Ritual"
+  ],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Spirits of the Elid",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Awusah the Mayor in Nardah.",
+  "skills": {
+   "Magic": 33,
+   "Mining": 37,
+   "Ranged": 37,
+   "Thieving": 37
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Swan Song",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Herman Caranos in the Piscatoris Fishing Colony, accessed via a boat trip from the river to the west of the Tree Gnome Stronghold.",
+  "skills": {
+   "Cooking": 62,
+   "Crafting": 40,
+   "Firemaking": 42,
+   "Fishing": 62,
+   "Magic": 66,
+   "Smithing": 45
+  },
+  "quest_points_required": 100,
+  "prerequisites": [
+   "One Small Favour",
+   "Garden of Tranquillity"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Tai Bwo Wannai Trio",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Timfraku in his house in Tai Bwo Wannai.",
+  "skills": {
+   "Agility": 15,
+   "Cooking": 30,
+   "Fishing": 5
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Jungle Potion"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Tale of the Righteous",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Phileas Rimor in his house west of The Cloak and Stagger tavern in Shayzien.",
+  "skills": {
+   "Mining": 10,
+   "Strength": 16
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Tears of Guthix",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to Juna, deep inside the Lumbridge Swamp Caves.",
+  "skills": {
+   "Crafting": 20,
+   "Firemaking": 49,
+   "Mining": 20
+  },
+  "quest_points_required": 43,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Temple of Ikov",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Lucien at the Flying Horse Inn in the north-western corner of East Ardougne.",
+  "skills": {
+   "Ranged": 40,
+   "Thieving": 42
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Temple of the Eye",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Wizard Persten north of Al Kharid, near the gate from Lumbridge.",
+  "skills": {
+   "Runecraft": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Enter the Abyss"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Ascent of Arceuus",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Mori in Arceuus.",
+  "skills": {
+   "Hunter": 12
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Hunter": 1500
+  }
+ },
+ {
+  "name": "The Blood Moon Rises",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Talk to Sarius Guile in the Icyene Graveyard.",
+  "skills": {
+   "Cooking": 72,
+   "Crafting": 64,
+   "Fletching": 70,
+   "Herblore": 64,
+   "Hunter": 65,
+   "Magic": 57,
+   "Mining": 66,
+   "Slayer": 74,
+   "Smithing": 72,
+   "Woodcutting": 74
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "A Night at the Theatre",
+   "Sins of the Father"
+  ],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "The Chosen Commander",
+  "difficulty": "Master",
+  "length": "",
+  "start": "",
+  "skills": {
+   "Agility": 58,
+   "Strength": 46,
+   "Thieving": 54
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Land of the Goblins"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "The Corsair Curse",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Captain Tock at the crossroads north of Port Sarim.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Curse of Arrav",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Elias White at the Uzer Oasis.",
+  "skills": {
+   "Agility": 61,
+   "Mining": 64,
+   "Ranged": 62,
+   "Slayer": 37,
+   "Strength": 58,
+   "Thieving": 62
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Defender of Varrock",
+   "Troll Romance"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {
+   "Agility": 40000,
+   "Mining": 40000,
+   "Thieving": 40000
+  }
+ },
+ {
+  "name": "The Depths of Despair",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Lord Kandur Hosidius at his home in Hosidius, north-west of the Vinery.",
+  "skills": {
+   "Agility": 18
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Dig Site",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to an examiner in the Exam Centre south of the Digsite.",
+  "skills": {
+   "Agility": 10,
+   "Herblore": 10,
+   "Thieving": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Enchanted Key",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Begin this mini-quest by getting your enchanted key. If lost, it can be reclaimed from the silver merchant in East Ardougne for 500 coins.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "The Eyes of Glouphrie",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Brimstail in his cave south-west side of the Tree Gnome Stronghold, directly west of the bank near the Stronghold Slayer Cave.",
+  "skills": {
+   "Construction": 5,
+   "Magic": 46
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Grand Tree"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Feud",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Ali Morrisane east of the Gem Trader in northern Al Kharid.",
+  "skills": {
+   "Thieving": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Final Dawn",
+  "difficulty": "Master",
+  "length": "Long",
+  "start": "Talk to Servius in the Sunrise Palace.",
+  "skills": {
+   "Fletching": 52,
+   "Runecraft": 52,
+   "Thieving": 66
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Heart of Darkness",
+   "Perilous Moons"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "The Forsaken Tower",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Lady Vulcana Lovakengj in Lovakengj.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Fractured Archive (miniquest)",
+  "difficulty": "Grandmaster",
+  "length": "Medium",
+  "start": "Near the entrance of the Ancient Guthixian Temple.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Defender of Varrock",
+   "The Path of Glouphrie",
+   "Fight Arena",
+   "Dream Mentor",
+   "The Hand in the Sand",
+   "Wanted!",
+   "Temple of the Eye",
+   "Tears of Guthix",
+   "Nature Spirit",
+   "A Tail of Two Cats"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "The Fremennik Exiles",
+  "difficulty": "Master",
+  "length": "Medium",
+  "start": "Talk to Brundt the Chieftain in Rellekka.",
+  "skills": {
+   "Crafting": 65,
+   "Fishing": 60,
+   "Mining": 60,
+   "Runecraft": 55,
+   "Slayer": 60,
+   "Smithing": 60
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Fremennik Isles",
+   "Lunar Diplomacy",
+   "Mountain Daughter",
+   "Heroes' Quest"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Fremennik Isles",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Mord Gunnars at the northernmost dock of Rellekka.",
+  "skills": {
+   "Construction": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Fremennik Trials"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Fremennik Trials",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Brundt the Chieftain in the Rellekka longhall.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "The Frozen Door",
+  "difficulty": "Master",
+  "length": "Short",
+  "start": "Receive an important letter from a messenger.",
+  "skills": {
+   "Agility": 70,
+   "Hitpoints": 70,
+   "Ranged": 70,
+   "Strength": 70
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Desert Treasure I"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "The Garden of Death",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Search the tent at the campsite found east of the chasm at the southern end of the Kebos Lowlands.",
+  "skills": {
+   "Farming": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {
+   "Farming": 10000
+  }
+ },
+ {
+  "name": "The General's Shadow",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Speak to the ghost of General Khazard roaming around the woods south-east of Rellekka.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "The Giant Dwarf",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to the Dwarven Boatman by the underground River Kelda, accessible through the Keldagrim entrance east of Rellekka, in the cave beyond the statues.",
+  "skills": {
+   "Crafting": 12,
+   "Firemaking": 16,
+   "Magic": 33,
+   "Thieving": 14
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Golem",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to the clay golem in the ruins of Uzer, east of the Shantay Pass in the Kharidian Desert.",
+  "skills": {
+   "Crafting": 20,
+   "Thieving": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Grand Tree",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to King Narnode Shareen in the Grand Tree.",
+  "skills": {
+   "Agility": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 5,
+  "experience": {}
+ },
+ {
+  "name": "The Graveyard",
+  "difficulty": "Master",
+  "length": "",
+  "start": "",
+  "skills": {
+   "Agility": 65,
+   "Fletching": 54,
+   "Sailing": 65,
+   "Woodcutting": 56
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Fremennik Exiles",
+   "Olaf's Quest",
+   "Pandemonium"
+  ],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "The Great Brain Robbery",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Brother Tranquility in Mos Le'Harmless.",
+  "skills": {
+   "Construction": 30,
+   "Crafting": 16,
+   "Prayer": 50
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Creature of Fenkenstrain",
+   "Cabin Fever",
+   "Recipe for Disaster/Freeing Pirate Pete"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Hand in the Sand",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Bert in Yanille, near the sand pit.",
+  "skills": {
+   "Crafting": 49,
+   "Thieving": 17
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Heart of Darkness",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Prince Itzla Arkan at the Teomat.",
+  "skills": {
+   "Agility": 46,
+   "Mining": 55,
+   "Slayer": 48,
+   "Thieving": 48
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Twilight's Promise"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Ides of Milk",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Cassius by the Lumbridge pond.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Knight's Sword",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to the squire in the courtyard of the White Knights' Castle in Falador.",
+  "skills": {
+   "Mining": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Lost Tribe",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Sigmund in Lumbridge Castle.",
+  "skills": {
+   "Agility": 13,
+   "Mining": 17,
+   "Thieving": 13
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Goblin Diplomacy",
+   "Rune Mysteries"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Path of Glouphrie",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Speak to King Bolren in the Tree Gnome Village.",
+  "skills": {
+   "Agility": 45,
+   "Ranged": 47,
+   "Slayer": 56,
+   "Strength": 60,
+   "Thieving": 56
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "The Eyes of Glouphrie",
+   "Waterfall Quest",
+   "Tree Gnome Village"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Queen of Thieves",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to Tomas Lawry outside the Port Piscarilius bank.",
+  "skills": {
+   "Thieving": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Client of Kourend"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Red Reef",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to Elder Raley at his home on the Great Conch.",
+  "skills": {
+   "Sailing": 52,
+   "Smithing": 48
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Troubled Tortugans"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "The Restless Ghost",
+  "difficulty": "Novice",
+  "length": "Short",
+  "start": "Talk to Father Aereck in the chapel south-east of Lumbridge Castle.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Ribbiting Tale of a Lily Pad Labour Dispute",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Marcellus at the Locus Oasis.",
+  "skills": {
+   "Woodcutting": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Slug Menace",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Sir Tiffy Cashien in Falador Park.",
+  "skills": {
+   "Crafting": 30,
+   "Runecraft": 30,
+   "Slayer": 30,
+   "Thieving": 30
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Wanted!",
+   "Sea Slug"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "The Tourist Trap",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Irena by the Shantay Pass, south of Al Kharid.",
+  "skills": {
+   "Fletching": 10,
+   "Smithing": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Throne of Miscellania",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to King Vargas in the Miscellania Castle.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Heroes' Quest",
+   "The Fremennik Trials"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Tower of Life",
+  "difficulty": "Novice",
+  "length": "Medium",
+  "start": "Talk to Effigy at the Tower of Life just east of the Ardougne Monastery.",
+  "skills": {
+   "Construction": 10
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Tree Gnome Village",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to King Bolren at the centre of the Tree Gnome Village maze.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Tribal Totem",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to Kangai Mau at The Shrimp and Parrot restaurant in Brimhaven.",
+  "skills": {
+   "Thieving": 21
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Troll Romance",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Ug at the Troll Stronghold.",
+  "skills": {
+   "Agility": 28
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Troll Stronghold"
+  ],
+  "quest_points_awarded": 2,
+  "experience": {}
+ },
+ {
+  "name": "Troll Stronghold",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Denulth in Burthorpe.",
+  "skills": {
+   "Agility": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Death Plateau"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Troubled Tortugans",
+  "difficulty": "Experienced",
+  "length": "Medium",
+  "start": "Talk to the injured tortugan on a Remote Island in the Unquiet Ocean.",
+  "skills": {
+   "Construction": 48,
+   "Crafting": 34,
+   "Hunter": 45,
+   "Sailing": 45,
+   "Slayer": 51,
+   "Woodcutting": 40
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Pandemonium"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Twilight's Promise",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Ennius Tullus or Furia Tullus in front of the Sunrise Palace.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Underground Pass",
+  "difficulty": "Experienced",
+  "length": "Long",
+  "start": "",
+  "skills": {
+   "Ranged": 25
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Biohazard"
+  ],
+  "quest_points_awarded": 5,
+  "experience": {}
+ },
+ {
+  "name": "Vale Totems (miniquest)",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Ranulph in north-western Auburnvale.",
+  "skills": {
+   "Fletching": 20
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Children of the Sun"
+  ],
+  "quest_points_awarded": 0,
+  "experience": {}
+ },
+ {
+  "name": "Vampyre Slayer",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to Morgan in his house in Draynor Village, just north of Ned's house.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 3,
+  "experience": {}
+ },
+ {
+  "name": "Wanted!",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to Sir Tiffy Cashien in Falador Park.",
+  "skills": {},
+  "quest_points_required": 32,
+  "prerequisites": [
+   "Recruitment Drive",
+   "The Lost Tribe",
+   "Priest in Peril",
+   "Enter the Abyss"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Watchtower",
+  "difficulty": "Intermediate",
+  "length": "Medium",
+  "start": "Talk to the Watchtower Wizard in the Watchtower north of Yanille; you must climb the trellis on the north side of the tower.",
+  "skills": {
+   "Agility": 25,
+   "Herblore": 14,
+   "Magic": 14,
+   "Mining": 40,
+   "Thieving": 15
+  },
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Waterfall Quest",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Almera in her house north-east of Baxtorian Falls.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "What Lies Below",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Rat Burgiss south of Varrock.",
+  "skills": {
+   "Runecraft": 35
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Rune Mysteries"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "While Guthix Sleeps",
+  "difficulty": "Grandmaster",
+  "length": "Very Long",
+  "start": "Talk to Ivy Sophista in Taverley.",
+  "skills": {
+   "Agility": 66,
+   "Attack": 99,
+   "Farming": 65,
+   "Firemaking": 49,
+   "Herblore": 65,
+   "Hunter": 62,
+   "Magic": 67,
+   "Strength": 99,
+   "Thieving": 72
+  },
+  "quest_points_required": 180,
+  "prerequisites": [
+   "Defender of Varrock",
+   "The Path of Glouphrie",
+   "Fight Arena",
+   "Dream Mentor",
+   "The Hand in the Sand",
+   "Wanted!",
+   "Temple of the Eye",
+   "Tears of Guthix",
+   "Nature Spirit",
+   "A Tail of Two Cats"
+  ],
+  "quest_points_awarded": 5,
+  "experience": {
+   "Farming": 75000,
+   "Herblore": 75000,
+   "Hunter": 50000,
+   "Thieving": 80000
+  }
+ },
+ {
+  "name": "Witch's House",
+  "difficulty": "Intermediate",
+  "length": "Very Short",
+  "start": "Talk to the boy near the gate entrance of Taverley.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 4,
+  "experience": {}
+ },
+ {
+  "name": "Witch's Potion",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Hetty in her house in Rimmington, south of Falador and west of Port Sarim.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "X Marks the Spot",
+  "difficulty": "Novice",
+  "length": "Very Short",
+  "start": "Talk to Veos in The Sheared Ram in Lumbridge.",
+  "skills": {},
+  "quest_points_required": 0,
+  "prerequisites": [],
+  "quest_points_awarded": 1,
+  "experience": {}
+ },
+ {
+  "name": "Zogre Flesh Eaters",
+  "difficulty": "Intermediate",
+  "length": "Short",
+  "start": "Talk to Grish in Jiggig, just south of Castle Wars.",
+  "skills": {
+   "Herblore": 8,
+   "Ranged": 30,
+   "Smithing": 4
+  },
+  "quest_points_required": 0,
+  "prerequisites": [
+   "Big Chompy Bird Hunting",
+   "Jungle Potion"
+  ],
+  "quest_points_awarded": 1,
+  "experience": {}
+ }
+]
