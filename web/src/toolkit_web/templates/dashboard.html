@@ -507,6 +507,9 @@
       count ? count + ' selected' : 'Tick positions to change several at once.';
     document.getElementById('bulk-supplies').disabled = !count;
     document.getElementById('bulk-remove').disabled = !count;
+    for (const box of document.querySelectorAll('.bulk-pick')) {
+      box.closest('tr').classList.toggle('picked', box.checked);
+    }
   }
 
   function toggleAllPositions(checked) {
@@ -524,8 +527,13 @@
       box.checked = !row.hidden && row.dataset.open === '1'
         && Date.parse(row.dataset.created) < cutoff;
     }
-    document.getElementById('bulk-age').value = '';
     updateBulkBar();
+    const first = pickedPositions()[0];
+    if (!first) {
+      toast('No open positions are older than ' + days + ' days.');
+      return;
+    }
+    first.closest('tr').scrollIntoView({ block: 'center' });
   }
 
   async function bulkPositions(action) {
