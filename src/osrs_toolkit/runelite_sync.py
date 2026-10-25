@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from osrs_toolkit.journal import (
+    ContainerSnapshot,
     JournalRepository,
     LoadoutItem,
     LoadoutSnapshot,
@@ -14,9 +15,12 @@ from osrs_toolkit.journal import (
     OfferCancelled,
     OfferOpened,
     PlayerDeathRecord,
+    ProgressRecord,
+    SkillsPoint,
     SyncedItem,
     SyncedTrade,
 )
+from osrs_toolkit.quests import all_quests
 from osrs_toolkit.sync_source import (
     LocalFileSource,
     PendingSyncEvent,
@@ -34,6 +38,13 @@ MAX_EVENT_SCAN = 2_000
 MAX_ITEMS_PER_SIDE = 56
 MAX_LOADOUT_ITEMS = 1_200
 MAX_SKILLS = 40
+MAX_QUESTS = 400
+MAX_DIARIES = 20
+MAX_COMBAT_TIERS = 12
+MAX_EXTRA_CONTAINERS = 8
+QUEST_STATES = frozenset({"not_started", "in_progress", "finished"})
+EVENT_LOOT_SOURCE_TYPES = frozenset({"event", "pickpocket"})
+SLAYER_INT_FIELDS = ("task_id", "remaining", "area", "master", "points", "tasks_completed")
 MAX_REJECTED_FILES = 200
 MAX_OFFER_STATE_BYTES = 16_384
 MAX_OFFER_SCREEN_BYTES = 4_096
@@ -46,7 +57,15 @@ FILLED_OFFER_STATES = frozenset({"BOUGHT", "SOLD"})
 TERMINAL_OFFER_STATES = FILLED_OFFER_STATES | frozenset({"CANCELLED_BUY", "CANCELLED_SELL"})
 
 ParsedEvent = (
-    SyncedTrade | LoadoutSnapshot | OfferOpened | OfferCancelled | NpcLootRecord | PlayerDeathRecord
+    SyncedTrade
+    | LoadoutSnapshot
+    | OfferOpened
+    | OfferCancelled
+    | NpcLootRecord
+    | PlayerDeathRecord
+    | ProgressRecord
+    | SkillsPoint
+    | ContainerSnapshot
 )
 
 
@@ -274,6 +293,19 @@ class RuneLiteSyncImporter:
                     imported += 1
                 else:
                     duplicates += 1
+            elif isinstance(event, ProgressRecord):
+                repository.save_progress(event)
+                known = {quest.name for quest in all_quests()}
+                repository.set_quests_completed(
+                    event.account_hash, sorted(event.finished_quests & known), True
+                )
+                imported += 1
+            elif isinstance(event, SkillsPoint):
+                repository.save_skills_snapshot(event)
+                imported += 1
+            elif isinstance(event, ContainerSnapshot):
+                repository.save_container_snapshot(event)
+                imported += 1
             elif not repository.claim_offer_event(event.event_id):
                 duplicates += 1
             else:
@@ -358,7 +390,7 @@ class RuneLiteSyncImporter:
 
 
 def _event_instant(event: ParsedEvent) -> datetime:
-    raw = event.captured_at if isinstance(event, LoadoutSnapshot) else event.occurred_at
+    raw = getattr(event, "captured_at", None) or event.occurred_at
     parsed = datetime.fromisoformat(raw)
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
@@ -389,6 +421,10 @@ def parse_sync_event(payload: object) -> ParsedEvent:
         "ge_offer_cancelled",
         "npc_loot",
         "player_death",
+        "progress_snapshot",
+        "skills_snapshot",
+        "container_snapshot",
+        "event_loot",
     }:
         raise UnsupportedEventError("Unsupported event type")
     occurred_at = _timestamp(payload.get("occurred_at"))
@@ -416,6 +452,21 @@ def parse_sync_event(payload: object) -> ParsedEvent:
         return _parse_npc_loot(event_id, occurred_at, account_hash, account_name, body)
     if event_type == "player_death":
         return _parse_player_death(event_id, occurred_at, account_hash, account_name, body)
+    if event_type == "event_loot":
+        return _parse_event_loot(event_id, occurred_at, account_hash, account_name, body)
+    if event_type == "progress_snapshot":
+        return _parse_progress_snapshot(occurred_at, account_hash, account_name, body)
+    if event_type == "skills_snapshot":
+        skills, xp = _skills_and_xp(body)
+        return SkillsPoint(
+            account_hash=account_hash,
+            account_name=account_name,
+            captured_at=occurred_at,
+            skills=skills,
+            xp=xp,
+        )
+    if event_type == "container_snapshot":
+        return _parse_container_snapshot(occurred_at, account_hash, account_name, body)
     return _parse_loadout_snapshot(occurred_at, account_hash, account_name, body)
 
 
@@ -546,6 +597,20 @@ def _parse_loadout_snapshot(
     equipment = _loadout_items(body.get("equipment"), "equipment")
     inventory = _loadout_items(body.get("inventory"), "inventory")
     bank = _loadout_items(body.get("bank"), "bank")
+    skills, xp = _skills_and_xp(body)
+    return LoadoutSnapshot(
+        account_hash=account_hash,
+        account_name=account_name,
+        captured_at=occurred_at,
+        equipment=tuple(equipment),
+        inventory=tuple(inventory),
+        bank=tuple(bank),
+        skills=skills,
+        xp=xp,
+    )
+
+
+def _skills_and_xp(body: dict[str, object]) -> tuple[dict[str, int], dict[str, int]]:
     skills_raw = body.get("skills")
     if not isinstance(skills_raw, dict) or len(skills_raw) > MAX_SKILLS:
         raise SyncEventError("Invalid skills")
@@ -559,15 +624,101 @@ def _parse_loadout_snapshot(
             raise SyncEventError("Invalid xp")
         for name, amount in xp_raw.items():
             xp[_text(name, "skill name", 32)] = _nonnegative_int(amount, "skill xp")
-    return LoadoutSnapshot(
+    return skills, xp
+
+
+def _int_map(value: object, field: str, maximum: int) -> dict[str, int]:
+    if not isinstance(value, dict) or len(value) > maximum:
+        raise SyncEventError(f"Invalid {field}")
+    return {
+        _text(name, field, 64): _nonnegative_int(amount, field) for name, amount in value.items()
+    }
+
+
+def _parse_progress_snapshot(
+    occurred_at: str,
+    account_hash: str,
+    account_name: str,
+    body: dict[str, object],
+) -> ProgressRecord:
+    quests_raw = body.get("quests")
+    if not isinstance(quests_raw, dict) or len(quests_raw) > MAX_QUESTS:
+        raise SyncEventError("Invalid quests")
+    quests: dict[str, str] = {}
+    for name, state in quests_raw.items():
+        if state not in QUEST_STATES:
+            raise SyncEventError("Invalid quest state")
+        quests[_text(name, "quest name", 128)] = state
+    combat = body.get("combat_achievements")
+    if not isinstance(combat, dict):
+        raise SyncEventError("Invalid combat achievements")
+    slayer_raw = body.get("slayer")
+    if not isinstance(slayer_raw, dict):
+        raise SyncEventError("Invalid slayer")
+    slayer: dict[str, object] = {
+        key: _nonnegative_int(slayer_raw.get(key), key) for key in SLAYER_INT_FIELDS
+    }
+    task_name = slayer_raw.get("task_name")
+    slayer["task_name"] = _text(task_name, "task name", 64) if isinstance(task_name, str) else None
+    return ProgressRecord(
         account_hash=account_hash,
         account_name=account_name,
         captured_at=occurred_at,
-        equipment=tuple(equipment),
-        inventory=tuple(inventory),
-        bank=tuple(bank),
-        skills=skills,
-        xp=xp,
+        quest_points=_nonnegative_int(body.get("quest_points"), "quest points"),
+        quests=quests,
+        diaries=_int_map(body.get("diaries"), "diaries", MAX_DIARIES),
+        combat_points=_nonnegative_int(combat.get("points"), "combat points"),
+        combat_tiers=_int_map(combat.get("tiers"), "combat tiers", MAX_COMBAT_TIERS),
+        slayer=slayer,
+    )
+
+
+def _parse_container_snapshot(
+    occurred_at: str,
+    account_hash: str,
+    account_name: str,
+    body: dict[str, object],
+) -> ContainerSnapshot:
+    containers_raw = body.get("containers")
+    if (
+        not isinstance(containers_raw, dict)
+        or not containers_raw
+        or len(containers_raw) > MAX_EXTRA_CONTAINERS
+    ):
+        raise SyncEventError("Invalid containers")
+    containers = {
+        _text(name, "container name", 32): tuple(_loadout_items(items, "container"))
+        for name, items in containers_raw.items()
+    }
+    return ContainerSnapshot(
+        account_hash=account_hash,
+        account_name=account_name,
+        captured_at=occurred_at,
+        containers=containers,
+    )
+
+
+def _parse_event_loot(
+    event_id: str,
+    occurred_at: str,
+    account_hash: str,
+    account_name: str,
+    body: dict[str, object],
+) -> NpcLootRecord:
+    source_type = _text(body.get("source_type"), "source type", 16)
+    if source_type not in EVENT_LOOT_SOURCE_TYPES:
+        raise SyncEventError("Invalid loot source type")
+    items = _loadout_items(body.get("items"), "items")
+    if not items:
+        raise SyncEventError("Loot is empty")
+    return NpcLootRecord(
+        event_id=event_id,
+        occurred_at=occurred_at,
+        account_hash=account_hash,
+        account_name=account_name,
+        npc_name=_text(body.get("source_name"), "source name", 128),
+        items=tuple(items),
+        source_type=source_type,
     )
 
 

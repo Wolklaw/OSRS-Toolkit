@@ -321,6 +321,7 @@ class NpcLootRecord:
     account_name: str
     npc_name: str
     items: tuple[LoadoutItem, ...]
+    source_type: str = "npc"
 
     @property
     def total_value(self) -> int:
@@ -361,6 +362,35 @@ class SkillsPoint:
     @property
     def total_level(self) -> int:
         return sum(self.skills.values())
+
+
+@dataclass(frozen=True, slots=True)
+class ProgressRecord:
+    account_hash: str
+    account_name: str
+    captured_at: str
+    quest_points: int
+    quests: dict[str, str]
+    diaries: dict[str, int]
+    combat_points: int
+    combat_tiers: dict[str, int]
+    slayer: dict[str, object]
+
+    @property
+    def finished_quests(self) -> frozenset[str]:
+        return frozenset(name for name, state in self.quests.items() if state == "finished")
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerSnapshot:
+    account_hash: str
+    account_name: str
+    captured_at: str
+    containers: dict[str, tuple[LoadoutItem, ...]]
+
+    @property
+    def total_value(self) -> int:
+        return sum(item.total_value for items in self.containers.values() for item in items)
 
 
 SESSION_GAP_MINUTES = 30
@@ -864,6 +894,36 @@ class JournalRepository:
                 account_hash TEXT NOT NULL,
                 account_name TEXT NOT NULL,
                 npc_name TEXT NOT NULL
+            )
+            """
+        )
+        self._add_missing_columns(
+            connection, "npc_loot_events", {"source_type": "TEXT NOT NULL DEFAULT 'npc'"}
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS progress_state (
+                account_hash TEXT PRIMARY KEY,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                quest_points INTEGER NOT NULL,
+                quests_json TEXT NOT NULL,
+                diaries_json TEXT NOT NULL,
+                combat_points INTEGER NOT NULL,
+                combat_tiers_json TEXT NOT NULL,
+                slayer_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS extra_container_snapshots (
+                account_hash TEXT NOT NULL,
+                container TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                captured_at TEXT NOT NULL,
+                items_json TEXT NOT NULL,
+                PRIMARY KEY (account_hash, container)
             )
             """
         )
@@ -2121,8 +2181,9 @@ class JournalRepository:
             cursor = connection.execute(
                 """
                 INSERT OR IGNORE INTO npc_loot_events (
-                    event_id, occurred_at, imported_at, account_hash, account_name, npc_name
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    event_id, occurred_at, imported_at, account_hash, account_name, npc_name,
+                    source_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     event.event_id,
@@ -2131,6 +2192,7 @@ class JournalRepository:
                     event.account_hash,
                     event.account_name,
                     event.npc_name,
+                    event.source_type,
                 ),
             )
             if cursor.rowcount == 0:
@@ -2200,6 +2262,7 @@ class JournalRepository:
                 account_name=str(row["account_name"]),
                 npc_name=str(row["npc_name"]),
                 items=tuple(items_by_event.get(str(row["event_id"]), [])),
+                source_type=str(row["source_type"]),
             )
             for row in rows
         ]
@@ -2443,6 +2506,141 @@ class JournalRepository:
                 """,
                 (snapshot.account_hash, snapshot.account_hash, MAX_SKILLS_HISTORY_PER_ACCOUNT),
             )
+
+    def save_skills_snapshot(self, point: SkillsPoint) -> None:
+        skills_json = json.dumps(point.skills, separators=(",", ":"))
+        xp_json = json.dumps(point.xp, separators=(",", ":"))
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO skills_history (
+                    account_hash, account_name, captured_at, skills_json, xp_json
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (point.account_hash, point.account_name, point.captured_at, skills_json, xp_json),
+            )
+            connection.execute(
+                """
+                DELETE FROM skills_history
+                WHERE account_hash = ? AND entry_id NOT IN (
+                    SELECT entry_id FROM skills_history
+                    WHERE account_hash = ?
+                    ORDER BY captured_at DESC, entry_id DESC
+                    LIMIT ?
+                )
+                """,
+                (point.account_hash, point.account_hash, MAX_SKILLS_HISTORY_PER_ACCOUNT),
+            )
+            connection.execute(
+                "UPDATE loadout_snapshots SET skills_json = ?, xp_json = ?"
+                " WHERE account_hash = ? AND captured_at <= ?",
+                (skills_json, xp_json, point.account_hash, point.captured_at),
+            )
+
+    def save_progress(self, record: ProgressRecord) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO progress_state (
+                    account_hash, account_name, captured_at, quest_points, quests_json,
+                    diaries_json, combat_points, combat_tiers_json, slayer_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_hash) DO UPDATE SET
+                    account_name = excluded.account_name,
+                    captured_at = excluded.captured_at,
+                    quest_points = excluded.quest_points,
+                    quests_json = excluded.quests_json,
+                    diaries_json = excluded.diaries_json,
+                    combat_points = excluded.combat_points,
+                    combat_tiers_json = excluded.combat_tiers_json,
+                    slayer_json = excluded.slayer_json
+                WHERE excluded.captured_at >= progress_state.captured_at
+                """,
+                (
+                    record.account_hash,
+                    record.account_name,
+                    record.captured_at,
+                    record.quest_points,
+                    json.dumps(record.quests, separators=(",", ":")),
+                    json.dumps(record.diaries, separators=(",", ":")),
+                    record.combat_points,
+                    json.dumps(record.combat_tiers, separators=(",", ":")),
+                    json.dumps(record.slayer, separators=(",", ":")),
+                ),
+            )
+
+    def get_progress(self, account_hash: str) -> ProgressRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM progress_state WHERE account_hash = ?", (account_hash,)
+            ).fetchone()
+        if row is None:
+            return None
+        return ProgressRecord(
+            account_hash=str(row["account_hash"]),
+            account_name=str(row["account_name"]),
+            captured_at=str(row["captured_at"]),
+            quest_points=int(row["quest_points"]),
+            quests=json.loads(str(row["quests_json"])),
+            diaries={k: int(v) for k, v in json.loads(str(row["diaries_json"])).items()},
+            combat_points=int(row["combat_points"]),
+            combat_tiers={k: int(v) for k, v in json.loads(str(row["combat_tiers_json"])).items()},
+            slayer=json.loads(str(row["slayer_json"])),
+        )
+
+    def save_container_snapshot(self, snapshot: ContainerSnapshot) -> None:
+        with self._connect() as connection:
+            for container, items in snapshot.containers.items():
+                connection.execute(
+                    """
+                    INSERT INTO extra_container_snapshots (
+                        account_hash, container, account_name, captured_at, items_json
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(account_hash, container) DO UPDATE SET
+                        account_name = excluded.account_name,
+                        captured_at = excluded.captured_at,
+                        items_json = excluded.items_json
+                    WHERE excluded.captured_at >= extra_container_snapshots.captured_at
+                    """,
+                    (
+                        snapshot.account_hash,
+                        container,
+                        snapshot.account_name,
+                        snapshot.captured_at,
+                        json.dumps(
+                            [
+                                {
+                                    "item_id": item.item_id,
+                                    "item_name": item.item_name,
+                                    "quantity": item.quantity,
+                                    "unit_value": item.unit_value,
+                                }
+                                for item in items
+                            ],
+                            separators=(",", ":"),
+                        ),
+                    ),
+                )
+
+    def list_container_items(self, account_hash: str) -> dict[str, tuple[LoadoutItem, ...]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT container, items_json FROM extra_container_snapshots"
+                " WHERE account_hash = ? ORDER BY container",
+                (account_hash,),
+            ).fetchall()
+        return {
+            str(row["container"]): tuple(
+                LoadoutItem(
+                    item_id=int(item["item_id"]),
+                    item_name=str(item["item_name"]),
+                    quantity=int(item["quantity"]),
+                    unit_value=int(item["unit_value"]),
+                )
+                for item in json.loads(str(row["items_json"]))
+            )
+            for row in rows
+        }
 
     @staticmethod
     def _prune_loadout_snapshot_history(connection: sqlite3.Connection, account_hash: str) -> None:

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
+from osrs_toolkit.achievements import container_rows, summarise_progress
 from osrs_toolkit.cancellations import cancellation_groups, summarize_cancellations
 from osrs_toolkit.csv_export import journal_csv
 from osrs_toolkit.drops import drop_table, npc_summaries
@@ -497,6 +498,38 @@ def build(deps: Deps) -> APIRouter:
                 "attribution": serialize(attribution) if attribution is not None else None,
                 "idle": [serialize(stack) for stack in idle[:15]],
                 "idle_total": sum(stack.value for stack in idle),
+                **switcher,
+            },
+        )
+
+    @router.get("/achievements", response_class=HTMLResponse)
+    def achievements_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = deps.character_switcher_context(account, active)
+        synced = switcher["synced_characters"]
+        live_hash = switcher["active_character"] or (
+            synced[0]["account_hash"] if len(synced) == 1 else None
+        )
+        summary = None
+        containers: list = []
+        if live_hash:
+            repository = journal_for(settings, account)
+            record = repository.get_progress(live_hash)
+            if record is not None:
+                summary = summarise_progress(record)
+            containers = container_rows(repository.list_container_items(live_hash))
+        return templates.TemplateResponse(
+            request,
+            "achievements.html",
+            {
+                "account": account,
+                "character_selected": live_hash is not None,
+                "summary": serialize(summary) if summary is not None else None,
+                "containers": [serialize(row) for row in containers],
+                "containers_total": sum(row.value for row in containers),
                 **switcher,
             },
         )

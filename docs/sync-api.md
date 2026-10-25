@@ -13,6 +13,10 @@ The event payloads themselves are **unchanged**. `ge_fill`, `ge_offer_opened`,
 `ge_offer_cancelled`, `player_trade` and `loadout_snapshot` keep the exact shape they have on
 disk today, so `parse_sync_event` needs no changes. Only the transport moves.
 
+Plugin 1.2.0 adds four event types, all opt-in and all described under
+[Progress events](#progress-events), and one read endpoint on the website rather than the sync
+service, described under [Grand Exchange suggestions](#grand-exchange-suggestions).
+
 ## Transport
 
 - HTTPS, JSON, UTF-8.
@@ -196,6 +200,51 @@ values, so 100–150 KB uncompressed, fired on every bank open.
 - The service keeps **one uncollected snapshot per account**: posting a new one deletes the
   previous uncollected one. It stays an ordinary queued event rather than a separate resource,
   so the desktop app's import path is unchanged — it just never finds a stale one waiting.
+
+## Progress events
+
+All four ride the same `POST /v1/events` envelope. An event type the desktop app does not know
+is left in the queue, so an older build is never broken by a newer plugin.
+
+| `event_type` | Setting | Payload |
+|---|---|---|
+| `progress_snapshot` | Track quests, diaries and Slayer | `quest_points`, `quests` (name to `not_started` / `in_progress` / `finished`), `diaries` (region to tiers complete, 0 to 4), `combat_achievements` (`points`, `tiers` as the raw status of each tier's varbit), `slayer` (`task_id`, `task_name`, `remaining`, `area`, `master`, `points`, `tasks_completed`) |
+| `skills_snapshot` | Track skill levels and experience | `skills` (level) and `xp`, by skill name |
+| `container_snapshot` | Sync gear and bank for PvM readiness | `containers`, the looting bag, seed vault, seed box and tackle box by name with the same item rows as a bank, and `seen`, the containers the game had loaded |
+| `event_loot` | Track valuable loot | `source_name`, `source_type` (`event` or `pickpocket`), `combat_level`, `amount`, `items` |
+
+`progress_snapshot` is read on login and then every minute of play, but only sent when it differs
+from the last one. Quests are swept on login, whenever quest points change, and every thirty
+minutes. `skills_snapshot` is throttled to one a minute and flushed at logout.
+
+`container_snapshot` only names a container in `seen` once the game has loaded it, which is why
+an empty looting bag and one never opened are different statements. The Grand Exchange collection
+box has no usable container constant in the client and is not sent.
+
+`event_loot` carries chests, raids, clue caskets and pickpocketing. NPC kills and player kills
+are not repeated here: kills stay `npc_loot`, and another player's loot is never sent.
+
+## Grand Exchange suggestions
+
+`GET https://runescope.app/api/plugin/ge-suggestions?account_hash=...`, authenticated with the
+same pairing token as the sync service. This is the one place the plugin reads from the toolkit
+rather than writing to it, and it goes to the website because the website holds the journal.
+
+```json
+{ "suggestions": [ { "item_id": 453, "item_name": "Coal", "side": "buy",
+                     "price": 150, "quantity": 500, "source": "position" } ] }
+```
+
+Open positions come first: a pending buy suggests what is still to buy at the plan's price, and
+stock in hand suggests what is unsold at the asking price. Watchlist items follow, at the market's
+offer targets and the remaining four-hour buy limit. At most 16 rows, cached for 10 seconds.
+The plugin polls every 15 seconds while the Grand Exchange is open and not at all otherwise.
+
+The plugin shows them inside the game's own chatbox prompts. In the item search it lists the
+tracked buys and, once a letter is typed, moves tracked items to the top of the results. In the
+quantity and price prompts it shows a line that fills the prompt's input box with the suggested
+number when clicked, leaving the Enter key to the player. It never selects an item, confirms an
+offer or sends any other input.
 
 ## Limits
 

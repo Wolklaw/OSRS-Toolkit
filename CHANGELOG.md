@@ -4,6 +4,23 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+### Highlights
+
+- **Achievements.** A new page under Progress shows quest points, achievement diary tiers by
+  region, combat achievement points and the tier they reach, your Slayer task with kills
+  remaining, and what the looting bag, seed vault, seed box and tackle box hold. Finished quests
+  tick themselves off the Quest Guide. Needs plugin 1.2.0 and "Track quests, diaries and Slayer".
+- **Skills without the bank.** Levels and experience now arrive as they change, so a session that
+  never opens the bank still records what it trained, and PvM Readiness reads current levels.
+- **Chest and clue loot.** Chests, raids, clue caskets and pickpocketing join the Loot Log, Drop
+  Rates and Trip Ledger beside NPC kills.
+- **Grand Exchange suggestions.** With the plugin's new setting on, the item search lists your
+  tracked buys and puts matching tracked items first in the results, and the quantity and price
+  prompts show a suggested number that fills the box when clicked. You still pick the item and
+  press Enter yourself.
+- Combat achievement tier status is stored as the raw game values and the tier shown is worked
+  out from points, because the meaning of the raw values has not been confirmed in game.
+
 ## [1.5.0] - 2026-10-25
 
 ### Highlights

@@ -30,7 +30,11 @@ the source and nothing is pending. The `warning=` line is riktenx's, applied by 
 queue-wide sweep; it is the standard install-time dialog for any plugin that contacts an
 external server, not a critique of this one.
 
-BSD-2 licensed, Java 11 target, 56 tests, no CI.
+That is 1.1.0. **1.2.0 is built and awaiting an in-game test**, so the pin above is still 1.1.0.
+It adds the settings below marked 1.2.0, and the Grand Exchange panel under
+[Grand Exchange suggestions](#grand-exchange-suggestions-in-the-client).
+
+BSD-2 licensed, Java 11 target, 66 tests, no CI.
 
 ### What it records
 
@@ -42,7 +46,13 @@ BSD-2 licensed, Java 11 target, 56 tests, no CI.
 | `trackPvmLoadout` | **off** | Equipment, inventory, bank (top 1,200 stacks by value), skill levels and experience — on bank open, fingerprinted so an unchanged bank sends nothing. |
 | `trackLoot` | **off** | What an NPC dropped, from `NpcLootReceived`. |
 | `trackDeaths` | **off** | Equipment and inventory at death, and the skull flag, from `ActorDeath`. |
+| `trackProgress` (1.2.0) | **off** | Quest states and points, diary tiers, combat achievement points and tier status, Slayer task. |
+| `trackSkills` (1.2.0) | **off** | Skill levels and experience as they change, at most once a minute. |
+| `showGeSuggestions` (1.2.0) | **off**, third-party warning | Reads tracked items and suggested prices from runescope.app while the Grand Exchange is open. |
 
+1.2.0 also widens two existing settings without renaming them: `trackLoot` now includes chest,
+raid, clue and pickpocket loot, and `trackPvmLoadout` now includes the looting bag, seed vault,
+seed box and tackle box.
 The design worth not breaking: events land in an on-disk outbox under `Filepath`
 (`.runelite/plugin-data/osrs-toolkit-sync/`, migrated from the pre-`Filepath` folder via
 `legacyDataDirectory`), a flush task drains it every 5 s, nothing is deleted until the service
@@ -157,21 +167,21 @@ bug fixes for ordinary reasons are fine.
 Each of these closes a gap the website's own roadmap has to work around. None is a new *kind*
 of data — they are the same opt-in categories, measured where they are actually missed.
 
-4. **Send skills and experience without needing a bank.** Today XP only arrives inside a
+4. **Send skills and experience without needing a bank.** *Built in 1.2.0, awaiting an in-game test.* Today XP only arrives inside a
    loadout snapshot, which fires on bank open, so a four-hour skilling session that never banks
    produces no XP readings at all — and the website's session inference has to lean on changed
    snapshots to date it. A skills-and-XP-only event, throttled and fingerprinted the same way,
    on a `StatChanged` edge and at logout, is a few hundred bytes against the snapshot's six
    figures. **This is the highest-value functional change on this list**: it makes XP per hour
    real, and it makes session boundaries honest for everyone who isn't a flipper.
-5. **Loot that isn't an NPC kill.** `NpcLootReceived` misses chests, raids, clue caskets,
+5. **Loot that isn't an NPC kill.** *Built in 1.2.0 on `LootReceived`, awaiting an in-game test.* `NpcLootReceived` misses chests, raids, clue caskets,
    implings and pickpocketing — a large share of what a PvM trip actually pays.
    `net.runelite.client.plugins.loottracker.LootReceived` carries `name`, `combatLevel`,
    `type` (`LootRecordType`: NPC, PLAYER, EVENT, PICKPOCKET), the items and an amount, and is
    what RuneLite's own loot tracker consumes. It is a core *plugin's* event class rather than a
    `net.runelite.client.events` one, so confirm depending on it is acceptable before building
    on it; if it is, send the `type` through so the journal can tell a chest from a kill.
-6. **The containers net worth is currently blind to.** The snapshot reads `WORN`, `INV` and
+6. **The containers net worth is currently blind to.** *Built in 1.2.0 for the looting bag, seed vault, seed box and tackle box; the collection box has no usable constant in the client and is left out.* The snapshot reads `WORN`, `INV` and
    `BANK` only. Real wealth also sits in `LOOTING_BAG`, `SEED_VAULT`, `SEED_BOX`, `TACKLE_BOX`,
    the GE collection box (`GE_COLLECT_*`) and raids shared storage — all real
    `gameval.InventoryID` constants. The catch is that `getItemContainer` returns null until the
@@ -208,6 +218,24 @@ here gets cleared on the RuneLite Discord **before** code is written:
     answer.
 
 ---
+
+## Grand Exchange suggestions in the client
+
+Built in 1.2.0, and the one place the plugin reads from the toolkit. It adds text widgets to
+the game's own chatbox prompts and reorders search results with `GrandExchangeSearched`, which
+RuneLite's own Grand Exchange plugin also uses. A first attempt as a floating overlay was dropped:
+its clicks did not survive stretched mode.
+
+Filling the price and quantity prompts on a click copies what Flipping Utilities does, which
+writes the value into the prompt's input and leaves Enter to the player. That is the one part
+that rests on precedent rather than on a written rule: AGENTS.md says no autotyping into the
+chatbox, and a strict reading could cover it.
+
+What it deliberately does not do: select an item, because that is the game's own action on a
+search result and nothing found does it for the player, or confirm an offer.
+
+Ask on the RuneLite Discord before the Hub PR whether writing a value into the prompt's input on a
+click is acceptable, and, if it is, whether writing an item name into the search box would be.
 
 ## Hard limits
 

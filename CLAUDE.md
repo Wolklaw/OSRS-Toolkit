@@ -154,7 +154,7 @@ stderr in error records and falsely reports failure.
 This is the inventory the roadmap is built from. Every item here is **already arriving** — the
 plugin sends it, `runelite_sync.py` parses it, and in most cases `journal.py` stores it.
 
-Event types, fixed at seven (`parse_sync_event`):
+Event types, eleven (`parse_sync_event`); the last four arrived with plugin 1.2.0:
 
 | Event | What it carries |
 |---|---|
@@ -165,6 +165,10 @@ Event types, fixed at seven (`parse_sync_event`):
 | `loadout_snapshot` | Equipment, inventory, and up to 1,200 bank stacks with names and values, plus **skill levels and experience**. Fired on bank open, skipped when nothing changed. |
 | `npc_loot` | NPC name and every stack it dropped, with values |
 | `player_death` | Equipment and inventory at the moment of death, and whether you were skulled |
+| `progress_snapshot` | Quest states and points, diary tiers, combat achievement points and tier status, Slayer task |
+| `skills_snapshot` | Levels and experience without needing the bank open |
+| `container_snapshot` | Looting bag, seed vault, seed box, tackle box, with which of them the game had loaded |
+| `event_loot` | Chest, raid, clue and pickpocket loot |
 
 Plus live current-state, replaced rather than queued: the eight GE slots (item, offer price,
 total and filled quantity, coins spent, state) and which item and side the offer box is open
@@ -329,8 +333,8 @@ so the desktop must not be allowed to drift into a different answer for the same
 
 Here so it does not get re-proposed:
 
-- **No new plugin event types**, and no plugin change, for anything above. The event set is
-  fixed at the seven in the table. The plugin's own roadmap
+- **Plugin changes to unblock anything above.** Phases 0 to 6 were built from the first seven
+  events and none of them waits on the four added in 1.2.0. The plugin's own roadmap
   ([`docs/plugin-roadmap.md`](docs/plugin-roadmap.md)) does propose additions — none of the
   phases above may be made to wait on them.
 - Nothing that automates gameplay, clicks interfaces, alters offers, or reads the client beyond

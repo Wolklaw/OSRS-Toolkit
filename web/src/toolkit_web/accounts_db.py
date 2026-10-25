@@ -251,6 +251,13 @@ class AccountsDB:
                 (token, discord_user_id),
             )
 
+    def account_for_pairing_token(self, token: str) -> Account | None:
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM account WHERE pairing_token = ?", (token,)
+            ).fetchone()
+        return _row_to_account(row) if row else None
+
     def set_discord_webhook(self, discord_user_id: str, url: str | None) -> None:
         with self._transaction() as connection:
             connection.execute(

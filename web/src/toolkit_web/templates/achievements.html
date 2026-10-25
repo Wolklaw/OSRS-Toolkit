@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set page_title = "Achievements" %}
+{% set page_sub = "Quest points, achievement diaries, combat achievements and your Slayer task, read from the RuneLite plugin." %}
+
+{% block content %}
+
+{% if not character_selected %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No character selected</strong>
+    Pick a character in the top bar to see its progress.
+  </div>
+</div>
+{% elif not summary %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>Nothing recorded yet</strong>
+    Switch on <em>Track quests, diaries and Slayer</em> in the plugin's settings, then log in. The first reading arrives within a few seconds.
+  </div>
+</div>
+{% else %}
+
+<div class="stats">
+  <div class="stat hero">
+    <div class="label">Quest points</div>
+    <div class="value">{{ "{:,}".format(summary.quest_points) }}</div>
+    <div class="foot">{{ summary.quests_finished }} finished, {{ summary.quests_in_progress }} in progress</div>
+  </div>
+  <div class="stat">
+    <div class="label">Diary tiers</div>
+    <div class="value">{{ summary.diary_tiers_complete }}<span class="unit">/ {{ summary.diary_tiers_total }}</span></div>
+    <div class="foot">Across {{ summary.diaries | length }} regions</div>
+  </div>
+  <div class="stat">
+    <div class="label">Combat achievement points</div>
+    <div class="value">{{ "{:,}".format(summary.combat_points) }}</div>
+    <div class="foot">{{ summary.combat_tier or "No tier yet" }}{% if summary.combat_tier %} tier reached{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Slayer task</div>
+    {% if summary.slayer.task %}
+    <div class="value">{{ summary.slayer.remaining }}<span class="unit">left</span></div>
+    <div class="foot">{{ summary.slayer.task | title }}</div>
+    {% else %}
+    <div class="value">None</div>
+    <div class="foot">{{ "{:,}".format(summary.slayer.points) }} points, {{ "{:,}".format(summary.slayer.tasks_completed) }} tasks done</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="panel flush">
+    <div class="panel-head"><div class="grow"><h2>Achievement diaries</h2></div></div>
+    <table class="table">
+      <thead><tr><th>Region</th><th>Highest tier</th><th class="num">Tiers</th></tr></thead>
+      <tbody>
+        {% for row in summary.diaries %}
+        <tr>
+          <td>{{ row.region }}</td>
+          <td>{{ row.label }}</td>
+          <td class="num">{{ row.tiers_complete }} / 4</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel flush">
+    <div class="panel-head"><div class="grow"><h2>Slayer</h2></div></div>
+    <table class="table">
+      <tbody>
+        <tr><td>Current task</td><td class="num">{{ (summary.slayer.task | title) if summary.slayer.task else "None" }}</td></tr>
+        <tr><td>Kills remaining</td><td class="num">{{ summary.slayer.remaining }}</td></tr>
+        <tr><td>Slayer points</td><td class="num">{{ "{:,}".format(summary.slayer.points) }}</td></tr>
+        <tr><td>Tasks completed</td><td class="num">{{ "{:,}".format(summary.slayer.tasks_completed) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<p class="muted">Last read {{ summary.captured_at[:16] | replace("T", " ") }} UTC. Combat achievement tiers are worked out from your points.</p>
+{% endif %}
+
+{% if containers %}
+<div class="panel flush">
+  <div class="panel-head"><div class="grow"><h2>Other storage</h2></div></div>
+  <table class="table">
+    <thead><tr><th>Container</th><th class="num">Stacks</th><th class="num">Value</th></tr></thead>
+    <tbody>
+      {% for row in containers %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td class="num">{{ row.stacks }}</td>
+        <td class="num">{{ "{:,}".format(row.value) }} gp</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td><strong>Total</strong></td><td></td>
+        <td class="num"><strong>{{ "{:,}".format(containers_total) }} gp</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}
