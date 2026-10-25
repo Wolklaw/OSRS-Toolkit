@@ -264,7 +264,9 @@ theoretical; this is yours.
 - **Supplies consumed.** `session_summary()` already infers the session window from the gaps
   between loot, deaths, trades and changed snapshots. With snapshot history, diff the snapshots
   bracketing that window: brews, restores, runes, food, ammo, priced at their own value.
-- **Trip P&L** = loot received − supplies burnt − what a death actually cost.
+- **Trip P&L** = loot received − supplies burnt − what a death actually cost. *Landed 2026-10-25*
+  as `trips.py` and `/trips`; a death's cost is not subtracted separately because what was lost
+  is already inside what left the account between the bracketing snapshots.
 - **Death cost by inference.** `player_death` says what you were carrying. The next snapshot
   says what you still have. The difference is what genuinely did not come back — strictly
   better than simulating OSRS's protect/skull/wilderness rules, which the plugin deliberately

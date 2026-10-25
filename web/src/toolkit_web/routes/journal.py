@@ -20,12 +20,15 @@ from osrs_toolkit.savings_goal import (
 )
 from osrs_toolkit.slippage import by_item_slippage, slippage_fills, summarize_slippage
 from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
+from osrs_toolkit.trips import build_trips
 
 from toolkit_web.accounts_db import Account
 from toolkit_web.charting import net_worth_history_svg
 from toolkit_web.deps import Deps
 from toolkit_web.importing import journal_for
 from toolkit_web.routes import ACTIVITY_WINDOW_DAYS
+
+TRIP_WINDOW_DAYS = 30
 from toolkit_web.serialize import serialize
 
 
@@ -365,6 +368,43 @@ def build(deps: Deps) -> APIRouter:
                 "account": account,
                 "character_selected": live_hash is not None,
                 "summary": serialize(summary) if summary is not None else None,
+                **switcher,
+            },
+        )
+
+    @router.get("/trips", response_class=HTMLResponse)
+    def trips_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = deps.character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        synced = switcher["synced_characters"]
+        live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        trips: list = []
+        if live_hash:
+            repository = journal_for(settings, account)
+            since = datetime.now(UTC) - timedelta(days=TRIP_WINDOW_DAYS)
+            margin = timedelta(hours=6)
+            trips = build_trips(
+                repository.list_npc_loot_events(since=since, account_hash=live_hash),
+                repository.list_player_death_events(since=since, account_hash=live_hash),
+                [
+                    point
+                    for point in repository.list_skills_history(live_hash)
+                    if datetime.fromisoformat(point.captured_at) >= since - margin
+                ],
+                repository.list_loadout_snapshots(live_hash, since=(since - margin).isoformat()),
+            )
+        return templates.TemplateResponse(
+            request,
+            "trips.html",
+            {
+                "account": account,
+                "character_selected": live_hash is not None,
+                "trips": [serialize(trip) for trip in trips],
+                "window_days": TRIP_WINDOW_DAYS,
                 **switcher,
             },
         )

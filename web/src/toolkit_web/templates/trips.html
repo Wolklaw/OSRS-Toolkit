@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% set page_title = "Trip Ledger" %}
+{% set page_sub = "What each trip actually paid: loot received, minus what left your account between the bank visits either side of it." %}
+
+{% block content %}
+
+{% if not character_selected %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No character selected</strong>
+    Pick a character in the top bar to see its trips.
+  </div>
+</div>
+{% elif not trips %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No trips in the last {{ window_days }} days</strong>
+    Kills, deaths and training that the plugin reports are grouped into trips, split wherever you
+    went quiet for half an hour. <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% else %}
+
+<div class="callout info">
+  <strong>How the numbers work.</strong>
+  Supplies are the items that were in your inventory, equipment and bank at the last bank visit
+  before the trip and were gone at the first one after it, priced as they were then. That counts
+  anything that left your account, so something you sold or traded in the same window shows up
+  there too. A trip without a bank visit on both sides shows loot only. Deaths are counted
+  but not subtracted a second time, because what you lost is already part of what left.
+</div>
+
+{% for trip in trips %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>{{ trip.title }}</h2>
+      <p class="hint tight">
+        {{ trip.started_at[:16] | replace("T", " ") }} UTC &middot; {{ trip.duration_minutes }} min
+        {% if trip.kills %}&middot; {{ trip.kills }} kills{% endif %}
+        {% if trip.deaths %}&middot; <span class="negative">{{ trip.deaths }} {{ "death" if trip.deaths == 1 else "deaths" }}, carrying {{ "{:,}".format(trip.death_value) }} gp</span>{% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="stats" style="padding: 0 1.25rem">
+    <div class="stat">
+      <div class="label">Loot</div>
+      <div class="value">{{ "{:,}".format(trip.loot_value) }}<span class="unit">gp</span></div>
+      <div class="foot">{% if trip.loot_per_hour is not none %}{{ "{:,.0f}".format(trip.loot_per_hour) }} gp/hr{% else %}Too short for a rate{% endif %}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Supplies</div>
+      <div class="value">{% if trip.supplies_value is not none %}{{ "{:,}".format(trip.supplies_value) }}<span class="unit">gp</span>{% else %}&mdash;{% endif %}</div>
+      <div class="foot">{% if trip.supplies_value is none %}Needs a bank visit either side{% else %}Left your account{% endif %}</div>
+    </div>
+    <div class="stat {{ 'good' if trip.net_profit is not none and trip.net_profit >= 0 else ('bad' if trip.net_profit is not none else '') }}">
+      <div class="label">Net</div>
+      <div class="value {{ 'positive' if trip.net_profit is not none and trip.net_profit >= 0 else ('negative' if trip.net_profit is not none else '') }}">
+        {% if trip.net_profit is not none %}{{ "{:+,}".format(trip.net_profit) }}<span class="unit">gp</span>{% else %}&mdash;{% endif %}
+      </div>
+      <div class="foot">{% if trip.net_per_hour is not none %}{{ "{:+,.0f}".format(trip.net_per_hour) }} gp/hr{% else %}&nbsp;{% endif %}</div>
+    </div>
+  </div>
+  {% if trip.loot_by_npc %}
+  <div class="table-wrap">
+    <table class="table-dense">
+      <thead><tr><th>Monster</th><th class="num">Kills</th><th class="num">Loot</th><th class="num">Per kill</th></tr></thead>
+      <tbody>
+        {% for npc in trip.loot_by_npc %}
+        <tr>
+          <td class="name">{{ npc.npc_name }}</td>
+          <td class="num">{{ npc.kills }}</td>
+          <td class="num">{{ "{:,}".format(npc.value) }}</td>
+          <td class="num">{{ "{:,}".format(npc.value_per_kill) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if trip.supplies %}
+  <div class="table-wrap">
+    <table class="table-dense">
+      <thead><tr><th>Used</th><th class="num">Quantity</th><th class="num">Value</th></tr></thead>
+      <tbody>
+        {% for use in trip.supplies[:12] %}
+        <tr>
+          <td class="name">{{ use.item_name }}</td>
+          <td class="num">{{ "{:,}".format(use.quantity) }}</td>
+          <td class="num">{{ "{:,}".format(use.value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% if trip.xp_gained %}
+  <p class="hint" style="padding: 0 1.25rem 1rem">
+    Experience:
+    {% for skill, gained in trip.xp_gained.items() %}{{ skill }} +{{ "{:,}".format(gained) }}{{ ", " if not loop.last }}{% endfor %}
+  </p>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}

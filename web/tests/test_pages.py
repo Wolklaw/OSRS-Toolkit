@@ -5,6 +5,9 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from osrs_toolkit.journal import (
     JournalRepository,
+    LoadoutItem,
+    LoadoutSnapshot,
+    NpcLootRecord,
     OfferCancelled,
     OfferOpened,
     SyncedItem,
@@ -337,3 +340,46 @@ def test_the_performance_page_reports_fill_times_once_an_item_has_three_complete
 
     assert "How long your offers take to fill" in page
     assert "8 min" in page
+
+
+def test_the_trip_ledger_nets_a_trips_loot_against_the_supplies_that_left(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    now = datetime.now(UTC)
+
+    def snapshot(minutes_ago: int, brews: int) -> LoadoutSnapshot:
+        return LoadoutSnapshot(
+            account_hash="abc123",
+            account_name="Wolklaw",
+            captured_at=(now - timedelta(minutes=minutes_ago)).isoformat(),
+            equipment=(),
+            inventory=(LoadoutItem(100, "Brew", brews, 10),),
+            bank=(),
+            skills={},
+        )
+
+    repository.save_loadout_snapshot(snapshot(60, 40))
+    for index, minutes_ago in enumerate((30, 20)):
+        repository.add_npc_loot_event(
+            NpcLootRecord(
+                f"loot-{index}",
+                (now - timedelta(minutes=minutes_ago)).isoformat(),
+                "abc123",
+                "Wolklaw",
+                "Vorkath",
+                (LoadoutItem(1, "Bones", 1, 5_000),),
+            )
+        )
+    repository.save_loadout_snapshot(snapshot(5, 10))
+    signed_in.cookies.set("active_character", "abc123")
+
+    page = signed_in.get("/trips").text
+
+    assert "Vorkath" in page
+    assert "10,000" in page
+    assert "+9,700" in page
+
+
+def test_the_trip_ledger_asks_for_a_character_when_none_is_selected(signed_in: TestClient):
+    assert "No character selected" in signed_in.get("/trips").text

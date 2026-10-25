@@ -843,6 +843,7 @@
 {%- elif name == "performance" -%}<path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/>
 {%- elif name == "quests" -%}<path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5z"/><path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5z"/><path d="M4 5.5v15"/><path d="M20 5.5v15"/>
 {%- elif name == "skillgoals" -%}<path d="M3 20h18"/><path d="M5 20v-5h4v5"/><path d="M10 20v-9h4v9"/><path d="M15 20V6h4v14"/>
+{%- elif name == "trips" -%}<path d="M4 7h16v12H4z"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M4 12h16"/>
 {%- elif name == "pvm" -%}<path d="M12 3l8 3v6c0 4.4-3.2 7.9-8 9-4.8-1.1-8-4.6-8-9V6z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/>
 {%- elif name == "loot" -%}<path d="M6 9l6-6 6 6"/><path d="M6 9l6 12 6-12"/><path d="M6 9h12"/>
 {%- elif name == "death" -%}<path d="M7 21V11a5 5 0 0 1 10 0v10"/><path d="M7 21h10"/><path d="M10 21v-3"/><path d="M14 21v-3"/>
@@ -878,6 +879,7 @@
   ]),
   ("Companion", [
     ("/session", "This Session", "session"),
+    ("/trips", "Trip Ledger", "trips"),
     ("/loot-log", "Loot Log", "loot"),
     ("/death-log", "Death Log", "death"),
     ("/loadout", "Skills & Bank", "loadout"),

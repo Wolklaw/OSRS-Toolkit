@@ -6,6 +6,15 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Trip Ledger.** A new page under Companion groups your kills, deaths and training into trips,
+  split wherever you went quiet for half an hour, and shows what each one actually paid: loot
+  received, the supplies that left your account between the bank visits either side of it,
+  the net and the net per hour, plus loot and kills per monster and experience gained. A
+  trip with no bank visit on both sides shows loot only rather than guessing. Supplies are
+  priced as they were at the first bank visit and include anything that left your account,
+  so a sale in the same window counts. Deaths are shown with what you carried but not taken
+  off a second time. It is built from the loot, death, skills and loadout-snapshot history
+  the site already keeps, so there is no plugin change and no schema change.
 - **Skill Goals.** A new page under Progress shows every skill against 99: experience, what is
   left to the next level and to 99, the pace you have actually trained it at over the last
   week of snapshots, and the days to 99 at that pace. Above it, "Levels that open quests"
