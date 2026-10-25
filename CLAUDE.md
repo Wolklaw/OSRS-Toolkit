@@ -231,8 +231,9 @@ lands the sooner history starts accumulating.
   real.
 - **Retain the offer lifecycle.** *Openings and cancellations landed 2026-10-25* in `offer_events`,
   with price, quantity, side, `restored` and the strategy of the position touched, and feed the
-  cancelled-offers report on `/performance`. Still to do: `filled_at` on both fill tables, which
-  observed fill time needs.
+  cancelled-offers report on `/performance`. Observed fill time *landed 2026-10-25* from `offer_events` plus
+  the fill timestamps `synced_trades` already holds, so `filled_at` on the position fill tables
+  was not needed for it; add it only if positions must keep their own fill times.
 - **Stamp market context onto a fill.** The 5m and 1h point at the moment of import, stored
   beside the fill, so every fill becomes a labelled observation instead of a bare price.
 

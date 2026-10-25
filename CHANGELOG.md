@@ -6,6 +6,12 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **How long your offers take to fill.** `/performance` now shows, per item and side, the median
+  time from opening an offer to its first fill and to its last, with the fastest and slowest,
+  for offers that completed. It is built from the offer openings now kept in `offer_events`
+  and the fills the journal already stores with their timestamps, so no `filled_at` column
+  was needed. Items need three completed offers before they show. Offers restored on login and
+  cancelled ones are left out, and history starts the day offer events started being kept.
 - **A cancelled-offers report.** `/performance` now shows, per strategy and side, how many offers
   you placed, how many you cancelled, the share that is, and the median wait before you gave
   up. Every opening and cancellation is now kept in a new `offer_events` table, additive like

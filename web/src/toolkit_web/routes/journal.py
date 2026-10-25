@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from osrs_toolkit.cancellations import cancellation_groups, summarize_cancellations
 from osrs_toolkit.csv_export import journal_csv
+from osrs_toolkit.fill_times import fill_observations, fill_time_groups
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS
 from osrs_toolkit.market import MarketDataError
@@ -230,8 +231,15 @@ def build(deps: Deps) -> APIRouter:
             period,
             now,
         )
-        cancel_groups = cancellation_groups(
-            repository.list_offer_events(switcher["active_character"]), period, now
+        offer_events = repository.list_offer_events(switcher["active_character"])
+        cancel_groups = cancellation_groups(offer_events, period, now)
+        fill_times = fill_time_groups(
+            fill_observations(
+                offer_events,
+                repository.list_synced_trades("ge_fill", account_hash=switcher["active_character"]),
+            ),
+            period,
+            now,
         )
         return templates.TemplateResponse(
             request,
@@ -244,6 +252,7 @@ def build(deps: Deps) -> APIRouter:
                 "by_strategy": [serialize(row) for row in by_strategy(results)],
                 "by_item": [serialize(row) for row in by_item(results)],
                 "calibration": [serialize(row) for row in calibration(tracked, period, now)],
+                "fill_times": [serialize(row) for row in fill_times],
                 "cancellations": [serialize(row) for row in cancel_groups],
                 "cancellation_summary": serialize(summarize_cancellations(cancel_groups)),
                 "slippage": serialize(summarize_slippage(fills)),

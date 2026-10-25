@@ -301,3 +301,39 @@ def test_the_performance_page_lists_cancelled_offers_with_the_wait(
     assert "Cancelled offers" in page
     assert "Overnight" in page
     assert "6 min" in page
+
+
+def test_the_performance_page_reports_fill_times_once_an_item_has_three_completed_offers(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    start = datetime.now(UTC) - timedelta(hours=3)
+    for index in range(3):
+        opened_at = start + timedelta(minutes=index * 20)
+        repository.record_offer_event(
+            OfferOpened(
+                f"o{index}", "h", "n", opened_at.isoformat(), "buy", 4151, "Abyssal whip", 1000, 10
+            ),
+            None,
+        )
+        repository.add_synced_trade(
+            SyncedTrade(
+                event_id=f"fill-{index}",
+                occurred_at=(opened_at + timedelta(minutes=8)).isoformat(),
+                event_type="ge_fill",
+                account_hash="h",
+                account_name="n",
+                counterparty=None,
+                direction="buy",
+                metadata={"offer_price": 1000, "total_quantity": 10, "offer_state": "BOUGHT"},
+                items=(
+                    SyncedItem("given", 995, "Coins", 10_000, 1),
+                    SyncedItem("received", 4151, "Abyssal whip", 10, 1000),
+                ),
+            )
+        )
+
+    page = signed_in.get("/performance").text
+
+    assert "How long your offers take to fill" in page
+    assert "8 min" in page

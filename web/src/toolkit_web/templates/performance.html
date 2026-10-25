@@ -185,6 +185,41 @@
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">
+      <h2>How long your offers take to fill</h2>
+      <p class="hint tight">Opening an offer to its last fill, for offers that completed. Offers
+        restored on login and cancelled ones are left out. Counted from the day offers started
+        being kept.</p>
+    </div>
+  </div>
+  {% if fill_times %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Side</th><th class="num">Offers</th><th class="num">To first fill</th><th class="num">To complete</th><th class="num">Fastest</th><th class="num">Slowest</th></tr>
+      </thead>
+      <tbody>
+        {% for row in fill_times %}
+        <tr>
+          <td class="name">{{ row.label }}</td>
+          <td><span class="badge {{ row.side }}">{{ row.side | capitalize }}</span></td>
+          <td class="num">{{ row.offers }}</td>
+          <td class="num">{{ "%.0f"|format(row.median_first_fill_minutes) }} min</td>
+          <td class="num">{{ "%.0f"|format(row.median_complete_minutes) }} min</td>
+          <td class="num">{{ "%.0f"|format(row.fastest_minutes) }} min</td>
+          <td class="num">{{ "%.0f"|format(row.slowest_minutes) }} min</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No item has three completed offers in this period yet.</div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
       <h2>Cancelled offers</h2>
       <p class="hint tight">What you pull back, how long you waited first, and under which strategy.
         Counted from the day offers started being kept, so older cancellations are not here.
