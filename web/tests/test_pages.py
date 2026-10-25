@@ -415,3 +415,51 @@ def test_the_drop_rates_page_lists_monsters_and_how_long_an_item_has_been_dry(
 
 def test_the_drop_rates_page_asks_for_a_character_when_none_is_selected(signed_in: TestClient):
     assert "No character selected" in signed_in.get("/drops").text
+
+
+def test_the_net_worth_page_explains_a_change_between_two_snapshots(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    now = datetime.now(UTC)
+
+    def snapshot(days_ago: int, whip_price: int) -> LoadoutSnapshot:
+        return LoadoutSnapshot(
+            account_hash="abc123",
+            account_name="Wolklaw",
+            captured_at=(now - timedelta(days=days_ago)).isoformat(),
+            equipment=(),
+            inventory=(LoadoutItem(7, "Abyssal whip", 2, whip_price),),
+            bank=(),
+            skills={},
+        )
+
+    repository.save_loadout_snapshot(snapshot(10, 1_000_000))
+    repository.save_loadout_snapshot(snapshot(0, 1_200_000))
+    signed_in.cookies.set("active_character", "abc123")
+
+    page = signed_in.get("/net-worth").text
+
+    assert "Price movement" in page
+    assert "+400,000" in page
+    assert "Abyssal whip" in page
+
+
+def test_the_net_worth_page_asks_for_two_snapshots_when_it_has_one(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.save_loadout_snapshot(
+        LoadoutSnapshot(
+            account_hash="abc123",
+            account_name="Wolklaw",
+            captured_at=datetime.now(UTC).isoformat(),
+            equipment=(),
+            inventory=(),
+            bank=(),
+            skills={},
+        )
+    )
+    signed_in.cookies.set("active_character", "abc123")
+
+    assert "Two bank snapshots needed" in signed_in.get("/net-worth").text

@@ -2729,6 +2729,32 @@ class JournalRepository:
             ).fetchone()
         return self._row_to_loadout_snapshot(row) if row is not None else None
 
+    def get_loadout_snapshot_at(
+        self, account_hash: str, at: str, *, fall_back_to_earliest: bool = False
+    ) -> LoadoutSnapshot | None:
+        moment = _as_moment(at)
+        with self._connect() as connection:
+            index = connection.execute(
+                "SELECT entry_id, captured_at FROM loadout_snapshot_history WHERE account_hash = ?",
+                (account_hash,),
+            ).fetchall()
+            ordered = sorted(
+                (_as_moment(row["captured_at"]), int(row["entry_id"])) for row in index
+            )
+            if not ordered:
+                return None
+            at_or_before = [entry for entry in ordered if entry[0] <= moment]
+            if at_or_before:
+                chosen = at_or_before[-1][1]
+            elif fall_back_to_earliest:
+                chosen = ordered[0][1]
+            else:
+                return None
+            row = connection.execute(
+                "SELECT * FROM loadout_snapshot_history WHERE entry_id = ?", (chosen,)
+            ).fetchone()
+        return self._row_to_loadout_snapshot(row)
+
     def get_latest_loadout_snapshot(self) -> LoadoutSnapshot | None:
         with self._connect() as connection:
             row = connection.execute(

@@ -6,6 +6,15 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Net Worth attribution.** A new page under Progress compares your latest bank snapshot with
+  one from 7, 30 or 90 days earlier and splits the change into loot received, what the market
+  did to the items you already held, what deaths cost, and everything else, with the
+  biggest price moves and the biggest changes in what you own beneath. The parts always add
+  up to the whole change. "Everything else" is deliberately a remainder: supplies you used,
+  things bought or sold and the Grand Exchange tax all land there, and the Trip Ledger breaks
+  supplies out trip by trip. It also lists idle capital, stacks worth at least 100,000 gp
+  that have not changed quantity in 14 days. It reads the snapshot history the site already
+  keeps, so there is no plugin or schema change.
 - **Drop Rates.** A new page under Companion lists every monster you have killed and, for the one
   you pick, every item it has dropped for you: how many kills it appeared in, the rate and
   roughly "1 in N", how many kills you have gone without it, the longest dry streak, and how

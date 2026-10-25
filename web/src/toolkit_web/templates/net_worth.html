@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set page_title = "Net Worth" %}
+{% set page_sub = "Why your wealth moved: what came from loot, what you lost to deaths, what the market did to things you were holding, and everything else." %}
+
+{% block page_actions %}
+<form method="get" class="row">
+  <select name="days" onchange="this.form.submit()" aria-label="Window">
+    {% for option in windows %}
+    <option value="{{ option }}" {% if option == days %}selected{% endif %}>Last {{ option }} days</option>
+    {% endfor %}
+  </select>
+  <noscript><button class="button secondary small" type="submit">Apply</button></noscript>
+</form>
+{% endblock %}
+
+{% block content %}
+
+{% if not character_selected %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No character selected</strong>
+    Pick a character in the top bar to see where its wealth went.
+  </div>
+</div>
+{% else %}
+
+{% if attribution %}
+<div class="stats">
+  <div class="stat hero {{ 'good' if attribution.change >= 0 else 'bad' }}">
+    <div class="label">Change</div>
+    <div class="value {{ 'positive' if attribution.change >= 0 else 'negative' }}">{{ "{:+,}".format(attribution.change) }}<span class="unit">gp</span></div>
+    <div class="foot">{{ "{:,}".format(attribution.start_value) }} to {{ "{:,}".format(attribution.end_value) }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Loot received</div>
+    <div class="value positive">{{ "{:+,}".format(attribution.loot) }}<span class="unit">gp</span></div>
+    <div class="foot">Kills in this window</div>
+  </div>
+  <div class="stat">
+    <div class="label">Price movement</div>
+    <div class="value {{ 'positive' if attribution.price_movement >= 0 else 'negative' }}">{{ "{:+,}".format(attribution.price_movement) }}<span class="unit">gp</span></div>
+    <div class="foot">On what you already held</div>
+  </div>
+  <div class="stat">
+    <div class="label">Lost to deaths</div>
+    <div class="value {{ 'negative' if attribution.deaths < 0 else '' }}">{{ "{:+,}".format(attribution.deaths) }}<span class="unit">gp</span></div>
+    <div class="foot">What you carried when you died</div>
+  </div>
+  <div class="stat">
+    <div class="label">Everything else</div>
+    <div class="value {{ 'positive' if attribution.other >= 0 else 'negative' }}">{{ "{:+,}".format(attribution.other) }}<span class="unit">gp</span></div>
+    <div class="foot">Supplies, buying, selling, trading</div>
+  </div>
+</div>
+
+<div class="callout info">
+  <strong>How this is worked out.</strong>
+  Two bank snapshots, {{ attribution.started_at[:16] | replace("T", " ") }} and
+  {{ attribution.ended_at[:16] | replace("T", " ") }} UTC, are compared. Price movement is what the
+  items you held at the start gained or lost at today's prices. Loot and deaths come from the
+  events between the snapshots. Whatever is left is everything else, so it includes supplies
+  you used, things you bought or sold and the Grand Exchange tax. See the Trip Ledger for supplies
+  trip by trip.
+</div>
+
+<div class="grid-2">
+  <div class="panel flush">
+    <div class="panel-head">
+      <div class="grow">
+        <h2>Biggest price moves</h2>
+        <p class="hint tight">On the quantity you held at the start.</p>
+      </div>
+    </div>
+    {% if attribution.price_movers %}
+    <div class="table-wrap">
+      <table class="table-dense">
+        <thead><tr><th>Item</th><th class="num">Held</th><th class="num">Price</th><th class="num">Effect</th></tr></thead>
+        <tbody>
+          {% for row in attribution.price_movers %}
+          <tr>
+            <td class="name">{{ row.item_name }}</td>
+            <td class="num">{{ "{:,}".format(row.quantity) }}</td>
+            <td class="num">{{ "{:,}".format(row.price_before) }} &rarr; {{ "{:,}".format(row.price_after) }}</td>
+            <td class="num {{ 'positive' if row.effect >= 0 else 'negative' }}">{{ "{:+,}".format(row.effect) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">Nothing you held changed price.</div>
+    {% endif %}
+  </div>
+  <div class="panel flush">
+    <div class="panel-head">
+      <div class="grow">
+        <h2>Biggest changes in what you own</h2>
+        <p class="hint tight">Valued at today's price.</p>
+      </div>
+    </div>
+    {% if attribution.quantity_movers %}
+    <div class="table-wrap">
+      <table class="table-dense">
+        <thead><tr><th>Item</th><th class="num">Change</th><th class="num">Value</th></tr></thead>
+        <tbody>
+          {% for row in attribution.quantity_movers %}
+          <tr>
+            <td class="name">{{ row.item_name }}</td>
+            <td class="num">{{ "{:+,}".format(row.quantity_change) }}</td>
+            <td class="num {{ 'positive' if row.effect >= 0 else 'negative' }}">{{ "{:+,}".format(row.effect) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">What you own did not change.</div>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>Two bank snapshots needed</strong>
+    Open your bank in game now and again after you have played for a while, with the plugin
+    running, and the change between them is explained here.
+  </div>
+</div>
+{% endif %}
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Idle capital</h2>
+      <p class="hint tight">Stacks worth at least 100,000 gp whose quantity has not changed in {{ idle_days }} days.
+        {% if idle %}Together {{ "{:,}".format(idle_total) }} gp.{% endif %}</p>
+    </div>
+  </div>
+  {% if idle %}
+  <div class="table-wrap">
+    <table class="table-dense">
+      <thead><tr><th>Item</th><th class="num">Quantity</th><th class="num">Value</th></tr></thead>
+      <tbody>
+        {% for stack in idle %}
+        <tr>
+          <td class="name">{{ stack.item_name }}</td>
+          <td class="num">{{ "{:,}".format(stack.quantity) }}</td>
+          <td class="num">{{ "{:,}".format(stack.value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">Nothing valuable has sat untouched for {{ idle_days }} days, or there is no older snapshot to compare with yet.</div>
+  {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}

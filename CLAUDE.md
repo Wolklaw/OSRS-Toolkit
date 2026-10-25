@@ -281,9 +281,11 @@ theoretical; this is yours.
 
 - **Decompose a change** into realized flip profit, loot in, deaths out, supplies burnt, and
   price movement on holdings you never traded. That last term is the one players never see and
-  it is frequently the largest.
+  it is frequently the largest. *Landed 2026-10-25* as `net_worth_attribution.py` and `/net-worth`;
+  supplies stay inside "everything else" there and are broken out on `/trips`.
 - **Idle capital** — stacks that have not moved in N days, what they are worth, and what they
-  would make at today's margins.
+  would make at today's margins. *The stacks landed 2026-10-25* on `/net-worth`; the margin
+  half is flip analytics and is not planned.
 - **Days of supply** — burn rate from the trip ledger against current stock. "Four days of
   nature runes left" is the restock warning nobody has.
 

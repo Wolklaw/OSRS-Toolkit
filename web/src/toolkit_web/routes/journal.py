@@ -11,6 +11,7 @@ from osrs_toolkit.fill_times import fill_observations, fill_time_groups
 from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.journal_presentation import PERIOD_FILTERS
 from osrs_toolkit.market import MarketDataError
+from osrs_toolkit.net_worth_attribution import attribute_change, idle_stacks
 from osrs_toolkit.performance import by_item, by_strategy, calibration, realized_results, summarize
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
 from osrs_toolkit.savings_goal import (
@@ -30,6 +31,8 @@ from toolkit_web.importing import journal_for
 from toolkit_web.routes import ACTIVITY_WINDOW_DAYS
 
 TRIP_WINDOW_DAYS = 30
+NET_WORTH_WINDOWS = (7, 30, 90)
+IDLE_DAYS = 14
 from toolkit_web.serialize import serialize
 
 
@@ -437,6 +440,63 @@ def build(deps: Deps) -> APIRouter:
                 "character_selected": live_hash is not None,
                 "npcs": [serialize(entry) for entry in npcs],
                 "table": serialize(table) if table is not None else None,
+                **switcher,
+            },
+        )
+
+    @router.get("/net-worth", response_class=HTMLResponse)
+    def net_worth_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+        days: int = 30,
+    ) -> HTMLResponse:
+        if days not in NET_WORTH_WINDOWS:
+            days = 30
+        switcher = deps.character_switcher_context(account, active)
+        filter_hash = switcher["active_character"]
+        synced = switcher["synced_characters"]
+        live_hash = filter_hash or (synced[0]["account_hash"] if len(synced) == 1 else None)
+        attribution = None
+        idle: list = []
+        if live_hash:
+            repository = journal_for(settings, account)
+            latest = repository.get_loadout_snapshot(live_hash)
+            if latest is not None:
+                latest_at = datetime.fromisoformat(latest.captured_at)
+                start = repository.get_loadout_snapshot_at(
+                    live_hash,
+                    (latest_at - timedelta(days=days)).isoformat(),
+                    fall_back_to_earliest=True,
+                )
+                if start is not None and start.captured_at != latest.captured_at:
+                    attribution = attribute_change(
+                        start,
+                        latest,
+                        repository.list_npc_loot_events(
+                            since=datetime.fromisoformat(start.captured_at), account_hash=live_hash
+                        ),
+                        repository.list_player_death_events(
+                            since=datetime.fromisoformat(start.captured_at), account_hash=live_hash
+                        ),
+                    )
+                reference = repository.get_loadout_snapshot_at(
+                    live_hash, (latest_at - timedelta(days=IDLE_DAYS)).isoformat()
+                )
+                if reference is not None:
+                    idle = idle_stacks(latest, reference)
+        return templates.TemplateResponse(
+            request,
+            "net_worth.html",
+            {
+                "account": account,
+                "character_selected": live_hash is not None,
+                "windows": NET_WORTH_WINDOWS,
+                "days": days,
+                "idle_days": IDLE_DAYS,
+                "attribution": serialize(attribution) if attribution is not None else None,
+                "idle": [serialize(stack) for stack in idle[:15]],
+                "idle_total": sum(stack.value for stack in idle),
                 **switcher,
             },
         )
