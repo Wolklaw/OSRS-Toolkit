@@ -234,6 +234,15 @@
         actually filled at, that's what Performance grades later.</p>
     </div>
     {% if positions %}
+    <div class="seg" role="group" aria-label="Which positions to show">
+      {% set supplies_count = positions | selectattr("status", "equalto", "Supplies") | list | length %}
+      {% set closed_count = positions | selectattr("status", "in", ["Completed", "Cancelled"]) | list | length %}
+      {% set live_count = positions | length - supplies_count - closed_count %}
+      <label><input type="radio" name="positions-view" value="open" onchange="applyPositionsView('open')"><span>Open ({{ live_count }})</span></label>
+      <label><input type="radio" name="positions-view" value="supplies" onchange="applyPositionsView('supplies')"><span>Supplies ({{ supplies_count }})</span></label>
+      <label><input type="radio" name="positions-view" value="closed" onchange="applyPositionsView('closed')"><span>Finished ({{ closed_count }})</span></label>
+      <label><input type="radio" name="positions-view" value="all" onchange="applyPositionsView('all')"><span>All</span></label>
+    </div>
     <input type="search" class="filter-input" placeholder="Filter positions…"
            oninput="filterTable(this, 'positions-table')" aria-label="Filter positions">
     <span class="table-note" id="positions-table-note"></span>
@@ -273,7 +282,7 @@
       </thead>
       <tbody>
         {% for position in positions %}
-        <tr data-created="{{ position.created_at }}" data-open="{{ 0 if position.status in ('Completed', 'Cancelled', 'Supplies') else 1 }}" data-not-in-ge="{{ 1 if position.not_in_ge else 0 }}">
+        <tr data-view="{{ 'supplies' if position.status == 'Supplies' else ('closed' if position.status in ('Completed', 'Cancelled') else 'open') }}" data-created="{{ position.created_at }}" data-open="{{ 0 if position.status in ('Completed', 'Cancelled', 'Supplies') else 1 }}" data-not-in-ge="{{ 1 if position.not_in_ge else 0 }}">
           <td><input type="checkbox" class="bulk-pick" value="{{ position.position_id }}" onchange="updateBulkBar()" aria-label="Select {{ position.item_name }}"></td>
           <td class="name">
             {% if position.item_id %}
@@ -293,17 +302,25 @@
             {% endif %}
           </td>
 
+          {% if position.status == "Supplies" %}
+          <td class="num table-note">{{ "{:,}".format(position.bought_quantity) }} bought</td>
+          {% else %}
           <td class="num cell-meter">
             {{ "{:,}".format(position.sold_quantity) }} / {{ "{:,}".format(position.quantity) }}
             <div class="meter good">
               <span style="--fill: {{ (position.sold_quantity / position.quantity * 100) if position.quantity else 0 }}%"></span>
             </div>
           </td>
+          {% endif %}
           <td class="num">{{ "{:,}".format(position.actual_buy or position.buy_suggestion) }}</td>
           <td class="num">{{ "{:,}".format(position.sell_suggestion) }}</td>
+          {% if position.status == "Supplies" %}
+          <td class="num table-note">&mdash;</td>
+          {% else %}
           <td class="num {{ 'positive' if position.estimated_profit >= 0 else 'negative' }}">
             {{ "{:+,}".format(position.estimated_profit) }}
           </td>
+          {% endif %}
           <td class="row-actions">
             <button class="button ghost small"
                     onclick='openPositionEditor({{ position | tojson }})'>Update</button>
@@ -313,6 +330,7 @@
         {% endfor %}
       </tbody>
     </table>
+    <div class="empty" id="positions-view-empty" hidden>Nothing in this view.</div>
   </div>
   {% else %}
   <div class="empty">
@@ -518,10 +536,40 @@
 
   function toggleAllPositions(checked) {
     for (const box of document.querySelectorAll('.bulk-pick')) {
-      box.checked = checked && !box.closest('tr').hidden;
+      box.checked = checked && positionRowShown(box.closest('tr'));
     }
     updateBulkBar();
   }
+
+  const POSITIONS_VIEW_KEY = 'positionsView';
+
+  function positionRowShown(row) {
+    return !row.hidden && !row.classList.contains('view-hidden');
+  }
+
+  function applyPositionsView(view) {
+    try { localStorage.setItem(POSITIONS_VIEW_KEY, view); } catch (e) {  }
+    let shown = 0;
+    for (const row of document.querySelectorAll('#positions-table tbody tr')) {
+      const hide = view !== 'all' && row.dataset.view !== view;
+      row.classList.toggle('view-hidden', hide);
+      if (!hide) { shown += 1; }
+      const box = row.querySelector('.bulk-pick');
+      if (box && hide) { box.checked = false; }
+    }
+    const choice = document.querySelector('input[name="positions-view"][value="' + view + '"]');
+    if (choice) { choice.checked = true; }
+    const empty = document.getElementById('positions-view-empty');
+    if (empty) { empty.hidden = shown > 0; }
+    updateBulkBar();
+  }
+
+  (function () {
+    if (!document.getElementById('positions-table')) { return; }
+    let saved = 'open';
+    try { saved = localStorage.getItem(POSITIONS_VIEW_KEY) || 'open'; } catch (e) {  }
+    applyPositionsView(['open', 'supplies', 'closed', 'all'].includes(saved) ? saved : 'open');
+  })();
 
   function selectOlderThan(choice) {
     if (!choice) { return; }
@@ -531,13 +579,13 @@
       const matches = cutoff === null
         ? row.dataset.notInGe === '1'
         : row.dataset.open === '1' && Date.parse(row.dataset.created) < cutoff;
-      box.checked = !row.hidden && matches;
+      box.checked = positionRowShown(row) && matches;
     }
     updateBulkBar();
     const first = pickedPositions()[0];
     if (!first) {
       toast(choice === 'ge'
-        ? 'Every open position has an offer in your Grand Exchange.'
+        ? 'No open flips are missing from your Grand Exchange. Supplies are listed under the Supplies tab.'
         : 'No open positions are older than ' + choice + ' days.');
       return;
     }

@@ -527,3 +527,24 @@ def test_a_position_with_a_matching_live_offer_is_not_flagged(
     )
 
     assert "Not in GE" not in _dashboard(signed_in, "live", {0: slot})
+
+
+def test_the_dashboard_files_supplies_and_finished_positions_apart_from_open_ones(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    open_id = repository.track(1, "Open item", 10, 100, 150)
+    supplies_id = repository.track(2, "Supply item", 10, 100, 150)
+    repository.update_tracked(supplies_id, "Supplies", None, None, None, [(10, 100)])
+    done_id = repository.track(3, "Done item", 10, 100, 150)
+    repository.update_tracked(done_id, "Completed", 100, 150, [(10, 150)], [(10, 100)])
+
+    page = signed_in.get("/").text
+
+    assert "Open (1)" in page
+    assert "Supplies (1)" in page
+    assert "Finished (1)" in page
+    assert page.count('data-view="open"') == 1
+    assert page.count('data-view="supplies"') == 1
+    assert page.count('data-view="closed"') == 1
+    assert open_id and supplies_id and done_id

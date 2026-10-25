@@ -6,6 +6,12 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Positions are filed by what they are.** Buys made outside a trading session are filed as
+  Supplies and used to sit in the same table as flips in progress, each with an empty "sold"
+  bar, which read as dozens of unfinished trades. The Positions table now opens on Open, with
+  Supplies, Finished and All beside it, remembers your choice, and shows Supplies as a bought
+  count rather than a sold bar with no profit figure. Bulk selection only ever acts on the rows
+  you can see.
 - **Find the positions your Grand Exchange no longer has.** While the plugin is live, a position
   that expects an offer (a pending buy, a listing, a part-sold listing) and has no matching
   offer in your eight slots now carries a "Not in GE" badge, and the bulk picker on the
