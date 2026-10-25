@@ -77,3 +77,17 @@ def test_rarest_items_come_first_and_other_monsters_are_ignored() -> None:
 
     assert [row.item_name for row in table.rows] == ["Draconic visage", "Dragon bones"]
     assert table.kills == 4
+
+
+def test_the_recorded_span_comes_from_the_first_and_last_kill() -> None:
+    events = [_kill(index, BONES) for index in range(4)]
+
+    summary = npc_summaries(events)[0]
+    table = drop_table(events, "Vorkath")
+
+    assert summary.first_kill_at == events[0].occurred_at
+    assert summary.last_kill_at == events[3].occurred_at
+    assert (table.first_kill_at, table.last_kill_at) == (
+        summary.first_kill_at,
+        summary.last_kill_at,
+    )

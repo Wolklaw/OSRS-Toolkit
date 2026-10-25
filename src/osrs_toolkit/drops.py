@@ -15,6 +15,7 @@ class NpcDrops:
     npc_name: str
     kills: int
     value: int
+    first_kill_at: str
     last_kill_at: str
 
 
@@ -41,6 +42,8 @@ class DropRow:
 class DropTable:
     npc_name: str
     kills: int
+    first_kill_at: str
+    last_kill_at: str
     rows: tuple[DropRow, ...]
 
 
@@ -58,6 +61,7 @@ def npc_summaries(events: Iterable[NpcLootRecord]) -> list[NpcDrops]:
             npc_name=name,
             kills=len(rows),
             value=sum(event.total_value for event in rows),
+            first_kill_at=min(rows, key=lambda event: _moment(event.occurred_at)).occurred_at,
             last_kill_at=max(rows, key=lambda event: _moment(event.occurred_at)).occurred_at,
         )
         for name, rows in grouped.items()
@@ -107,4 +111,10 @@ def drop_table(events: Iterable[NpcLootRecord], npc_name: str) -> DropTable:
             )
         )
     rows.sort(key=lambda row: (row.kills_with, -row.unit_value, row.item_name))
-    return DropTable(npc_name=npc_name, kills=total, rows=tuple(rows))
+    return DropTable(
+        npc_name=npc_name,
+        kills=total,
+        first_kill_at=kills[0].occurred_at if kills else "",
+        last_kill_at=kills[-1].occurred_at if kills else "",
+        rows=tuple(rows),
+    )

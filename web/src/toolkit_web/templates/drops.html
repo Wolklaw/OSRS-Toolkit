@@ -32,13 +32,14 @@
   </div>
   <div class="table-wrap" style="max-height: 18rem; overflow-y: auto">
     <table id="npc-table" class="table-dense">
-      <thead><tr><th>Monster</th><th class="num">Kills</th><th class="num">Loot</th><th>Last kill</th></tr></thead>
+      <thead><tr><th>Monster</th><th class="num">Kills</th><th class="num">Loot</th><th>First kill</th><th>Last kill</th></tr></thead>
       <tbody>
         {% for npc in npcs %}
         <tr>
           <td class="name"><a href="/drops?npc={{ npc.npc_name | urlencode }}">{{ npc.npc_name }}</a></td>
           <td class="num">{{ "{:,}".format(npc.kills) }}</td>
           <td class="num">{{ "{:,}".format(npc.value) }}</td>
+          <td class="table-note">{{ npc.first_kill_at[:10] }}</td>
           <td class="table-note">{{ npc.last_kill_at[:10] }}</td>
         </tr>
         {% endfor %}
@@ -52,7 +53,8 @@
   <div class="panel-head">
     <div class="grow">
       <h2>{{ table.npc_name }}</h2>
-      <p class="hint tight">{{ "{:,}".format(table.kills) }} kills. Rarest first. A rate needs several kills to mean
+      <p class="hint tight">{{ "{:,}".format(table.kills) }} kills recorded between {{ table.first_kill_at[:10] }} and {{ table.last_kill_at[:10] }}.
+        Only kills the plugin sent are counted, so RuneLite's own loot tracker, which keeps its own history, can show more. Rarest first. A rate needs several kills to mean
         much, and "vs usual wait" only shows once an item has dropped twice.</p>
     </div>
   </div>
