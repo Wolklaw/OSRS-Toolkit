@@ -6,6 +6,19 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Price slippage on Performance.** `/performance` now shows your offer price against what each
+  Grand Exchange fill actually cost or paid, by item and by side, with the net gp the
+  exchange gave you over what you asked. It is computed from the `offer_price` every fill
+  already stores, so nothing in the plugin or the schema changed. Items need three fills
+  before they show, the same honesty floor the by-item table applies.
+- **Quest Guide counts like the game.** The tally is 184 quests and 343 quest points, miniquests
+  and Recipe for Disaster's sub-steps are kept out of it, and miniquests get a list of their
+  own instead of crowding "Do next". Plague City and Spirits of the Elid had no quest
+  points in the bundled data, and four unreleased quests were in it.
+- **Pages stop waiting on the sync service.** Every page used to open the journal from scratch
+  and block on the sync service for up to twenty seconds. The journal is now opened once per
+  user, the import runs at most every few seconds with a backoff after a slow call, and the
+  profile page counts rows instead of loading them.
 - **A Quest Guide that reads your levels.** `/quests` lists every quest you can start right
   now, ranked by how many other quests finishing it opens, then the ones that are only a few
   levels away, the biggest experience rewards you can claim per skill, and a checklist to

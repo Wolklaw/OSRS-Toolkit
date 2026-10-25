@@ -148,6 +148,43 @@
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">
+      <h2>Price slippage</h2>
+      <p class="hint tight">Your offer price against what the fills really cost or paid. Positive means the
+        Grand Exchange gave you a better price than you asked for.
+        {% if slippage.fills %}Across {{ slippage.fills }} fills:
+        buying {{ "{:+,}".format(slippage.buy_improvement) }} gp,
+        selling {{ "{:+,}".format(slippage.sell_improvement) }} gp.{% endif %}</p>
+    </div>
+  </div>
+  {% if slippage_items %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Side</th><th class="num">Fills</th><th class="num">Quantity</th><th class="num">Per unit</th><th class="num">Better by</th><th class="num">Total</th></tr>
+      </thead>
+      <tbody>
+        {% for row in slippage_items %}
+        <tr>
+          <td class="name">{{ row.label }}</td>
+          <td><span class="badge {{ row.side }}">{{ row.side | capitalize }}</span></td>
+          <td class="num">{{ row.fills }}</td>
+          <td class="num">{{ "{:,}".format(row.quantity) }}</td>
+          <td class="num {{ 'positive' if row.improvement >= 0 else 'negative' }}">{{ "{:+,.1f}".format(row.improvement_per_unit) }}</td>
+          <td class="num">{% if row.improvement_percent is not none %}{{ "{:+.2f}".format(row.improvement_percent) }}%{% else %}—{% endif %}</td>
+          <td class="num {{ 'positive' if row.improvement >= 0 else 'negative' }}">{{ "{:+,}".format(row.improvement) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No item has enough Grand Exchange fills in this period to show yet.</div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
       <h2>Plan vs. actual</h2>
       <p class="hint tight">Where the plan and the outcome parted company. Hover a row for the detail.</p>
     </div>

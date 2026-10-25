@@ -240,7 +240,8 @@ This is the thing no other tool can do, because nobody else holds your fill hist
 
 - **Slippage** — the offer price against the effective filled price, by item and by strategy.
   This one needs nothing from Phase 0: every `ge_fill` already stores `offer_price` in its
-  `metadata_json` beside the coins it actually moved, so it is a query away. Start here.
+  `metadata_json` beside the coins it actually moved, so it is a query away. *Landed 2026-10-25* as `slippage.py`, by item and side, on `/performance`;
+  by strategy still needs fills matched to positions.
 - **Observed fill time**, per item and per offset from the market price. "At the 1h low, this
   fills in about four minutes for you; a gp under, about forty." Needs Phase 0's timestamps —
   a position's `created_at` is a rough stand-in and silently misses everything cancelled.

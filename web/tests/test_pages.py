@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
-from osrs_toolkit.journal import JournalRepository
+from osrs_toolkit.journal import JournalRepository, SyncedItem, SyncedTrade
 
 from toolkit_web.config import Settings
 
@@ -244,3 +244,32 @@ def test_the_signed_out_header_wordmark_is_wrapped_too(client: TestClient):
 
     assert '<span class="wordmark">Rune<em>Scope</em></span>' in page
     assert '<span class="mark">RS</span>Rune' not in page
+
+
+def test_the_performance_page_reports_slippage_once_an_item_has_enough_fills(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    for index in range(3):
+        repository.add_synced_trade(
+            SyncedTrade(
+                event_id=f"slip-{index}",
+                occurred_at=datetime.now(UTC).isoformat(),
+                event_type="ge_fill",
+                account_hash="abc123",
+                account_name="Wolklaw",
+                counterparty=None,
+                direction="buy",
+                metadata={"offer_price": 1000},
+                items=(
+                    SyncedItem("given", 995, "Coins", 9_000, 1),
+                    SyncedItem("received", 4151, "Abyssal whip", 10, 900),
+                ),
+            )
+        )
+
+    page = signed_in.get("/performance").text
+
+    assert "Price slippage" in page
+    assert "Abyssal whip" in page
+    assert "+3,000" in page

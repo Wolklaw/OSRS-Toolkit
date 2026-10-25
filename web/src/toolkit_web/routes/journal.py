@@ -16,6 +16,7 @@ from osrs_toolkit.savings_goal import (
     estimate_days_remaining,
     realized_profit_since,
 )
+from osrs_toolkit.slippage import by_item_slippage, slippage_fills, summarize_slippage
 from osrs_toolkit.supplies_report import supplies_spend_rows, total_supplies_spend
 
 from toolkit_web.accounts_db import Account
@@ -223,6 +224,11 @@ def build(deps: Deps) -> APIRouter:
         now = datetime.now(UTC)
         results = realized_results(tracked, repository.list_all(), period, now)
         summary = summarize(results)
+        fills = slippage_fills(
+            repository.list_synced_trades("ge_fill", account_hash=switcher["active_character"]),
+            period,
+            now,
+        )
         return templates.TemplateResponse(
             request,
             "performance.html",
@@ -234,6 +240,8 @@ def build(deps: Deps) -> APIRouter:
                 "by_strategy": [serialize(row) for row in by_strategy(results)],
                 "by_item": [serialize(row) for row in by_item(results)],
                 "calibration": [serialize(row) for row in calibration(tracked, period, now)],
+                "slippage": serialize(summarize_slippage(fills)),
+                "slippage_items": [serialize(row) for row in by_item_slippage(fills)],
                 **switcher,
             },
         )
