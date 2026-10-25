@@ -45,14 +45,15 @@ ingress:
 they come back running whatever code is already on disk. Nothing pulls from GitHub on boot.
 
 ```bash
-ssh 192.168.0.172
+ssh wolkhost
 cd ~/osrs-web && git pull --ff-only
 systemctl --user restart toolkit-web
 ```
 
-The hostname `wolkhost` is what the machine calls itself, not something every client resolves —
-the Windows machine only has `192.168.0.172` in its `~/.ssh/config`, so that is what works from
-there.
+Connect by name, not by address. The router hands out addresses by DHCP, and a reboot on
+2026-10-25 moved the laptop from `192.168.0.172` to `192.168.0.189`, which looked exactly like
+SSH being down. The router resolves `wolkhost.ht.home` to whatever the address is now, and the
+Windows machine's `~/.ssh/config` maps `wolkhost` to that name.
 
 Both halves are editable installs out of this one checkout, so a pull is normally the whole
 deploy — including a domain-layer change, which now arrives in the same pull as the page that
