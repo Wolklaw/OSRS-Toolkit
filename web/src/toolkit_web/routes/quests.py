@@ -7,9 +7,11 @@ from osrs_toolkit.quests import (
     all_quests,
     assess_quests,
     best_for_skill,
+    counted_quest_names,
     do_next,
     nearly_ready,
     quest_points,
+    ready_miniquests,
     with_prerequisites,
     without_dependants,
 )
@@ -19,9 +21,7 @@ from toolkit_web.deps import Deps
 from toolkit_web.importing import journal_for
 
 QUEST_NAMES = frozenset(quest.name for quest in all_quests())
-COUNTED_QUEST_NAMES = frozenset(
-    quest.name for quest in all_quests() if quest.quest_points_awarded > 0
-)
+COUNTED_QUEST_NAMES = counted_quest_names()
 TOTAL_QUEST_POINTS = quest_points(COUNTED_QUEST_NAMES)
 
 
@@ -76,6 +76,7 @@ def build(deps: Deps) -> APIRouter:
                 "guides": ordered,
                 "next_up": do_next(guides),
                 "almost": nearly_ready(guides),
+                "miniquests": ready_miniquests(guides),
                 "skill_picks": {skill: rows for skill, rows in skill_picks.items() if rows},
                 "done_count": len(completed & COUNTED_QUEST_NAMES),
                 "total_count": len(COUNTED_QUEST_NAMES),

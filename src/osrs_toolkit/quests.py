@@ -15,6 +15,32 @@ DIFFICULTY_ORDER = (
     "Special",
 )
 NEARLY_READY_LEVELS = 10
+LENGTH_ORDER = ("Very Short", "Short", "Medium", "Long", "Very Long")
+MINIQUESTS = frozenset(
+    {
+        "Alfred Grimhand's Barcrawl",
+        "Architectural Alliance",
+        "Barbarian Training",
+        "Bear Your Soul",
+        "Curse of the Empty Lord",
+        "Daddy's Home",
+        "Enter the Abyss",
+        "Family Pest",
+        "His Faithful Servants",
+        "Hopespear's Will",
+        "In Search of Knowledge",
+        "Into the Tombs",
+        "Lair of Tarn Razorlor",
+        "Mage Arena I",
+        "Mage Arena II",
+        "Skippy and the Mogres",
+        "The Enchanted Key",
+        "The Fractured Archive (miniquest)",
+        "The Frozen Door",
+        "The General's Shadow",
+        "Vale Totems (miniquest)",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +143,18 @@ def without_dependants(names: Iterable[str]) -> frozenset[str]:
     return frozenset(seen)
 
 
+def is_miniquest(quest: Quest) -> bool:
+    return quest.name in MINIQUESTS
+
+
+def counts_as_quest(quest: Quest) -> bool:
+    return not is_miniquest(quest) and "/" not in quest.name
+
+
+def counted_quest_names() -> frozenset[str]:
+    return frozenset(quest.name for quest in all_quests() if counts_as_quest(quest))
+
+
 def quest_points(completed: Iterable[str]) -> int:
     by_name = _by_name()
     return sum(by_name[name].quest_points_awarded for name in set(completed) if name in by_name)
@@ -168,17 +206,29 @@ def _difficulty_rank(guide: QuestGuide) -> int:
     )
 
 
+def _length_rank(guide: QuestGuide) -> int:
+    length = guide.quest.length
+    return LENGTH_ORDER.index(length) if length in LENGTH_ORDER else len(LENGTH_ORDER)
+
+
 def do_next(guides: Iterable[QuestGuide], limit: int = 10) -> list[QuestGuide]:
-    ready = [guide for guide in guides if guide.state == "Ready"]
+    ready = [guide for guide in guides if guide.state == "Ready" and counts_as_quest(guide.quest)]
     ready.sort(
         key=lambda guide: (
             -guide.unlocks,
+            _length_rank(guide),
             -guide.quest.quest_points_awarded,
             _difficulty_rank(guide),
             guide.quest.name,
         )
     )
     return ready[:limit]
+
+
+def ready_miniquests(guides: Iterable[QuestGuide]) -> list[QuestGuide]:
+    ready = [guide for guide in guides if guide.state == "Ready" and is_miniquest(guide.quest)]
+    ready.sort(key=lambda guide: (_length_rank(guide), _difficulty_rank(guide), guide.quest.name))
+    return ready
 
 
 def nearly_ready(

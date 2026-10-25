@@ -7,9 +7,12 @@ from osrs_toolkit.quests import (
     all_quests,
     assess_quests,
     best_for_skill,
+    counted_quest_names,
     do_next,
+    is_miniquest,
     nearly_ready,
     quest_points,
+    ready_miniquests,
     with_prerequisites,
     without_dependants,
 )
@@ -123,3 +126,15 @@ def test_progress_is_kept_per_character_and_survives_a_reopen(tmp_path: Path) ->
 
     reopened.set_quests_completed("hash-a", ["Cook's Assistant"], False)
     assert reopened.list_completed_quests("hash-a") == frozenset()
+
+
+def test_miniquests_are_kept_out_of_do_next_and_listed_on_their_own() -> None:
+    guides = assess_quests({skill: 99 for skill in ("Magic", "Smithing", "Mining")}, set())
+
+    assert not any(is_miniquest(guide.quest) for guide in do_next(guides, 500))
+    assert all(is_miniquest(guide.quest) for guide in ready_miniquests(guides))
+
+
+def test_the_quest_total_matches_the_games_own_count() -> None:
+    assert len(counted_quest_names()) == 184
+    assert quest_points(counted_quest_names()) == 343

@@ -45,12 +45,39 @@
   </div>
 </div>
 
+{% if miniquests %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Miniquests you can do</h2>
+      <p class="hint tight">Not counted in your quest total, shortest first.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Miniquest</th><th>Difficulty</th><th>Length</th></tr>
+      </thead>
+      <tbody>
+        {% for guide in miniquests %}
+        <tr>
+          <td class="name">{{ wiki_link(guide.quest.name) }}<div class="table-note">{{ guide.quest.start }}</div></td>
+          <td>{{ guide.quest.difficulty }}</td>
+          <td>{{ guide.quest.length }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">
       <h2>Do next</h2>
       <p class="hint tight">Quests you can start now. The ones that open the most other quests
-        come first.</p>
+        come first, then the shorter ones.</p>
     </div>
   </div>
   {% if next_up %}
