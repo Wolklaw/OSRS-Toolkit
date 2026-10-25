@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+from osrs_toolkit.holdings import untracked_holdings
 from osrs_toolkit.journal_presentation import trade_needs_attention
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.ranking import offer_targets
@@ -86,10 +87,10 @@ def build(deps: Deps) -> APIRouter:
             [(point.captured_at, point.total_value) for point in net_worth_history]
         )
         try:
-            _mappings, market_points = market.snapshot()
+            market_mappings, market_points = market.snapshot()
             live_sell_targets = {point.item_id: offer_targets(point)[1] for point in market_points}
         except MarketDataError:
-            live_sell_targets = {}
+            market_mappings, market_points, live_sell_targets = {}, [], {}
         plugin_state = plugin_activity(settings, account)
         offers_known = live_hash is not None and plugin_state == "live"
         now = datetime.now(UTC)
@@ -118,6 +119,7 @@ def build(deps: Deps) -> APIRouter:
             else repository.get_latest_loadout_snapshot()
         )
         net_worth_composition = _net_worth_composition(snapshot, total_invested)
+        untracked = untracked_holdings(snapshot, positions, market_mappings, market_points)
         session_summary = repository.session_summary(live_hash) if live_hash else None
         return templates.TemplateResponse(
             request,
@@ -133,6 +135,8 @@ def build(deps: Deps) -> APIRouter:
                 "total_estimated_profit": sum(
                     position.estimated_profit for position in open_positions
                 ),
+                "untracked_holdings": [serialize(row) for row in untracked[:15]],
+                "untracked_total": sum(row.net_total for row in untracked),
                 "net_worth": serialize(net_worth_history[-1]) if net_worth_history else None,
                 "net_worth_chart": net_worth_chart,
                 "net_worth_composition": net_worth_composition,

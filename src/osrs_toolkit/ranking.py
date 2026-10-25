@@ -109,6 +109,9 @@ def confidence_standing(confidence: int, floor: int) -> float:
     return max(0.0, min(1.0, (confidence - floor) / span))
 
 
+MAX_CASH_STACK = 2_147_483_647
+
+
 def ge_tax(sell_price: int, *, exempt: bool = False) -> int:
     if exempt:
         return 0

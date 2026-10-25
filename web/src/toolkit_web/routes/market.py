@@ -9,6 +9,7 @@ from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.calculators import ALCH_POLICIES, alch_candidates, skill_results
 from osrs_toolkit.market import MarketDataError
 from osrs_toolkit.ranking import (
+    MAX_CASH_STACK,
     STRATEGIES,
     ge_tax,
     is_tax_exempt,
@@ -69,6 +70,7 @@ def build(deps: Deps) -> APIRouter:
                     slots_prefilled = True
                 else:
                     slots = 8
+        cash_stack = max(0, min(MAX_CASH_STACK, cash_stack))
         slots = max(1, min(8, slots))
         context = {
             "account": account,
@@ -240,6 +242,7 @@ def build(deps: Deps) -> APIRouter:
         policy: str = "Safer",
         magic_level: int | None = None,
     ) -> HTMLResponse:
+        cash_stack = max(0, min(MAX_CASH_STACK, cash_stack))
         if policy not in ALCH_POLICIES:
             policy = "Safer"
         watched_ids = (

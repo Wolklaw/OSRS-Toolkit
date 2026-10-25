@@ -6,6 +6,17 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **A sell price for everything you hold.** Items in your inventory or bank with no tracked
+  purchase behind them, bought before tracking was on, now appear under "Held but not tracked"
+  on the dashboard and the desktop Overview page, with the market's suggested sell price, the
+  amount after tax each, and in total.
+- **The cash stack matches the game.** It is capped at 2,147,483,647, the most a stack of coins
+  can hold, in the Flipper and the Alch Finder on the website and in the desktop app. The
+  website's field also accepts any whole number: its old step of 100,000 rejected a prefilled
+  synced coin count with "Please select a valid value".
+- **The desktop app mirrors the website.** Eleven pages join the sidebar: Overview, Session,
+  Activity, Counterparties, Net Worth, Trips, Drops, Skills & Bank, Quests, Skill Goals and
+  Flip Insights. Pages past the ninth answer to Ctrl+Shift+1 onward.
 - **Positions are filed by what they are.** Buys made outside a trading session are filed as
   Supplies and used to sit in the same table as flips in progress, each with an empty "sold"
   bar, which read as dozens of unfinished trades. The Positions table now opens on Open, with

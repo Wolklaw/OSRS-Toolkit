@@ -14,6 +14,7 @@ from osrs_toolkit.app import (
     _gp_digits,
 )
 
+MAX_CASH_STACK = 2_147_483_647
 ABOVE_THE_OLD_CAP = 9_000_000_000
 
 
@@ -145,18 +146,18 @@ def test_the_digits_of_a_typed_amount(text: str, suffix: str, expected: str | No
     assert _gp_digits(text, suffix) == expected
 
 
-def test_the_flips_tab_takes_a_stack_above_the_old_cap(window: MainWindow) -> None:
+def test_the_flips_tab_cannot_hold_more_than_a_cash_stack(window: MainWindow) -> None:
     window.cash.setValue(ABOVE_THE_OLD_CAP)
 
-    assert window.cash.value() == ABOVE_THE_OLD_CAP
+    assert window.cash.value() == MAX_CASH_STACK
 
 
-def test_an_alch_budget_above_the_old_cap_is_stored_whole(window: MainWindow) -> None:
+def test_an_alch_budget_is_capped_at_a_cash_stack(window: MainWindow) -> None:
     window.alch_budget.setValue(ABOVE_THE_OLD_CAP)
 
     window._alch_settings_changed(None)
 
-    assert int(app_module.QSettings().value("alch/budget")) == ABOVE_THE_OLD_CAP
+    assert int(app_module.QSettings().value("alch/budget")) == MAX_CASH_STACK
 
 
 def test_a_savings_goal_above_the_old_cap_reads_back_whole(window: MainWindow) -> None:

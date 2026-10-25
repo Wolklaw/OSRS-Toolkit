@@ -328,3 +328,19 @@ def test_a_partly_spent_buy_limit_still_leaves_the_flip_on_the_table(
 
     assert response.status_code == 200
     assert "Abyssal whip" in response.text
+
+
+def test_a_cash_stack_above_the_game_maximum_is_clamped(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips", params={"cash_stack": 99_999_999_999})
+
+    assert response.status_code == 200
+    assert 'value="2147483647"' in response.text
+
+
+def test_the_cash_stack_input_accepts_any_whole_number(signed_in: TestClient):
+    with _patched_market():
+        response = signed_in.get("/flips", params={"cash_stack": 19_935_127})
+
+    assert 'step="1"' in response.text
+    assert 'value="19935127"' in response.text

@@ -226,6 +226,38 @@
 </div>
 {% endif %}
 
+{% if untracked_holdings %}
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Held but not tracked</h2>
+      <p class="hint tight">
+        Items in your inventory and bank with no tracked purchase behind them, at the price the
+        market suggests selling them for, after tax. Worth {{ "{:,}".format(untracked_total) }} gp in all.
+      </p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table-dense">
+      <thead>
+        <tr><th>Item</th><th class="num">Quantity</th><th class="num">Suggested sell</th><th class="num">After tax, each</th><th class="num">After tax, total</th></tr>
+      </thead>
+      <tbody>
+        {% for row in untracked_holdings %}
+        <tr>
+          <td class="name"><a href="/item/{{ row.item_id }}">{{ row.item_name }}</a></td>
+          <td class="num">{{ "{:,}".format(row.quantity) }}</td>
+          <td class="num">{{ "{:,}".format(row.suggested_sell) }}</td>
+          <td class="num">{{ "{:,}".format(row.net_each) }}</td>
+          <td class="num">{{ "{:,}".format(row.net_total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="panel flush">
   <div class="panel-head">
     <div class="grow">

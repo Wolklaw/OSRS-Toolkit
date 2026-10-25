@@ -160,6 +160,7 @@ from osrs_toolkit.performance import (
 )
 from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
 from osrs_toolkit.ranking import (
+    MAX_CASH_STACK,
     STRATEGIES,
     confidence_standing,
     ge_tax,
@@ -173,6 +174,7 @@ from osrs_toolkit.release_notes import (
     catch_up_to_html,
     load_release_notes,
 )
+from osrs_toolkit.reports import REPORTS, ReportContext, Section
 from osrs_toolkit.runelite_sync import (
     FILLED_OFFER_STATES,
     GE_SLOT_COUNT,
@@ -2017,6 +2019,7 @@ class MainWindow(QMainWindow):
         "Alch Finder",
         "Skilling Profit",
         "PvM Readiness",
+        *REPORTS,
     ]
 
     def __init__(self) -> None:
@@ -2105,6 +2108,8 @@ class MainWindow(QMainWindow):
         self._mirror_timer = QTimer(self)
         self._mirror_timer.setInterval(MIRROR_INTERVAL_MS)
         self._mirror_timer.timeout.connect(self._mirror_journal)
+        self._report_pickers: dict[str, QComboBox] = {}
+        self._report_bodies: dict[str, QVBoxLayout] = {}
         self._build_ui()
         self._apply_theme(self._theme)
         self._restore_window_geometry()
@@ -2126,6 +2131,10 @@ class MainWindow(QMainWindow):
         self._update_check_timer.setInterval(60 * 60 * 1_000)
         self._update_check_timer.timeout.connect(self._start_startup_update_check)
         self._update_check_timer.start()
+
+    @staticmethod
+    def page_shortcut(index: int) -> str:
+        return f"Ctrl+{index + 1}" if index < 9 else f"Ctrl+Shift+{index - 8}"
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -2150,15 +2159,16 @@ class MainWindow(QMainWindow):
         side.addWidget(brand)
         self.nav = QListWidget(objectName="nav")
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.nav.setUniformItemSizes(True)
         self.nav.setSpacing(2)
         self.nav.addItems(self.NAV_ITEMS)
         self.nav.setCurrentRow(0)
         self.nav.currentRowChanged.connect(self._change_page)
         for index, title in enumerate(self.NAV_ITEMS):
-            self.nav.item(index).setToolTip(f"{title}  (Ctrl+{index + 1})")
-            shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
+            key = self.page_shortcut(index)
+            self.nav.item(index).setToolTip(f"{title}  ({key})")
+            shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(lambda row=index: self.nav.setCurrentRow(row))
         QShortcut(QKeySequence.StandardKey.Refresh, self).activated.connect(self.load_market)
         side.addWidget(self.nav, 1)
@@ -2195,6 +2205,8 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self._build_alch_page())
         self.pages.addWidget(self._build_skilling_page())
         self.pages.addWidget(self._build_pvm_page())
+        for key in REPORTS:
+            self.pages.addWidget(self._build_report_page(key))
         layout.addWidget(self.pages, 1)
         outer.addWidget(content, 1)
         self.setCentralWidget(root)
@@ -2383,7 +2395,7 @@ class MainWindow(QMainWindow):
         self.search = SearchLineEdit("Search items…")
         self.search.textChanged.connect(self._render_flips)
         self.cash = GpSpinBox()
-        self.cash.setRange(10_000, GP_FIELD_MAXIMUM)
+        self.cash.setRange(10_000, MAX_CASH_STACK)
         self.cash.setValue(10_000_000)
         self.cash.setSingleStep(1_000_000)
         self.cash.valueChanged.connect(self._schedule_cash_changed)
@@ -3150,9 +3162,9 @@ class MainWindow(QMainWindow):
         )
         controls = QHBoxLayout()
         self.alch_budget = GpSpinBox()
-        self.alch_budget.setRange(10_000, GP_FIELD_MAXIMUM)
+        self.alch_budget.setRange(10_000, MAX_CASH_STACK)
         self.alch_budget.setValue(
-            _setting_int("alch/budget", 2_000_000, minimum=10_000, maximum=GP_FIELD_MAXIMUM)
+            _setting_int("alch/budget", 2_000_000, minimum=10_000, maximum=MAX_CASH_STACK)
         )
         self.alch_budget.setSingleStep(100_000)
         self.alch_budget.valueChanged.connect(self._alch_settings_changed)
@@ -3328,6 +3340,86 @@ class MainWindow(QMainWindow):
         table.verticalHeader().setDefaultSectionSize(38)
         return table
 
+    def _build_report_page(self, key: str) -> QWidget:
+        definition = REPORTS[key]
+        page = QWidget()
+        layout = self._page_heading(definition.title, definition.subtitle)
+        if definition.choices is not None:
+            picker = QComboBox()
+            picker.setMinimumWidth(240)
+            picker.currentTextChanged.connect(lambda _text, name=key: self._render_report(name))
+            self._report_pickers[key] = picker
+            layout.addWidget(picker)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 8, 0)
+        body_layout.setSpacing(14)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(body)
+        self._report_bodies[key] = body_layout
+        layout.addWidget(scroll, 1)
+        page.setLayout(layout)
+        return page
+
+    def _render_report(self, key: str) -> None:
+        definition = REPORTS[key]
+        context = ReportContext(self._journal, self._loadout_snapshot, self._mappings, self._points)
+        picker = self._report_pickers.get(key)
+        choice: str | None = None
+        if picker is not None and definition.choices is not None:
+            names = definition.choices(context)
+            current = picker.currentText()
+            if [picker.itemText(index) for index in range(picker.count())] != names:
+                picker.blockSignals(True)
+                picker.clear()
+                picker.addItems(names)
+                if current in names:
+                    picker.setCurrentText(current)
+                picker.blockSignals(False)
+            choice = picker.currentText() or None
+        try:
+            sections = definition.build(context, choice)
+        except Exception as exc:  # noqa: BLE001
+            sections = [Section("Couldn't build this page", str(exc))]
+        layout = self._report_bodies[key]
+        while layout.count():
+            entry = layout.takeAt(0)
+            widget = entry.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for section in sections:
+            layout.addWidget(self._report_section(section))
+        layout.addStretch()
+
+    def _report_section(self, section: Section) -> QWidget:
+        box = QWidget()
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(0, 0, 0, 0)
+        box_layout.setSpacing(4)
+        box_layout.addWidget(QLabel(section.title, objectName="sectionTitle"))
+        if section.hint:
+            hint = QLabel(section.hint, objectName="muted")
+            hint.setWordWrap(True)
+            box_layout.addWidget(hint)
+        if not section.headers:
+            return box
+        if not section.rows:
+            box_layout.addWidget(QLabel(section.empty, objectName="muted"))
+            return box
+        table = self._table(
+            list(section.headers),
+            minimum_widths={0: 200},
+            text_columns=set(),
+        )
+        self._fill_table(table, [list(row) for row in section.rows], set(section.profit_columns))
+        height = table.horizontalHeader().height() + 38 * min(len(section.rows), 12) + 6
+        table.setMinimumHeight(height)
+        table.setMaximumHeight(height)
+        box_layout.addWidget(table)
+        return box
+
     def _refresh_trading_session(self) -> None:
         self._set_trading_session("read", 0)
 
@@ -3422,6 +3514,8 @@ class MainWindow(QMainWindow):
             self._release_pending_flashes()
             if self.NAV_ITEMS[row] == "Trade Journal":
                 self._refresh_trading_session()
+            if self.NAV_ITEMS[row] in REPORTS:
+                self._render_report(self.NAV_ITEMS[row])
 
     def open_settings(self) -> None:
         client = configured_web_client()
@@ -3602,6 +3696,7 @@ class MainWindow(QMainWindow):
             button.setText("Refresh market")
         source = "Cached market data loaded" if used_cache else "Market data fetched"
         self.market_status.setText(f"{source} • {datetime.now().astimezone():%H:%M:%S}")
+        self._render_visible_report()
         self._render_flips()
         self._render_alch()
         self._render_watchlist()
@@ -4229,6 +4324,12 @@ class MainWindow(QMainWindow):
     def _refresh_journal_views(self) -> None:
         self._render_journal()
         self._render_performance()
+        self._render_visible_report()
+
+    def _render_visible_report(self) -> None:
+        row = self.nav.currentRow()
+        if 0 <= row < len(self.NAV_ITEMS) and self.NAV_ITEMS[row] in REPORTS:
+            self._render_report(self.NAV_ITEMS[row])
 
     def _apply_mirror_interval(self, active: bool) -> None:
         self._mirror_timer.setInterval(
@@ -5234,6 +5335,7 @@ class MainWindow(QMainWindow):
             #brandTitle {{ color: {palette.text}; font-size: 16px; font-weight: 700; }}
             #brandSubtitle, #versionLabel {{ color: {palette.muted}; font-size: 11px; }}
             #title {{ font-size: 28px; font-weight: 650; margin-top: 12px; }}
+            #sectionTitle {{ font-size: 17px; font-weight: 650; margin-top: 6px; }}
             #muted, #status {{ color: {palette.muted}; }}
             #recommendation {{ background: {palette.field}; color: {palette.text}; border: 1px solid {palette.border}; border-radius: {panel}; padding: 14px; }}
             /* Descendants only: these two are frames holding labels, which would otherwise

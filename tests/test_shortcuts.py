@@ -17,7 +17,9 @@ def _shortcuts(window: MainWindow) -> set[str]:
 
 
 def test_every_page_has_a_number_of_its_own(window: MainWindow) -> None:
-    assert {f"Ctrl+{index + 1}" for index in range(len(MainWindow.NAV_ITEMS))} <= _shortcuts(window)
+    assert {
+        MainWindow.page_shortcut(index) for index in range(len(MainWindow.NAV_ITEMS))
+    } <= _shortcuts(window)
 
 
 def test_the_market_refresh_answers_to_the_usual_key(window: MainWindow) -> None:
@@ -26,7 +28,7 @@ def test_the_market_refresh_answers_to_the_usual_key(window: MainWindow) -> None
 
 def test_the_shortcuts_are_advertised_where_the_pages_are(window: MainWindow) -> None:
     for index, title in enumerate(MainWindow.NAV_ITEMS):
-        assert window.nav.item(index).toolTip() == f"{title}  (Ctrl+{index + 1})"
+        assert window.nav.item(index).toolTip() == f"{title}  ({MainWindow.page_shortcut(index)})"
 
 
 def test_pressing_the_number_changes_the_page(window: MainWindow, qt_app: QApplication) -> None:
