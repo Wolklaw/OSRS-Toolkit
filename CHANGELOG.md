@@ -4,6 +4,8 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-25
+
 ### Highlights
 
 - **A sell price for everything you hold.** Items in your inventory or bank with no tracked
