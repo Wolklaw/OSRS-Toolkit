@@ -6,6 +6,13 @@ All notable changes to OSRS Toolkit are documented here.
 
 ### Highlights
 
+- **Skill Goals.** A new page under Progress shows every skill against 99: experience, what is
+  left to the next level and to 99, the pace you have actually trained it at over the last
+  week of snapshots, and the days to 99 at that pace. Above it, "Levels that open quests"
+  lists quests where one skill is the only thing missing, grouped by the level needed and
+  ordered by how many quests it opens, with the experience still to go. It reads the levels
+  and experience the plugin already sends and the quests you have ticked, so there is no
+  plugin change.
 - **How long your offers take to fill.** `/performance` now shows, per item and side, the median
   time from opening an offer to its first fill and to its last, with the fastest and slowest,
   for offers that completed. It is built from the offer openings now kept in `offer_events`

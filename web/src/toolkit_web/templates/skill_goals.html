@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% set page_title = "Skill Goals" %}
+{% set page_sub = "Where each skill stands against 99, how fast you have been training it, and which levels open quests you cannot start yet." %}
+
+{% block content %}
+
+{% if not has_levels %}
+<div class="panel flush">
+  <div class="empty">
+    <strong>No levels yet</strong>
+    Open your bank in game once with the plugin running and your skills show up here.
+    <a href="/help">How to set that up</a>.
+  </div>
+</div>
+{% else %}
+
+<div class="stats">
+  <div class="stat hero">
+    <div class="label">Total level</div>
+    <div class="value">{{ "{:,}".format(total_level) }}</div>
+    <div class="foot">{{ rows | length }} skills</div>
+  </div>
+  <div class="stat">
+    <div class="label">At 99</div>
+    <div class="value">{{ maxed }}<span class="unit">of {{ rows | length }}</span></div>
+    <div class="foot">Skills with 99 reached</div>
+  </div>
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Levels that open quests</h2>
+      <p class="hint tight">Quests where one skill is the only thing missing. The cheapest raise comes
+        first within the biggest unlocks.</p>
+    </div>
+  </div>
+  {% if unlocks %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Skill</th><th class="num">Level</th><th class="num">Needed</th><th class="num">XP to go</th><th>Opens</th></tr>
+      </thead>
+      <tbody>
+        {% for row in unlocks %}
+        <tr>
+          <td class="name">{{ row.skill }}</td>
+          <td class="num">{{ row.current }}</td>
+          <td class="num">{{ row.target }}</td>
+          <td class="num">{{ "{:,}".format(row.xp_needed) }}</td>
+          <td class="wrap">{{ row.quests | join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No quest is waiting on a single skill level right now.</div>
+  {% endif %}
+</div>
+
+<div class="panel flush">
+  <div class="panel-head">
+    <div class="grow">
+      <h2>Every skill</h2>
+      <p class="hint tight">Pace is the experience gained over the last week of snapshots, so it only
+        shows for skills you have trained since the site started keeping history.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Skill</th><th class="num">Level</th><th class="num">XP</th><th class="num">To next level</th><th class="num">To 99</th><th class="num">Pace / day</th><th class="num">Days to 99</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="name">{{ row.skill }}</td>
+          <td class="num cell-meter">
+            {{ row.level }}
+            <div class="meter {{ 'good' if row.level >= 99 else '' }}"><span style="--fill: {{ row.percent_to_max }}%"></span></div>
+          </td>
+          <td class="num">{{ "{:,}".format(row.xp) }}</td>
+          <td class="num">{% if row.xp_to_next is not none %}{{ "{:,}".format(row.xp_to_next) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.xp_to_max %}{{ "{:,}".format(row.xp_to_max) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.xp_per_day is not none %}{{ "{:,.0f}".format(row.xp_per_day) }}{% else %}—{% endif %}</td>
+          <td class="num">{% if row.days_to_max is not none %}{{ "{:,.0f}".format(row.days_to_max) }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

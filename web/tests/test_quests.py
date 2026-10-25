@@ -96,3 +96,32 @@ def test_ticking_without_any_character_is_a_clear_conflict(signed_in: TestClient
     )
 
     assert response.status_code == 409
+
+
+def test_the_skill_goals_page_shows_xp_to_99_and_levels_that_open_quests(
+    signed_in: TestClient, settings: Settings
+):
+    repository = JournalRepository(settings.journal_path("111"))
+    repository.save_loadout_snapshot(
+        LoadoutSnapshot(
+            account_hash="abc123",
+            account_name="Wolklaw",
+            captured_at=datetime.now(UTC).isoformat(),
+            equipment=(),
+            inventory=(),
+            bank=(),
+            skills={"Slayer": 70, "Cooking": 1},
+            xp={"Slayer": 750_000, "Cooking": 0},
+        )
+    )
+
+    page = signed_in.get("/skill-goals")
+
+    assert page.status_code == 200
+    assert "Slayer" in page.text
+    assert "12,284,431" in page.text
+    assert "Levels that open quests" in page.text
+
+
+def test_the_skill_goals_page_asks_for_a_sync_when_there_are_no_levels(signed_in: TestClient):
+    assert "No levels yet" in signed_in.get("/skill-goals").text

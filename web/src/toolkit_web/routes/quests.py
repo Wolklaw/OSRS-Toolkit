@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
+from osrs_toolkit.progression import level_unlocks, skill_progress
 from osrs_toolkit.quests import (
     DIFFICULTY_ORDER,
     all_quests,
@@ -19,6 +22,7 @@ from osrs_toolkit.quests import (
 from toolkit_web.accounts_db import Account
 from toolkit_web.deps import Deps
 from toolkit_web.importing import journal_for
+from toolkit_web.serialize import serialize
 
 QUEST_NAMES = frozenset(quest.name for quest in all_quests())
 COUNTED_QUEST_NAMES = counted_quest_names()
@@ -83,6 +87,34 @@ def build(deps: Deps) -> APIRouter:
                 "total_quest_points": TOTAL_QUEST_POINTS,
                 "ready_count": sum(1 for guide in guides if guide.state == "Ready"),
                 "quest_points": quest_points(completed),
+                **switcher,
+            },
+        )
+
+    @router.get("/skill-goals", response_class=HTMLResponse)
+    def skill_goals_page(
+        request: Request,
+        account: Account = CurrentAccount,
+        active: str | None = ActiveCharacter,
+    ) -> HTMLResponse:
+        switcher = deps.character_switcher_context(account, active)
+        repository, account_hash, snapshot = resolve(account, active)
+        levels = dict(snapshot.skills) if snapshot else {}
+        xp = dict(snapshot.xp) if snapshot else {}
+        completed = repository.list_completed_quests(account_hash) if account_hash else frozenset()
+        history = repository.list_skills_history(account_hash) if account_hash else []
+        rows = skill_progress(levels, xp, history, datetime.now(UTC))
+        unlocks = level_unlocks(assess_quests(levels, completed), levels, xp)
+        return templates.TemplateResponse(
+            request,
+            "skill_goals.html",
+            {
+                "account": account,
+                "has_levels": bool(levels),
+                "rows": [serialize(row) for row in rows],
+                "unlocks": [serialize(row) for row in unlocks[:12]],
+                "maxed": sum(1 for row in rows if row.level >= 99),
+                "total_level": sum(levels.values()),
                 **switcher,
             },
         )
