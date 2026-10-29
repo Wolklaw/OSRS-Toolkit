@@ -30,6 +30,7 @@ def settings(tmp_path: Path) -> Settings:
         session_secret="test-secret",
         data_dir=tmp_path,
         accounts_db_path=tmp_path / "accounts.db",
+        upscape_scores_db_path=tmp_path / "upscape-scores.db",
         sync_base_url="https://sync.example.invalid",
         sync_invite_code="test-invite-code",
         dev_login_enabled=True,

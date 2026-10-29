@@ -21,6 +21,7 @@ class Settings:
     session_secret: str
     data_dir: Path
     accounts_db_path: Path
+    upscape_scores_db_path: Path
     sync_base_url: str
     sync_invite_code: str | None
     dev_login_enabled: bool
@@ -40,6 +41,7 @@ class Settings:
             session_secret=os.environ.get("TOOLKIT_SESSION_SECRET") or secrets.token_urlsafe(32),
             data_dir=data_dir,
             accounts_db_path=data_dir / "accounts.db",
+            upscape_scores_db_path=data_dir / "upscape-scores.db",
             sync_base_url=os.environ.get("TOOLKIT_SYNC_BASE_URL", "https://sync.runescope.app"),
             sync_invite_code=os.environ.get("TOOLKIT_SYNC_INVITE_CODE") or None,
             dev_login_enabled=_bool("TOOLKIT_DEV_LOGIN", False),

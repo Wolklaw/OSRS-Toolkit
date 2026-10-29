@@ -9,7 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from toolkit_web import errors
 from toolkit_web.config import Settings
 from toolkit_web.deps import build as build_deps
-from toolkit_web.routes import account, api, internal, journal, market, pages, plugin_api, quests
+from toolkit_web.routes import (
+    account,
+    api,
+    internal,
+    journal,
+    market,
+    pages,
+    plugin_api,
+    quests,
+    upscape,
+)
 from toolkit_web.sessions import COOKIE_NAME
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -54,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     for module in (pages, journal, market, account, api, internal, quests, plugin_api):
         app.include_router(module.build(deps))
+    app.mount("/api/upscape", upscape.build(deps))
 
     app.state.settings = settings
     app.state.accounts = deps.accounts
