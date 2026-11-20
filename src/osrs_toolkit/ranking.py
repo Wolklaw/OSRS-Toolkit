@@ -72,22 +72,20 @@ STRATEGIES = {
         "hours": 1,
         "capital_fraction": 0.15,
         "volume_fraction": 0.05,
-        "min_roi": 0.3,
+        "min_roi": 1.0,
         "min_confidence": 45,
         "min_stability": 0.25,
         "adverse_ticks": 1,
-        "adverse_rate": 0.001,
         "weights": (0.25, 0.35, 0.10, 0.30),
     },
     "Balanced (1–4h)": {
         "hours": 4,
         "capital_fraction": 0.25,
         "volume_fraction": 0.25,
-        "min_roi": 0.5,
+        "min_roi": 1.0,
         "min_confidence": 55,
         "min_stability": 0.35,
         "adverse_ticks": 2,
-        "adverse_rate": 0.0025,
         "weights": (0.35, 0.20, 0.20, 0.25),
     },
     "Overnight (8–12h)": {
@@ -98,7 +96,6 @@ STRATEGIES = {
         "min_confidence": 65,
         "min_stability": 0.60,
         "adverse_ticks": 3,
-        "adverse_rate": 0.005,
         "weights": (0.30, 0.10, 0.20, 0.40),
     },
 }
@@ -110,6 +107,9 @@ def confidence_standing(confidence: int, floor: int) -> float:
 
 
 MAX_CASH_STACK = 2_147_483_647
+
+ADVERSE_FILL_RATE = 0.01
+MAX_SLOT_LIQUIDITY_SCALE = 2.0
 
 
 def ge_tax(sell_price: int, *, exempt: bool = False) -> int:
@@ -163,7 +163,7 @@ def rank_flips(
                 continue
         adverse_buffer = max(
             int(settings["adverse_ticks"]),
-            math.ceil(buy_price * float(settings["adverse_rate"])),
+            math.ceil(buy_price * ADVERSE_FILL_RATE),
         )
         if profit <= adverse_buffer:
             meets_strategy = False
@@ -171,7 +171,8 @@ def rank_flips(
                 continue
 
         freshness = max(0.0, 1.0 - age / max_age_seconds)
-        liquidity = min(1.0, math.log1p(point.volume_1h) / math.log1p(20_000))
+        round_trip_volume = _round_trip_volume(point)
+        liquidity = min(1.0, math.log1p(round_trip_volume) / math.log1p(20_000))
         stability = _stability(point)
         confidence = round(100 * (0.38 * liquidity + 0.34 * freshness + 0.28 * stability))
         if confidence < int(settings["min_confidence"]) or stability < float(
@@ -190,11 +191,13 @@ def rank_flips(
             if room is not None:
                 limit = min(limit, room)
         projected_volume = round(point.volume_1h * int(settings["hours"]))
-        volume_fraction = min(
-            float(settings["hours"]),
-            float(settings["volume_fraction"]) * 8 / max(1, slot_count),
-        )
-        liquid_quantity = max(1, round(point.volume_1h * volume_fraction))
+        slot_scale = min(MAX_SLOT_LIQUIDITY_SCALE, 8 / max(1, slot_count))
+        volume_fraction = float(settings["volume_fraction"]) * slot_scale
+        if round_trip_volume * volume_fraction < 1:
+            meets_strategy = False
+            if not include_all:
+                continue
+        liquid_quantity = max(1, round(round_trip_volume * volume_fraction))
         quantity = min(affordable, limit, liquid_quantity)
         if quantity <= 0:
             continue
@@ -244,18 +247,20 @@ def plan_flip_portfolio(
     eligible = [
         candidate
         for candidate in candidates
-        if candidate.suggested_quantity > 0 and candidate.buy_price <= cash_stack
+        if candidate.suggested_quantity > 0
+        and candidate.buy_price <= cash_stack
+        and _profit_after_adverse_fills(candidate) > 0
     ]
     selected: list[FlipCandidate] = []
     selected_ids: set[int] = set()
     selected_price_floor = 0
     selected_score = 0.0
-    current_utility = -1
+    current_utility = -1.0
     current_capital = -1
 
     for _slot in range(min(slot_count, len(eligible))):
         best_candidate: FlipCandidate | None = None
-        best_metric: tuple[int, int, float] | None = None
+        best_metric: tuple[float, int, float] | None = None
         for candidate in eligible:
             if candidate.item_id in selected_ids:
                 continue
@@ -263,10 +268,10 @@ def plan_flip_portfolio(
                 continue
             trial_selected = [*selected, candidate]
             quantities = _size_offers(trial_selected, cash_stack)
-            utility = 0
+            utility = 0.0
             capital = 0
             for item, quantity in zip(trial_selected, quantities, strict=True):
-                utility += item.profit_each * quantity * item.confidence
+                utility += _profit_after_adverse_fills(item) * quantity * item.confidence
                 capital += item.buy_price * quantity
             metric = (utility, capital, selected_score + candidate.score)
             if best_metric is None or metric > best_metric:
@@ -296,7 +301,9 @@ def _size_offers(selected: list[FlipCandidate], cash_stack: int) -> list[int]:
     priority = sorted(
         range(len(selected)),
         key=lambda index: (
-            selected[index].profit_each * selected[index].confidence / selected[index].buy_price,
+            _profit_after_adverse_fills(selected[index])
+            * selected[index].confidence
+            / selected[index].buy_price,
             selected[index].score,
         ),
         reverse=True,
@@ -320,6 +327,16 @@ def _allocate_selected(selected: list[FlipCandidate], cash_stack: int) -> list[F
         )
         for candidate, quantity in zip(selected, _size_offers(selected, cash_stack), strict=True)
     ]
+
+
+def _profit_after_adverse_fills(candidate: FlipCandidate) -> float:
+    return candidate.profit_each - candidate.buy_price * ADVERSE_FILL_RATE
+
+
+def _round_trip_volume(point: MarketPoint) -> int:
+    if point.high_volume_1h + point.low_volume_1h <= 0:
+        return point.volume_1h
+    return 2 * min(point.high_volume_1h, point.low_volume_1h)
 
 
 def _stability(point: MarketPoint) -> float:

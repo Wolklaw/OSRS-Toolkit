@@ -4,6 +4,25 @@ All notable changes to OSRS Toolkit are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The GE Flipper plans against what actually fills.** The ranker and the plan were replayed
+  against 72 hours of Wiki five-minute history (2026-11-16 to 2026-11-19), and four things
+  changed as a result:
+  - An offer is sized against the thinner side of the market rather than total volume. A buy
+    only becomes a flip when somebody later buys it back, so an item with 9,600 sold into bids
+    and 400 bought from asks is now sized as a 400-an-hour item.
+  - With few free slots an offer grows to at most twice its eight-slot size. One free slot used
+    to ask for up to twice an item's whole hourly volume.
+  - An item too thin to expect a single unit to trade inside the strategy's window no longer
+    clears the bar.
+  - Every strategy now needs the margin after tax to beat 1% of the buy price, and the plan
+    ranks offers by what is left after that allowance. Thinner margins lost money in the replay
+    because the buys that fill are disproportionately the ones the price then falls away from.
+  Replayed plans made about twice as much on Quick and Overnight as before, and Balanced went
+  from a small loss to a gain. "Potential profit" is still what the plan makes if every offer
+  fills at its price, which the replay says is several times what usually happens.
+
 ## [1.6.0] - 2026-10-25
 
 ### Highlights

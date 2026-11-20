@@ -297,15 +297,15 @@ def test_ge_tax_skips_exempt_items_at_any_price() -> None:
 def _bond_point(now: int, item_id: int) -> MarketPoint:
     return MarketPoint(
         item_id,
-        10_300_000,
+        10_400_000,
         10_000_000,
         now,
         now,
         80,
         1_000,
-        average_high_5m=10_300_000,
+        average_high_5m=10_400_000,
         average_low_5m=10_000_000,
-        average_high_1h=10_300_000,
+        average_high_1h=10_400_000,
         average_low_1h=10_000_000,
         high_volume_5m=40,
         low_volume_5m=40,
@@ -323,9 +323,9 @@ def test_ranker_charges_no_tax_on_an_exempt_item() -> None:
     normal = rank_flips(taxed, [_bond_point(now, 1434)], cash_stack=50_000_000, now=now)
 
     assert exempt[0].tax == 0
-    assert exempt[0].profit_each == 300_000
-    assert normal[0].tax == 206_000
-    assert normal[0].profit_each == 94_000
+    assert exempt[0].profit_each == 400_000
+    assert normal[0].tax == 208_000
+    assert normal[0].profit_each == 192_000
 
 
 def test_ranker_caps_quantity_at_the_buy_limit_room_left() -> None:
@@ -369,3 +369,104 @@ def test_every_flip_keeps_the_stale_one_and_marks_it_as_missing_the_bar() -> Non
     assert [c.name for c in rank_flips(mappings, [fresh, stale], cash_stack=100_000, now=now)] == [
         "Test item"
     ]
+
+
+def _two_sided_point(
+    now: int, item_id: int, low: int, high: int, sold_into_bids: int, bought_from_asks: int
+) -> MarketPoint:
+    return MarketPoint(
+        item_id,
+        high,
+        low,
+        now - 60,
+        now - 60,
+        (sold_into_bids + bought_from_asks) // 12,
+        sold_into_bids + bought_from_asks,
+        average_high_5m=high,
+        average_low_5m=low,
+        average_high_1h=high,
+        average_low_1h=low,
+        high_volume_5m=bought_from_asks // 12,
+        low_volume_5m=sold_into_bids // 12,
+        high_volume_1h=bought_from_asks,
+        low_volume_1h=sold_into_bids,
+    )
+
+
+def test_ranker_sizes_an_offer_against_the_thinner_side_of_the_market() -> None:
+    now = 2_000_000
+    mappings = {
+        1: ItemMapping(1, "Even item", True, 100_000, None),
+        2: ItemMapping(2, "Lopsided item", True, 100_000, None),
+    }
+    even = _two_sided_point(now, 1, 100, 120, 5_000, 5_000)
+    lopsided = _two_sided_point(now, 2, 100, 120, 9_600, 400)
+
+    ranked = {
+        c.item_id: c for c in rank_flips(mappings, [even, lopsided], cash_stack=10_000_000, now=now)
+    }
+
+    assert ranked[1].suggested_quantity == 2_500
+    assert ranked[2].suggested_quantity == 200
+    assert ranked[1].hourly_volume == ranked[2].hourly_volume == 10_000
+
+
+def test_ranker_never_asks_one_slot_for_more_than_twice_the_eight_slot_share() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Even item", True, 1_000_000, None)}
+    point = _two_sided_point(now, 1, 100, 120, 5_000, 5_000)
+
+    eight = rank_flips(mappings, [point], cash_stack=1_000_000_000, slot_count=8, now=now)
+    one = rank_flips(mappings, [point], cash_stack=1_000_000_000, slot_count=1, now=now)
+
+    assert eight[0].suggested_quantity == 2_500
+    assert one[0].suggested_quantity == 5_000
+
+
+def test_ranker_rejects_an_item_too_thin_to_expect_one_unit_to_trade() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Rare item", True, 8, None)}
+    point = _two_sided_point(now, 1, 50_000_000, 53_000_000, 8, 8)
+
+    quick = rank_flips(
+        mappings, [point], cash_stack=200_000_000, strategy="Quick (up to 1h)", now=now
+    )
+    shown = rank_flips(
+        mappings,
+        [point],
+        cash_stack=200_000_000,
+        strategy="Quick (up to 1h)",
+        now=now,
+        include_all=True,
+    )
+
+    assert quick == []
+    assert [candidate.meets_strategy for candidate in shown] == [False]
+
+
+def test_ranker_rejects_a_margin_inside_the_adverse_fill_allowance() -> None:
+    now = 2_000_000
+    mappings = {1: ItemMapping(1, "Thin edge", True, 10_000, None)}
+    inside = _two_sided_point(now, 1, 10_000, 10_290, 5_000, 5_000)
+    outside = _two_sided_point(now, 1, 10_000, 10_330, 5_000, 5_000)
+
+    for strategy in ("Quick (up to 1h)", "Balanced (1–4h)", "Overnight (8–12h)"):
+        assert (
+            rank_flips(mappings, [inside], cash_stack=10_000_000, strategy=strategy, now=now) == []
+        )
+        assert (
+            len(rank_flips(mappings, [outside], cash_stack=10_000_000, strategy=strategy, now=now))
+            == 1
+        )
+
+
+def test_portfolio_prefers_the_margin_left_after_adverse_fills() -> None:
+    wide = _candidate(1, 1_000, 100, 50, profit=60)
+    thin_but_larger = _candidate(2, 10_000, 100, 90, profit=150)
+    below_allowance = _candidate(3, 10_000, 100, 99, profit=90)
+
+    one_slot = plan_flip_portfolio([wide, thin_but_larger, below_allowance], 1_000_000, 1)
+    every_slot = plan_flip_portfolio([wide, thin_but_larger, below_allowance], 2_000_000, 8)
+
+    assert [position.item_id for position in one_slot] == [2]
+    assert {position.item_id for position in every_slot} == {1, 2}
