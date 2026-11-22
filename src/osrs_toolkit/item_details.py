@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from osrs_toolkit.market import WikiMarketClient
+from osrs_toolkit.market_history import history_stats
 from osrs_toolkit.models import FlipCandidate, ItemMapping, MarketPoint, TimeseriesPoint
 from osrs_toolkit.ranking import ge_tax, offer_targets
 
@@ -70,7 +71,7 @@ class ItemDetailsDialog(QDialog):
         tabs = QTabWidget()
         tabs.addTab(self._build_overview_tab(item, point, candidate), "Overview")
         history_tab, self._history_tab_index = self._build_history_tab(), 1
-        tabs.addTab(history_tab, "Price history")
+        tabs.addTab(history_tab, "Price and volume")
         tabs.currentChanged.connect(self._tab_changed)
         layout.addWidget(tabs, 1)
 
@@ -141,9 +142,24 @@ class ItemDetailsDialog(QDialog):
         self.history_chart.setBackgroundVisible(False)
         self.history_view = QChartView(self.history_chart)
         self.history_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.history_view.setMinimumHeight(320)
+        self.history_view.setMinimumHeight(260)
         self.history_view.hide()
-        tab_layout.addWidget(self.history_view, 1)
+        tab_layout.addWidget(self.history_view, 2)
+
+        self.volume_chart = QChart()
+        self.volume_chart.legend().setVisible(False)
+        self.volume_chart.setBackgroundVisible(False)
+        self.volume_view = QChartView(self.volume_chart)
+        self.volume_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.volume_view.setMinimumHeight(140)
+        self.volume_view.hide()
+        tab_layout.addWidget(self.volume_view, 1)
+
+        self.history_details = QWidget()
+        self.history_details_layout = QGridLayout(self.history_details)
+        self.history_details_layout.setContentsMargins(0, 0, 0, 0)
+        self.history_details.hide()
+        tab_layout.addWidget(self.history_details)
         return tab
 
     def _tab_changed(self, index: int) -> None:
@@ -201,8 +217,50 @@ class ItemDetailsDialog(QDialog):
         buy_series.attachAxis(axis_y)
         sell_series.attachAxis(axis_y)
 
+        self._show_volume(points)
+        self._show_history_details(points)
         self.history_status.hide()
         self.history_view.show()
+
+    def _show_volume(self, points: list[TimeseriesPoint]) -> None:
+        if not any(point.total_volume for point in points):
+            return
+        series = QLineSeries()
+        series.setName("Volume")
+        for point in points:
+            series.append(point.timestamp * 1000, point.total_volume)
+        self.volume_chart.addSeries(series)
+        axis_x = QDateTimeAxis()
+        axis_x.setFormat("MMM d")
+        self.volume_chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
+        series.attachAxis(axis_x)
+        axis_y = QValueAxis()
+        axis_y.setTitleText("Volume")
+        axis_y.setLabelFormat("%.0f")
+        axis_y.setRange(0, max(point.total_volume for point in points) * 1.05)
+        self.volume_chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
+        series.attachAxis(axis_y)
+        self.volume_view.show()
+
+    def _show_history_details(self, points: list[TimeseriesPoint]) -> None:
+        stats, by_weekday = history_stats(points)
+        if stats is None:
+            return
+        grid = self.history_details_layout
+        facts = [
+            ("Average spread", _gp(stats.average_spread)),
+            ("Total volume", f"{stats.total_volume:,}"),
+            (f"Average volume per {_HISTORY_TIMESTEP}", f"{stats.average_volume:,}"),
+        ]
+        for row, (label, value) in enumerate(facts):
+            grid.addWidget(QLabel(label, objectName="muted"), row, 0)
+            grid.addWidget(QLabel(value), row, 1)
+        grid.addWidget(QLabel("Average volume by day of week", objectName="muted"), 0, 2)
+        for row, day in enumerate(by_weekday, start=1):
+            grid.addWidget(QLabel(day.day, objectName="muted"), row, 2)
+            grid.addWidget(QLabel(f"{day.average_volume:,}"), row, 3)
+        grid.setColumnStretch(4, 1)
+        self.history_details.show()
 
     def _history_failed(self, message: str) -> None:
         self.history_status.setText(f"Price history could not be loaded: {message}")

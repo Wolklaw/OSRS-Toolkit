@@ -12,7 +12,11 @@ from osrs_toolkit.formatting import compact_items, synced_trade_label
 from osrs_toolkit.holdings import untracked_holdings
 from osrs_toolkit.journal import JournalRepository, LoadoutSnapshot
 from osrs_toolkit.models import ItemMapping, MarketPoint
-from osrs_toolkit.net_worth_attribution import attribute_change, idle_stacks
+from osrs_toolkit.net_worth_attribution import (
+    attribute_change,
+    idle_stacks,
+    net_worth_composition,
+)
 from osrs_toolkit.progression import level_unlocks, skill_progress
 from osrs_toolkit.quests import (
     all_quests,
@@ -30,6 +34,11 @@ from osrs_toolkit.trips import build_trips
 ACTIVITY_WINDOW_DAYS = 90
 TRIP_WINDOW_DAYS = 30
 NET_WORTH_WINDOW_DAYS = 30
+NET_WORTH_WINDOWS = {
+    "Compare with 7 days ago": 7,
+    "Compare with 30 days ago": 30,
+    "Compare with 90 days ago": 90,
+}
 IDLE_DAYS = 14
 ALL_TIME = "All time"
 CLOSED_STATUSES = frozenset({"Completed", "Cancelled", "Supplies"})
@@ -43,6 +52,8 @@ class Section:
     rows: tuple[tuple[str, ...], ...] = ()
     profit_columns: frozenset[int] = frozenset()
     empty: str = "Nothing to show yet."
+    row_keys: tuple[str, ...] = ()
+    chart: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(slots=True)
@@ -64,6 +75,9 @@ class ReportDefinition:
     subtitle: str
     build: Callable[[ReportContext, str | None], list[Section]]
     choices: Callable[[ReportContext], list[str]] | None = None
+    default_choice: str | None = None
+    remove_kind: str | None = None
+    action: str | None = None
 
 
 def _n(value: float) -> str:
@@ -117,6 +131,33 @@ def overview(context: ReportContext, _choice: str | None = None) -> list[Section
                 ),
             )
     sections.append(Section("Overview", headers=("Measure", "Value"), rows=tuple(stats)))
+    composition = net_worth_composition(
+        context.snapshot, sum(trade.invested for trade in open_positions)
+    )
+    sections.append(
+        Section(
+            "Net worth composition",
+            "What your latest snapshot and open positions are made of.",
+            ("Part", "Value", "Share"),
+            tuple(
+                (part.label, f"{_n(part.value)} gp", f"{part.percent:.1f}%") for part in composition
+            ),
+            empty="Needs a bank snapshot from the plugin.",
+        )
+    )
+    sections.append(
+        Section(
+            "Net worth over time",
+            "Every bank and gear snapshot the plugin has sent."
+            if len(history) > 1
+            else "Needs at least two bank snapshots from the plugin.",
+            chart=(
+                tuple((point.captured_at, point.total_value) for point in history)
+                if len(history) > 1
+                else ()
+            ),
+        )
+    )
     held = untracked_holdings(context.snapshot, tracked, context.mappings, context.points)
     sections.append(
         Section(
@@ -200,6 +241,7 @@ def activity(context: ReportContext, _choice: str | None = None) -> list[Section
             ),
             frozenset({4}),
             "No synced trades in this window.",
+            row_keys=tuple(event.event_id for event in events),
         )
     ]
 
@@ -234,15 +276,20 @@ def counterparties(context: ReportContext, _choice: str | None = None) -> list[S
     ]
 
 
-def net_worth(context: ReportContext, _choice: str | None = None) -> list[Section]:
+def _net_worth_choices(_context: ReportContext) -> list[str]:
+    return list(NET_WORTH_WINDOWS)
+
+
+def net_worth(context: ReportContext, choice: str | None = None) -> list[Section]:
     if context.account_hash is None or context.snapshot is None:
         return _no_character()
     journal = context.journal
     latest = context.snapshot
     latest_at = datetime.fromisoformat(latest.captured_at)
+    window_days = NET_WORTH_WINDOWS.get(choice or "", NET_WORTH_WINDOW_DAYS)
     start = journal.get_loadout_snapshot_at(
         latest.account_hash,
-        (latest_at - timedelta(days=NET_WORTH_WINDOW_DAYS)).isoformat(),
+        (latest_at - timedelta(days=window_days)).isoformat(),
         fall_back_to_earliest=True,
     )
     sections: list[Section] = []
@@ -318,13 +365,13 @@ def net_worth(context: ReportContext, _choice: str | None = None) -> list[Sectio
     return sections
 
 
-def trips(context: ReportContext, _choice: str | None = None) -> list[Section]:
+def _found_trips(context: ReportContext) -> list:
     if context.account_hash is None:
-        return _no_character()
+        return []
     journal = context.journal
     since = context.now - timedelta(days=TRIP_WINDOW_DAYS)
     margin = timedelta(hours=6)
-    found = build_trips(
+    return build_trips(
         journal.list_npc_loot_events(since=since, account_hash=context.account_hash),
         journal.list_player_death_events(since=since, account_hash=context.account_hash),
         [
@@ -334,7 +381,67 @@ def trips(context: ReportContext, _choice: str | None = None) -> list[Section]:
         ],
         journal.list_loadout_snapshots(context.account_hash, since=(since - margin).isoformat()),
     )
+
+
+def _trip_label(trip) -> str:
+    return f"{_day(trip.started_at)} - {trip.title}"
+
+
+def _trip_choices(context: ReportContext) -> list[str]:
+    return [_trip_label(trip) for trip in _found_trips(context)]
+
+
+def _trip_detail(trip) -> list[Section]:
+    facts: list[tuple[str, ...]] = [
+        ("When", f"{_day(trip.started_at)} to {_day(trip.ended_at)} UTC"),
+        ("Minutes", _n(trip.duration_minutes)),
+        ("Kills", _n(trip.kills)),
+        ("Loot", f"{_n(trip.loot_value)} gp"),
+        ("Supplies", "—" if trip.supplies_value is None else f"{_n(trip.supplies_value)} gp"),
+        ("Net", "—" if trip.net_profit is None else f"{_signed(trip.net_profit)} gp"),
+    ]
+    if trip.deaths:
+        facts.append(("Deaths", f"{trip.deaths}, carrying {_n(trip.death_value)} gp"))
+    sections = [Section(trip.title, headers=("Measure", "Value"), rows=tuple(facts))]
+    sections.append(
+        Section(
+            "Loot by monster",
+            headers=("Monster", "Kills", "Loot", "Per kill"),
+            rows=tuple(
+                (npc.npc_name, _n(npc.kills), _n(npc.value), _n(npc.value_per_kill))
+                for npc in trip.loot_by_npc
+            ),
+            empty="No kills on this trip.",
+        )
+    )
+    sections.append(
+        Section(
+            "Supplies used",
+            "Gone between the bank visits either side of the trip, priced as they were then.",
+            ("Item", "Quantity", "Value"),
+            tuple((use.item_name, _n(use.quantity), _n(use.value)) for use in trip.supplies[:12]),
+            empty="Needs a bank visit before and after the trip.",
+        )
+    )
+    if trip.xp_gained:
+        sections.append(
+            Section(
+                "Experience",
+                headers=("Skill", "Gained"),
+                rows=tuple((skill, f"+{_n(gained)}") for skill, gained in trip.xp_gained.items()),
+            )
+        )
+    return sections
+
+
+def trips(context: ReportContext, choice: str | None = None) -> list[Section]:
+    if context.account_hash is None:
+        return _no_character()
+    found = _found_trips(context)
+    chosen = next((trip for trip in found if _trip_label(trip) == choice), None)
+    detail = _trip_detail(chosen) if chosen is not None else []
     return [
+        *detail,
         Section(
             "Trip ledger",
             f"What each trip paid over the last {TRIP_WINDOW_DAYS} days: loot, minus what left "
@@ -354,7 +461,7 @@ def trips(context: ReportContext, _choice: str | None = None) -> list[Section]:
             ),
             frozenset({5, 6}),
             "No trips in this window.",
-        )
+        ),
     ]
 
 
@@ -472,7 +579,7 @@ def quests(context: ReportContext, _choice: str | None = None) -> list[Section]:
         Section(
             "Quest progress",
             f"{done} of {len(counted)} quests done, {quest_points(completed)} quest points. "
-            f"{len(all_quests())} quests and miniquests known. Tick quests off on the website.",
+            f"{len(all_quests())} quests and miniquests known. Use Tick quests to mark them done.",
             ("Measure", "Value"),
             (
                 ("Ready to start", _n(sum(1 for guide in guides if guide.state == "Ready"))),
@@ -687,15 +794,28 @@ REPORTS: dict[str, ReportDefinition] = {
         "Session", "What your current or latest play session earned.", session
     ),
     "Activity": ReportDefinition(
-        "Activity", "Every Grand Exchange fill and player trade the plugin has reported.", activity
+        "Activity",
+        "Every Grand Exchange fill and player trade the plugin has reported. Right-click a row "
+        "to remove it.",
+        activity,
+        remove_kind="activity",
     ),
     "Counterparties": ReportDefinition(
         "Counterparties", "Everyone you have traded with directly.", counterparties
     ),
     "Net Worth": ReportDefinition(
-        "Net Worth", "Where your wealth moved, and what has been sitting still.", net_worth
+        "Net Worth",
+        "Where your wealth moved, and what has been sitting still.",
+        net_worth,
+        _net_worth_choices,
+        default_choice="Compare with 30 days ago",
     ),
-    "Trips": ReportDefinition("Trip Ledger", "What each trip actually paid.", trips),
+    "Trips": ReportDefinition(
+        "Trip Ledger",
+        "What each trip actually paid. Pick a trip for its loot, supplies and experience.",
+        trips,
+        _trip_choices,
+    ),
     "Drops": ReportDefinition(
         "Drop Rates", "Observed drop rates and dry streaks per monster.", drops, _drop_choices
     ),
@@ -703,7 +823,10 @@ REPORTS: dict[str, ReportDefinition] = {
         "Skills & Bank", "Skill levels and bank contents from your latest snapshot.", loadout
     ),
     "Quests": ReportDefinition(
-        "Quests", "What you can start now, and what is a few levels away.", quests
+        "Quests",
+        "What you can start now, and what is a few levels away.",
+        quests,
+        action="Tick quests…",
     ),
     "Skill Goals": ReportDefinition(
         "Skill Goals",

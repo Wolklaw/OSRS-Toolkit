@@ -269,7 +269,8 @@ class AccountsDB:
         created_at = datetime.now(UTC).isoformat(timespec="seconds")
         with self._transaction() as connection:
             connection.execute(
-                "UPDATE account SET goal_label = ?, goal_target = ?, goal_created_at = ?"
+                "UPDATE account SET goal_label = ?, goal_target = ?,"
+                " goal_created_at = CASE WHEN goal_target IS NULL THEN ? ELSE goal_created_at END"
                 " WHERE discord_user_id = ?",
                 (label, target, created_at, discord_user_id),
             )

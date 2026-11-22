@@ -100,6 +100,34 @@ def build(deps: Deps) -> APIRouter:
         applied = stored_journal(settings, account).sync_apply(payload)
         return {"ok": True, **applied}
 
+    @router.post("/api/journal/plugin-data")
+    def journal_plugin_data(payload: dict, account: Account = CurrentAccount) -> dict:
+        return stored_journal(settings, account).plugin_export(payload.get("cursors"))
+
+    @router.get("/api/desktop-settings")
+    def desktop_settings(account: Account = CurrentAccount) -> dict:
+        goal = (
+            {
+                "label": account.goal_label,
+                "target": account.goal_target,
+                "created_at": account.goal_created_at,
+            }
+            if account.has_goal
+            else None
+        )
+        return {
+            "watchlist": [
+                {
+                    "item_id": alert.item_id,
+                    "target_price": alert.target_price,
+                    "direction": alert.direction,
+                }
+                for alert in accounts.list_watchlist_alerts(account.discord_user_id)
+            ],
+            "savings_goal": goal,
+            "webhook_configured": bool(account.discord_webhook_url),
+        }
+
     @router.get("/api/sync-state")
     def sync_state(account: Account = CurrentAccount, account_hash: str | None = None) -> dict:
         synced = known_characters(settings, account)

@@ -40,7 +40,7 @@ def _mirror(
     return JournalMirror(local, website), remote, website
 
 
-def test_an_idle_pass_asks_one_cheap_question(tmp_path):
+def test_an_idle_pass_asks_two_cheap_questions(tmp_path):
     mirror, _remote, website = _mirror(tmp_path)
     mirror.sync()
     website.calls.clear()
@@ -48,7 +48,7 @@ def test_an_idle_pass_asks_one_cheap_question(tmp_path):
     result = mirror.sync()
 
     assert result.checked_only is True
-    assert website.calls == ["/api/journal/version"]
+    assert website.calls == ["/api/journal/version", "/api/journal/plugin-data"]
     assert result.describe() == "Up to date"
 
 
@@ -97,7 +97,7 @@ def test_settling_down_after_the_seed(tmp_path):
     result = mirror.sync()
 
     assert result.checked_only is True
-    assert website.calls == ["/api/journal/version"]
+    assert website.calls == ["/api/journal/version", "/api/journal/plugin-data"]
 
 
 def test_both_sides_holding_different_history_end_up_with_both(tmp_path):

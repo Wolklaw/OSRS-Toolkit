@@ -136,7 +136,10 @@ def build(deps: Deps) -> APIRouter:
             raise HTTPException(
                 status_code=422, detail="quest_names must be known quests and completed a boolean"
             )
-        repository, account_hash, _snapshot = resolve(account, active)
+        chosen = payload.get("account_hash")
+        repository, account_hash, _snapshot = resolve(
+            account, chosen if isinstance(chosen, str) and chosen else active
+        )
         if account_hash is None:
             raise HTTPException(
                 status_code=409, detail="Pick or sync a character before ticking quests."

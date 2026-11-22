@@ -733,6 +733,288 @@ class JournalRepository:
                 ],
             )
 
+    _MIRROR_EVENT_TABLES: ClassVar[dict[str, str]] = {
+        "synced_trades": "synced_trade_items",
+        "npc_loot_events": "npc_loot_items",
+        "player_death_events": "player_death_items",
+    }
+    _MIRROR_HISTORY_TABLES: ClassVar[tuple[str, ...]] = (
+        "offer_events",
+        "loadout_snapshot_history",
+        "net_worth_history",
+        "skills_history",
+        "deleted_sync_events",
+    )
+    _MIRROR_REUSABLE_ROWIDS: ClassVar[frozenset[str]] = frozenset(
+        {"synced_trades", "npc_loot_events", "player_death_events", "offer_events"}
+    )
+    _MIRROR_STATE_TABLES: ClassVar[dict[str, tuple[str, ...]]] = {
+        "progress_state": ("account_hash",),
+        "extra_container_snapshots": ("account_hash", "container"),
+    }
+    _MIRROR_SURROGATE_KEYS: ClassVar[frozenset[str]] = frozenset({"entry_id", "item_row_id"})
+    _MIRROR_PAGE_SIZES: ClassVar[dict[str, int]] = {"loadout_snapshot_history": 40}
+    MIRROR_PAGE_SIZE: ClassVar[int] = 1000
+    MIRROR_ROWID_OVERLAP: ClassVar[int] = 25
+
+    @staticmethod
+    def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
+        return {str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")}
+
+    def _mirror_page(
+        self, connection: sqlite3.Connection, table: str, cursor: int
+    ) -> tuple[list[sqlite3.Row], int, bool]:
+        limit = self._MIRROR_PAGE_SIZES.get(table, self.MIRROR_PAGE_SIZE)
+        after = (
+            max(0, cursor - self.MIRROR_ROWID_OVERLAP)
+            if table in self._MIRROR_REUSABLE_ROWIDS
+            else cursor
+        )
+        rows = connection.execute(
+            f"SELECT rowid AS mirror_rowid, * FROM {table} WHERE rowid > ? ORDER BY rowid LIMIT ?",
+            (after, limit),
+        ).fetchall()
+        reached = max([cursor, *(int(row["mirror_rowid"]) for row in rows)])
+        return rows, reached, len(rows) >= limit and reached > cursor
+
+    def _mirror_record(self, row: sqlite3.Row) -> dict:
+        return {
+            key: row[key]
+            for key in row.keys()  # noqa: SIM118
+            if key != "mirror_rowid" and key not in self._MIRROR_SURROGATE_KEYS
+        }
+
+    def plugin_export(self, cursors: dict | None = None) -> dict:
+        cursors = cursors if isinstance(cursors, dict) else {}
+        rows_out: dict[str, list[dict]] = {}
+        next_cursors: dict[str, int] = {}
+        more = False
+
+        def cursor_for(table: str) -> int:
+            value = cursors.get(table)
+            return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+        with self._connect() as connection:
+            for table, child in self._MIRROR_EVENT_TABLES.items():
+                rows, next_cursors[table], unfinished = self._mirror_page(
+                    connection, table, cursor_for(table)
+                )
+                more = more or unfinished
+                records = {str(row["event_id"]): self._mirror_record(row) for row in rows}
+                for record in records.values():
+                    record["items"] = []
+                event_ids = list(records)
+                for start in range(0, len(event_ids), 500):
+                    chunk = event_ids[start : start + 500]
+                    placeholders = ", ".join("?" for _ in chunk)
+                    for item in connection.execute(
+                        f"SELECT * FROM {child} WHERE event_id IN ({placeholders})"
+                        " ORDER BY item_row_id",
+                        chunk,
+                    ):
+                        records[str(item["event_id"])]["items"].append(self._mirror_record(item))
+                rows_out[table] = list(records.values())
+            for table in self._MIRROR_HISTORY_TABLES:
+                rows, next_cursors[table], unfinished = self._mirror_page(
+                    connection, table, cursor_for(table)
+                )
+                more = more or unfinished
+                rows_out[table] = [self._mirror_record(row) for row in rows]
+            state = {
+                table: [
+                    self._mirror_record(row) for row in connection.execute(f"SELECT * FROM {table}")
+                ]
+                for table in self._MIRROR_STATE_TABLES
+            }
+            quests: dict[str, list[dict]] = {}
+            for (account_hash,) in connection.execute(
+                "SELECT account_hash FROM loadout_snapshots"
+                " UNION SELECT account_hash FROM progress_state"
+                " UNION SELECT account_hash FROM quest_progress"
+            ):
+                quests[str(account_hash)] = []
+            for row in connection.execute(
+                "SELECT account_hash, quest_name, completed_at FROM quest_progress"
+                " ORDER BY quest_name"
+            ):
+                quests[str(row["account_hash"])].append(
+                    {"quest_name": row["quest_name"], "completed_at": row["completed_at"]}
+                )
+        return {
+            "cursors": next_cursors,
+            "more": more,
+            "rows": rows_out,
+            "state": state,
+            "quest_progress": quests,
+        }
+
+    def plugin_apply(self, payload: dict) -> int:
+        if not isinstance(payload, dict):
+            return 0
+        rows = payload.get("rows") if isinstance(payload.get("rows"), dict) else {}
+        changed = 0
+        snapshot_accounts: set[str] = set()
+
+        def records(table: str) -> list[dict]:
+            found = rows.get(table) or []
+            return [record for record in found if isinstance(record, dict)]
+
+        def insert(
+            connection: sqlite3.Connection,
+            table: str,
+            known: set[str],
+            record: dict,
+            verb: str = "INSERT OR IGNORE",
+        ) -> bool:
+            fields = {
+                key: value
+                for key, value in record.items()
+                if key in known and key not in self._MIRROR_SURROGATE_KEYS
+            }
+            if not fields:
+                return False
+            names = ", ".join(fields)
+            placeholders = ", ".join("?" for _ in fields)
+            try:
+                cursor = connection.execute(
+                    f"{verb} INTO {table} ({names}) VALUES ({placeholders})",
+                    tuple(fields.values()),
+                )
+            except sqlite3.IntegrityError:
+                return False
+            return bool(cursor.rowcount)
+
+        with self._connect() as connection:
+            for table, child in self._MIRROR_EVENT_TABLES.items():
+                known = self._table_columns(connection, table)
+                child_known = self._table_columns(connection, child) - {"event_id"}
+                for record in records(table):
+                    event_id = record.get("event_id")
+                    if not isinstance(event_id, str) or not event_id:
+                        continue
+                    if not insert(connection, table, known, record):
+                        continue
+                    changed += 1
+                    for item in record.get("items") or []:
+                        if isinstance(item, dict):
+                            insert(
+                                connection,
+                                child,
+                                child_known | {"event_id"},
+                                {**item, "event_id": event_id},
+                                "INSERT",
+                            )
+            for table in ("offer_events", "loadout_snapshot_history"):
+                known = self._table_columns(connection, table)
+                for record in records(table):
+                    if insert(connection, table, known, record):
+                        changed += 1
+                        if table == "loadout_snapshot_history":
+                            snapshot_accounts.add(str(record.get("account_hash")))
+            for table in ("net_worth_history", "skills_history"):
+                known = self._table_columns(connection, table)
+                for record in records(table):
+                    seen = connection.execute(
+                        f"SELECT 1 FROM {table} WHERE account_hash = ? AND captured_at = ?",
+                        (record.get("account_hash"), record.get("captured_at")),
+                    ).fetchone()
+                    if seen is None and insert(connection, table, known, record, "INSERT"):
+                        changed += 1
+            for record in records("deleted_sync_events"):
+                kind = record.get("kind")
+                event_id = record.get("event_id")
+                if kind in self._MIRROR_EVENT_TABLES and isinstance(event_id, str):
+                    changed += self._delete_mirrored_event(connection, kind, event_id)
+            state = payload.get("state") if isinstance(payload.get("state"), dict) else {}
+            for table, keys in self._MIRROR_STATE_TABLES.items():
+                known = self._table_columns(connection, table)
+                for record in state.get(table) or []:
+                    if not isinstance(record, dict) or not all(record.get(k) for k in keys):
+                        continue
+                    where = " AND ".join(f"{key} = ?" for key in keys)
+                    existing = connection.execute(
+                        f"SELECT captured_at FROM {table} WHERE {where}",
+                        tuple(record[key] for key in keys),
+                    ).fetchone()
+                    if existing is not None and _as_moment(record.get("captured_at")) <= _as_moment(
+                        existing["captured_at"]
+                    ):
+                        continue
+                    if insert(connection, table, known, record, "INSERT OR REPLACE"):
+                        changed += 1
+            quests = payload.get("quest_progress")
+            for account_hash, entries in quests.items() if isinstance(quests, dict) else ():
+                if not isinstance(entries, list):
+                    continue
+                wanted = {
+                    str(entry["quest_name"]): str(entry.get("completed_at") or _now())
+                    for entry in entries
+                    if isinstance(entry, dict) and entry.get("quest_name")
+                }
+                held = {
+                    str(row["quest_name"])
+                    for row in connection.execute(
+                        "SELECT quest_name FROM quest_progress WHERE account_hash = ?",
+                        (account_hash,),
+                    )
+                }
+                if held == set(wanted):
+                    continue
+                connection.execute(
+                    "DELETE FROM quest_progress WHERE account_hash = ?", (account_hash,)
+                )
+                connection.executemany(
+                    "INSERT INTO quest_progress (account_hash, quest_name, completed_at)"
+                    " VALUES (?, ?, ?)",
+                    [(account_hash, name, stamp) for name, stamp in wanted.items()],
+                )
+                changed += 1
+            for account_hash in snapshot_accounts:
+                self._refresh_newest_snapshot(connection, account_hash)
+                self._prune_loadout_snapshot_history(connection, account_hash)
+        return changed
+
+    def plugin_mirror_cursors(self) -> dict[str, int]:
+        try:
+            stored = json.loads(self._setting("plugin_mirror_cursors") or "{}")
+        except ValueError:
+            return {}
+        if not isinstance(stored, dict):
+            return {}
+        return {
+            str(table): value
+            for table, value in stored.items()
+            if isinstance(value, int) and not isinstance(value, bool)
+        }
+
+    def set_plugin_mirror_cursors(self, cursors: dict[str, int]) -> None:
+        self._write_setting("plugin_mirror_cursors", json.dumps(cursors, sort_keys=True))
+
+    def _refresh_newest_snapshot(self, connection: sqlite3.Connection, account_hash: str) -> None:
+        newest = connection.execute(
+            "SELECT * FROM loadout_snapshot_history WHERE account_hash = ?"
+            " ORDER BY captured_at DESC LIMIT 1",
+            (account_hash,),
+        ).fetchone()
+        if newest is None:
+            return
+        current = connection.execute(
+            "SELECT captured_at FROM loadout_snapshots WHERE account_hash = ?", (account_hash,)
+        ).fetchone()
+        if current is not None and _as_moment(current["captured_at"]) >= _as_moment(
+            newest["captured_at"]
+        ):
+            return
+        shared = self._table_columns(connection, "loadout_snapshots") & (
+            set(newest.keys()) - self._MIRROR_SURROGATE_KEYS
+        )
+        names = sorted(shared)
+        connection.execute(
+            f"INSERT OR REPLACE INTO loadout_snapshots ({', '.join(names)})"
+            f" VALUES ({', '.join('?' for _ in names)})",
+            tuple(newest[name] for name in names),
+        )
+
     def _install_touch_triggers(self, connection: sqlite3.Connection) -> None:
         for table, primary_key in self._SYNC_TABLES.items():
             connection.execute(
@@ -803,7 +1085,20 @@ class JournalRepository:
             self._create_timeseries_tables(connection)
             self._create_position_tables(connection)
             self._create_session_tables(connection)
+            self._create_mirror_tables(connection)
             self._install_touch_triggers(connection)
+
+    def _create_mirror_tables(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deleted_sync_events (
+                entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                deleted_at TEXT NOT NULL
+            )
+            """
+        )
 
     def _create_trade_tables(self, connection: sqlite3.Connection) -> None:
         connection.execute(
@@ -2174,7 +2469,7 @@ class JournalRepository:
 
     def delete_synced_trade(self, event_id: str) -> None:
         with self._connect() as connection:
-            connection.execute("DELETE FROM synced_trades WHERE event_id = ?", (event_id,))
+            self._delete_mirrored_event(connection, "synced_trades", event_id)
 
     def add_npc_loot_event(self, event: NpcLootRecord) -> bool:
         with self._connect() as connection:
@@ -2269,7 +2564,7 @@ class JournalRepository:
 
     def delete_npc_loot_event(self, event_id: str) -> None:
         with self._connect() as connection:
-            connection.execute("DELETE FROM npc_loot_events WHERE event_id = ?", (event_id,))
+            self._delete_mirrored_event(connection, "npc_loot_events", event_id)
 
     def add_player_death_event(self, event: PlayerDeathRecord) -> bool:
         with self._connect() as connection:
@@ -2379,7 +2674,18 @@ class JournalRepository:
 
     def delete_player_death_event(self, event_id: str) -> None:
         with self._connect() as connection:
-            connection.execute("DELETE FROM player_death_events WHERE event_id = ?", (event_id,))
+            self._delete_mirrored_event(connection, "player_death_events", event_id)
+
+    def _delete_mirrored_event(
+        self, connection: sqlite3.Connection, table: str, event_id: str
+    ) -> bool:
+        removed = connection.execute(f"DELETE FROM {table} WHERE event_id = ?", (event_id,))
+        if removed.rowcount:
+            connection.execute(
+                "INSERT INTO deleted_sync_events (event_id, kind, deleted_at) VALUES (?, ?, ?)",
+                (event_id, table, _now()),
+            )
+        return bool(removed.rowcount)
 
     def save_loadout_snapshot(self, snapshot: LoadoutSnapshot) -> None:
         def dump(items: tuple[LoadoutItem, ...]) -> str:

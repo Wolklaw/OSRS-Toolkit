@@ -6,11 +6,13 @@ import os
 import shutil
 import sys
 from collections.abc import Callable, Hashable, Iterable
-from datetime import UTC, datetime
+from dataclasses import replace as dataclass_replace
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import ClassVar, NamedTuple
 
+from PySide6.QtCharts import QChart, QChartView, QDateTimeAxis, QLineSeries, QValueAxis
 from PySide6.QtCore import (
     QByteArray,
     QEvent,
@@ -34,6 +36,7 @@ from PySide6.QtGui import (
     QGuiApplication,
     QIcon,
     QKeySequence,
+    QPainter,
     QShortcut,
     QValidator,
 )
@@ -55,6 +58,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -135,6 +139,7 @@ from osrs_toolkit.item_details import ItemDetailsDialog
 from osrs_toolkit.journal import (
     UNCHANGED,
     JournalRepository,
+    NpcLootRecord,
     TrackedTrade,
 )
 from osrs_toolkit.journal_mirror import JournalMirror, MirrorResult
@@ -161,7 +166,8 @@ from osrs_toolkit.performance import (
     realized_results,
     summarize,
 )
-from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour
+from osrs_toolkit.pvm import assess_all, estimate_gp_per_hour, observed_gp_per_hour
+from osrs_toolkit.quests import all_quests, with_prerequisites, without_dependants
 from osrs_toolkit.ranking import (
     MAX_CASH_STACK,
     STRATEGIES,
@@ -209,10 +215,31 @@ from osrs_toolkit.web_source import (
     ToolkitWebError,
     WebAppSource,
 )
+from osrs_toolkit.website_settings import (
+    SavingsGoal,
+    WatchedItem,
+    WebsiteSettings,
+    WebsiteSettingsClient,
+)
 
 MIRROR_INTERVAL_MS = 60 * 1_000
 
 MIRROR_BACKGROUND_INTERVAL_MS = 5 * 60 * 1_000
+
+WEBSITE_WRITE_TIMEOUT_SECONDS = 8.0
+
+WEBSITE_MERGED_KEY = "website/local_settings_merged"
+
+LOOT_ROLLUP_DAYS = 90
+
+
+def _instant_or_none(stamp: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
 
 WEB_BASE_URL_KEY = "web/base_url"
 WEB_TOKEN_KEY = "web/token"
@@ -245,7 +272,7 @@ class MarketWorker(QObject):
 
 
 class MirrorWorker(QObject):
-    finished = Signal(object, object)
+    finished = Signal(object, object, object)
     failed = Signal(object, str)
 
     def __init__(self, mirror: JournalMirror) -> None:
@@ -254,7 +281,9 @@ class MirrorWorker(QObject):
 
     def run(self) -> None:
         try:
-            self.finished.emit(self.mirror, self.mirror.sync())
+            result = self.mirror.sync()
+            settings = WebsiteSettingsClient(self.mirror.client).fetch() if result.reached else None
+            self.finished.emit(self.mirror, result, settings)
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(self.mirror, str(exc))
 
@@ -1284,6 +1313,101 @@ class SavingsGoalDialog(QDialog):
         self.accept()
 
 
+class QuestChecklistDialog(QDialog):
+    def __init__(
+        self, character: str, completed: frozenset[str], parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Tick quests")
+        self.setMinimumSize(440, 560)
+        self._completed = completed
+        layout = QVBoxLayout(self)
+        note = QLabel(
+            f"Quests {character} has finished. Ticking a quest also ticks everything it needs; "
+            "unticking one also unticks everything that needed it.",
+            objectName="muted",
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        self.filter = SearchLineEdit("Filter quests…")
+        self.filter.textChanged.connect(self._filter_changed)
+        layout.addWidget(self.filter)
+        self.quest_list = QListWidget()
+        for quest in sorted(all_quests(), key=lambda entry: entry.name):
+            entry = QListWidgetItem(quest.name)
+            entry.setFlags(entry.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            entry.setCheckState(
+                Qt.CheckState.Checked if quest.name in completed else Qt.CheckState.Unchecked
+            )
+            self.quest_list.addItem(entry)
+        layout.addWidget(self.quest_list, 1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _filter_changed(self, text: str) -> None:
+        needle = text.strip().casefold()
+        for index in range(self.quest_list.count()):
+            entry = self.quest_list.item(index)
+            entry.setHidden(bool(needle) and needle not in entry.text().casefold())
+
+    def changes(self) -> tuple[list[str], list[str]]:
+        ticked: list[str] = []
+        unticked: list[str] = []
+        for index in range(self.quest_list.count()):
+            entry = self.quest_list.item(index)
+            checked = entry.checkState() == Qt.CheckState.Checked
+            if checked and entry.text() not in self._completed:
+                ticked.append(entry.text())
+            elif not checked and entry.text() in self._completed:
+                unticked.append(entry.text())
+        return ticked, unticked
+
+
+class PriceAlertDialog(QDialog):
+    DIRECTIONS: ClassVar[dict[str, str]] = {"Rises above": "above", "Falls below": "below"}
+
+    def __init__(
+        self, item_name: str, current: WatchedItem | None, parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Price alert")
+        self.setMinimumWidth(380)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.direction = QComboBox()
+        self.direction.addItems(list(self.DIRECTIONS))
+        if current is not None and current.direction == "below":
+            self.direction.setCurrentText("Falls below")
+        self.target = GpSpinBox()
+        self.target.setRange(1, GP_FIELD_MAXIMUM)
+        self.target.setSuffix(" gp")
+        self.target.setValue(current.target_price if current and current.target_price else 1_000)
+        form.addRow("Item", QLabel(item_name))
+        form.addRow("When the price", self.direction)
+        form.addRow("Target", self.target)
+        layout.addLayout(form)
+        note = QLabel(
+            "The website checks prices and posts to your Discord webhook, at most once every "
+            "12 hours per item. It works while this app is closed.",
+            objectName="muted",
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def direction_value(self) -> str:
+        return self.DIRECTIONS[self.direction.currentText()]
+
+
 class RetagTradesDialog(QDialog):
     UNCHANGED_LABEL = "Leave unchanged"
     STATUSES: ClassVar[list[str]] = [
@@ -2130,6 +2254,8 @@ class MainWindow(QMainWindow):
         self._sync_importer = build_sync_importer()
         self._poll_sync_state_in_background()
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
+        self._website = WebsiteSettingsClient(configured_web_client(WEBSITE_WRITE_TIMEOUT_SECONDS))
+        self._website_settings: WebsiteSettings | None = None
         self._market_client = WikiMarketClient()
         self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
         self._last_sync_message = ""
@@ -2358,11 +2484,110 @@ class MainWindow(QMainWindow):
         menu.addAction(f"Copy “{name}”", lambda: self._copy_text(name))
 
     def _set_watched(self, item_id: int, watched: bool) -> None:
+        if watched == (item_id in self._watchlist):
+            return
+        if self._website.configured:
+            done = self._website.watch(item_id) if watched else self._website.unwatch(item_id)
+            if not done:
+                QMessageBox.warning(
+                    self,
+                    "Watchlist",
+                    f"The website didn't take that change: {self._website.last_error}",
+                )
+                return
+            if self._website_settings is not None:
+                kept = tuple(
+                    item for item in self._website_settings.watchlist if item.item_id != item_id
+                )
+                self._website_settings = dataclass_replace(
+                    self._website_settings,
+                    watchlist=(*kept, WatchedItem(item_id)) if watched else kept,
+                )
         if watched:
             self._watchlist.add(item_id)
         else:
             self._watchlist.discard(item_id)
         QSettings().setValue("market/watchlist", sorted(self._watchlist))
+        self._render_watchlist()
+
+    def _apply_website_settings(self, settings: WebsiteSettings) -> None:
+        if not QSettings().value(WEBSITE_MERGED_KEY, False, type=bool):
+            merged = list(settings.watchlist)
+            for item_id in sorted(self._watchlist - settings.watched_ids):
+                if self._website.watch(item_id):
+                    merged.append(WatchedItem(item_id))
+            goal = settings.savings_goal
+            local_goal = self._local_savings_goal()
+            if goal is None and local_goal is not None:
+                label, target, created_at = local_goal
+                if self._website.set_goal(label, target):
+                    goal = SavingsGoal(label, target, created_at)
+            settings = dataclass_replace(settings, watchlist=tuple(merged), savings_goal=goal)
+            QSettings().setValue(WEBSITE_MERGED_KEY, True)
+        changed = settings != self._website_settings
+        self._website_settings = settings
+        if not changed:
+            return
+        self._watchlist = set(settings.watched_ids)
+        QSettings().setValue("market/watchlist", sorted(self._watchlist))
+        self._render_watchlist()
+        self._render_performance()
+
+    def _alert_text(self, item_id: int) -> str:
+        if self._website_settings is None:
+            return "—"
+        alert = self._website_settings.alert_for(item_id)
+        if alert is None or alert.target_price is None:
+            return "—"
+        return f"{(alert.direction or '').capitalize()} {alert.target_price:,}"
+
+    def _set_price_alert(self, item_id: int) -> None:
+        settings = self._website_settings
+        if settings is None:
+            QMessageBox.information(
+                self,
+                "Price alert",
+                "Price alerts are kept on the website. Connect the desktop app to "
+                "runescope.app in Settings, then try again.",
+            )
+            return
+        if not settings.webhook_configured:
+            QMessageBox.information(
+                self,
+                "Price alert",
+                "Alerts are posted to a Discord webhook. Add one on your profile at "
+                "runescope.app, then try again.",
+            )
+            return
+        current = settings.alert_for(item_id)
+        name = self._mappings[item_id].name if item_id in self._mappings else f"Item {item_id}"
+        dialog = PriceAlertDialog(name, current, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        target, direction = dialog.target.value(), dialog.direction_value()
+        if not self._website.set_alert(item_id, target, direction):
+            QMessageBox.warning(
+                self, "Price alert", f"The website didn't save it: {self._website.last_error}"
+            )
+            return
+        self._replace_watched(WatchedItem(item_id, target, direction))
+
+    def _clear_price_alert(self, item_id: int) -> None:
+        if not self._website.clear_alert(item_id):
+            QMessageBox.warning(
+                self, "Price alert", f"The website didn't clear it: {self._website.last_error}"
+            )
+            return
+        self._replace_watched(WatchedItem(item_id))
+
+    def _replace_watched(self, entry: WatchedItem) -> None:
+        if self._website_settings is None:
+            return
+        kept = tuple(
+            item for item in self._website_settings.watchlist if item.item_id != entry.item_id
+        )
+        self._website_settings = dataclass_replace(self._website_settings, watchlist=(*kept, entry))
+        self._watchlist.add(entry.item_id)
         self._render_watchlist()
 
     def _build_market_row_menu(self, table: ResponsiveTableWidget) -> Callable[[QMenu, int], None]:
@@ -2382,6 +2607,13 @@ class MainWindow(QMainWindow):
                 "Remove from watchlist" if watched else "Add to watchlist",
                 lambda: self._set_watched(item_id, not watched),
             )
+            if self._website.configured:
+                menu.addAction("Set price alert…", lambda: self._set_price_alert(item_id))
+                if (
+                    self._website_settings is not None
+                    and self._website_settings.alert_for(item_id) is not None
+                ):
+                    menu.addAction("Clear price alert", lambda: self._clear_price_alert(item_id))
             menu.addSeparator()
             self._add_copy_action(menu, table, row, 0)
 
@@ -2599,8 +2831,13 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(self.watchlist_empty)
         self.watchlist_table = self._table(
-            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Oldest trade"],
-            minimum_widths={0: 220},
+            ["Item", "Buy", "Sell", "Net margin", "ROI", "1h volume", "Oldest trade", "Alert"],
+            minimum_widths={0: 220, 7: 150},
+            text_columns={7},
+        )
+        self.watchlist_table.setToolTip(
+            "Right-click a row to set a price alert. Alerts live on the website and post to "
+            "your Discord webhook."
         )
         self._open_rows_with(
             self.watchlist_table,
@@ -2826,9 +3063,26 @@ class MainWindow(QMainWindow):
         loot_log_remove_button = QPushButton("Delete entry", objectName="secondary")
         loot_log_remove_button.clicked.connect(self._delete_selected_loot_event)
         self._loot_log_row_buttons += [loot_log_remove_button]
+        loot_log_controls.addWidget(
+            QLabel(
+                f"By NPC, last {LOOT_ROLLUP_DAYS} days: your own observed rate from the "
+                "deliveries below.",
+                objectName="muted",
+            )
+        )
         loot_log_controls.addStretch()
         loot_log_controls.addWidget(loot_log_remove_button)
         loot_log_layout.addLayout(loot_log_controls)
+        self.loot_rollup_table = self._table(
+            ["NPC", "Deliveries", "Total value", "Observed gp/hr"],
+            minimum_widths={0: 200},
+        )
+        self.loot_rollup_table.setMaximumHeight(190)
+        self.loot_rollup_table.setToolTip(
+            "Observed gp/hr is total loot over the time between the first and last delivery, "
+            "so it needs at least two kills and counts any breaks in between."
+        )
+        loot_log_layout.addWidget(self.loot_rollup_table)
         self.loot_log_table = self._table(
             ["Time", "NPC", "Character", "Items", "Value"],
             minimum_widths={0: 145, 1: 140, 2: 140, 3: 260},
@@ -3140,6 +3394,14 @@ class MainWindow(QMainWindow):
         self._render_savings_goal(tracked)
 
     def _saved_savings_goal(self) -> tuple[str, int, str] | None:
+        if self._website.configured and self._website_settings is not None:
+            goal = self._website_settings.savings_goal
+            if goal is None:
+                return None
+            return goal.label, goal.target, goal.created_at or datetime.now(UTC).isoformat()
+        return self._local_savings_goal()
+
+    def _local_savings_goal(self) -> tuple[str, int, str] | None:
         label = str(QSettings().value("savings_goal/label", ""))
         if not label:
             return None
@@ -3191,6 +3453,19 @@ class MainWindow(QMainWindow):
         dialog = SavingsGoalDialog(label, target, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        if self._website.configured and self._website_settings is not None:
+            new_label, new_target = dialog.goal_label.text().strip(), dialog.goal_target.value()
+            if not self._website.set_goal(new_label, new_target):
+                QMessageBox.warning(
+                    self, "Savings goal", f"The website didn't save it: {self._website.last_error}"
+                )
+                return
+            started = existing[2] if existing is not None else datetime.now(UTC).isoformat()
+            self._website_settings = dataclass_replace(
+                self._website_settings, savings_goal=SavingsGoal(new_label, new_target, started)
+            )
+            self._render_performance()
+            return
         settings = QSettings()
         settings.setValue("savings_goal/label", dialog.goal_label.text().strip())
         settings.setValue("savings_goal/target", dialog.goal_target.value())
@@ -3208,6 +3483,13 @@ class MainWindow(QMainWindow):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
+        if self._website.configured and self._website_settings is not None:
+            if not self._website.clear_goal():
+                QMessageBox.warning(
+                    self, "Savings goal", f"The website didn't clear it: {self._website.last_error}"
+                )
+                return
+            self._website_settings = dataclass_replace(self._website_settings, savings_goal=None)
         settings = QSettings()
         settings.remove("savings_goal/label")
         settings.remove("savings_goal/target")
@@ -3290,8 +3572,14 @@ class MainWindow(QMainWindow):
                 "1h volume",
                 "Buy trade age",
                 "Limit",
+                "Can cast",
             ],
             minimum_widths={0: 230, 1: 105, 2: 95, 3: 95, 5: 105, 7: 110, 8: 115, 10: 100},
+            text_columns={13},
+        )
+        self.alch_table.horizontalHeaderItem(13).setToolTip(
+            "High Alchemy needs Magic 55. Checked against your looked-up character, or the "
+            "levels the plugin last synced."
         )
         self._open_rows_with(
             self.alch_table, lambda row, _column: self._open_market_item(self.alch_table, row)
@@ -3437,12 +3725,19 @@ class MainWindow(QMainWindow):
         definition = REPORTS[key]
         page = QWidget()
         layout = self._page_heading(definition.title, definition.subtitle)
+        controls = QHBoxLayout()
         if definition.choices is not None:
             picker = QComboBox()
             picker.setMinimumWidth(240)
             picker.currentTextChanged.connect(lambda _text, name=key: self._render_report(name))
             self._report_pickers[key] = picker
-            layout.addWidget(picker)
+            controls.addWidget(picker)
+        if definition.action is not None:
+            action = QPushButton(definition.action, objectName="secondary")
+            action.clicked.connect(lambda _checked=False, name=key: self._run_report_action(name))
+            controls.addWidget(action)
+        controls.addStretch()
+        layout.addLayout(controls)
         body = QWidget()
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 8, 0)
@@ -3466,10 +3761,13 @@ class MainWindow(QMainWindow):
             current = picker.currentText()
             if [picker.itemText(index) for index in range(picker.count())] != names:
                 picker.blockSignals(True)
+                first_fill = picker.count() == 0
                 picker.clear()
                 picker.addItems(names)
                 if current in names:
                     picker.setCurrentText(current)
+                elif first_fill and definition.default_choice in names:
+                    picker.setCurrentText(definition.default_choice)
                 picker.blockSignals(False)
             choice = picker.currentText() or None
         try:
@@ -3483,10 +3781,10 @@ class MainWindow(QMainWindow):
             if widget is not None:
                 widget.deleteLater()
         for section in sections:
-            layout.addWidget(self._report_section(section))
+            layout.addWidget(self._report_section(section, definition.remove_kind))
         layout.addStretch()
 
-    def _report_section(self, section: Section) -> QWidget:
+    def _report_section(self, section: Section, remove_kind: str | None = None) -> QWidget:
         box = QWidget()
         box_layout = QVBoxLayout(box)
         box_layout.setContentsMargins(0, 0, 0, 0)
@@ -3496,6 +3794,9 @@ class MainWindow(QMainWindow):
             hint = QLabel(section.hint, objectName="muted")
             hint.setWordWrap(True)
             box_layout.addWidget(hint)
+        if section.chart:
+            box_layout.addWidget(self._report_chart(section.chart))
+            return box
         if not section.headers:
             return box
         if not section.rows:
@@ -3506,12 +3807,120 @@ class MainWindow(QMainWindow):
             minimum_widths={0: 200},
             text_columns=set(),
         )
-        self._fill_table(table, [list(row) for row in section.rows], set(section.profit_columns))
+        keyed = remove_kind is not None and len(section.row_keys) == len(section.rows)
+        self._fill_table(
+            table,
+            [list(row) for row in section.rows],
+            set(section.profit_columns),
+            row_ids=list(section.row_keys) if keyed else None,
+        )
+        if keyed and remove_kind is not None:
+            self._install_row_menu(table, self._build_report_row_menu(table, remove_kind))
         height = table.horizontalHeader().height() + 38 * min(len(section.rows), 12) + 6
         table.setMinimumHeight(height)
         table.setMaximumHeight(height)
         box_layout.addWidget(table)
         return box
+
+    def _report_chart(self, points: tuple[tuple[str, int], ...]) -> QWidget:
+        series = QLineSeries()
+        series.setName("Net worth")
+        for stamp, value in points:
+            try:
+                moment = datetime.fromisoformat(stamp)
+            except ValueError:
+                continue
+            series.append(moment.timestamp() * 1000, value)
+        chart = QChart()
+        chart.legend().setVisible(False)
+        chart.setBackgroundVisible(False)
+        chart.addSeries(series)
+        axis_x = QDateTimeAxis()
+        axis_x.setFormat("MMM d")
+        axis_x.setLabelsColor(QColor(self._muted_color))
+        chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
+        series.attachAxis(axis_x)
+        axis_y = QValueAxis()
+        axis_y.setLabelFormat("%.0f")
+        axis_y.setLabelsColor(QColor(self._muted_color))
+        values = [value for _stamp, value in points]
+        low, high = min(values), max(values)
+        padding = max(1, (high - low) * 0.05)
+        axis_y.setRange(max(0, low - padding), high + padding)
+        chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
+        series.attachAxis(axis_y)
+        view = QChartView(chart)
+        view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        view.setMinimumHeight(260)
+        return view
+
+    def _build_report_row_menu(
+        self, table: ResponsiveTableWidget, kind: str
+    ) -> Callable[[QMenu, int], None]:
+        def build(menu: QMenu, row: int) -> None:
+            anchor = table.item(row, 0)
+            event_id = anchor.data(Qt.ItemDataRole.UserRole) if anchor is not None else None
+            if isinstance(event_id, str):
+                menu.addAction("Remove entry…", lambda: self._remove_report_entry(kind, event_id))
+                menu.addSeparator()
+            self._add_copy_action(menu, table, row, 1)
+
+        return build
+
+    def _remove_report_entry(self, kind: str, event_id: str) -> None:
+        answer = QMessageBox.question(
+            self,
+            "Remove entry",
+            "Remove this entry from the journal here and on the website? This does not affect "
+            "RuneLite or the game.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes or not self._remove_on_website(kind, event_id):
+            return
+        if kind == "activity":
+            self._journal.delete_synced_trade(event_id)
+        self._render_visible_report()
+        self._render_buy_limits()
+
+    def _run_report_action(self, key: str) -> None:
+        if key == "Quests":
+            self._tick_quests()
+
+    def _tick_quests(self) -> None:
+        snapshot = self._loadout_snapshot
+        if snapshot is None:
+            QMessageBox.information(
+                self,
+                "Tick quests",
+                "Quests are ticked per character. Connect RuneLite and open your bank in game "
+                "so the desktop knows which character this is.",
+            )
+            return
+        if not self._website.configured:
+            QMessageBox.information(
+                self,
+                "Tick quests",
+                "Quest progress is kept on the website. Connect the desktop app to "
+                "runescope.app in Settings, then try again.",
+            )
+            return
+        done = self._journal.list_completed_quests(snapshot.account_hash)
+        dialog = QuestChecklistDialog(snapshot.account_name, done, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        ticked, unticked = dialog.changes()
+        for names, completed in ((ticked, True), (unticked, False)):
+            if not names:
+                continue
+            if not self._website.set_quests(snapshot.account_hash, names, completed):
+                QMessageBox.warning(
+                    self, "Tick quests", f"The website didn't save it: {self._website.last_error}"
+                )
+                return
+            affected = with_prerequisites(names) if completed else without_dependants(names)
+            self._journal.set_quests_completed(snapshot.account_hash, sorted(affected), completed)
+        self._render_visible_report()
 
     def _refresh_trading_session(self) -> None:
         self._set_trading_session("read", 0)
@@ -3645,6 +4054,8 @@ class MainWindow(QMainWindow):
         self._sync_importer = build_sync_importer()
         self._poll_sync_state_in_background()
         self._journal_mirror = JournalMirror(self._journal, configured_web_client())
+        self._website = WebsiteSettingsClient(configured_web_client(WEBSITE_WRITE_TIMEOUT_SECONDS))
+        self._website_settings = None
         self._last_sync_message = ""
         self._last_mirror_message = ""
 
@@ -4000,7 +4411,7 @@ class MainWindow(QMainWindow):
         return f'<table width="100%" cellspacing="0" cellpadding="5">{"".join(rows)}</table>'
 
     def _render_alch(self) -> None:
-        magic_level = self._profile.skills.get("Magic") if self._profile else None
+        magic_level = self._character_levels()[0].get("Magic")
         rows = alch_candidates(
             self._mappings,
             self._points,
@@ -4023,6 +4434,7 @@ class MainWindow(QMainWindow):
                 f"{row.volume:,}",
                 _short_duration(row.age_seconds),
                 f"{row.buy_limit:,}",
+                "Unknown" if row.eligible is None else "Yes" if row.eligible else "No",
             ]
             for row in rows
         ]
@@ -4109,6 +4521,7 @@ class MainWindow(QMainWindow):
                     f"{roi:.2f}%",
                     f"{point.volume_1h:,}",
                     f"{age // 60} min",
+                    self._alert_text(item_id),
                 ]
             )
             row_ids.append(item_id)
@@ -4136,10 +4549,8 @@ class MainWindow(QMainWindow):
             self.watchlist_add_status.setText(f"{match.name} is already on your watchlist.")
             self.watchlist_add_status.show()
             return
-        self._watchlist.add(match.item_id)
-        QSettings().setValue("market/watchlist", sorted(self._watchlist))
         self.watchlist_add_status.hide()
-        self._render_watchlist()
+        self._set_watched(match.item_id, True)
 
     def _journal_status_filter_changed(self, selected_filter: str) -> None:
         QSettings().setValue("journal/status_filter", selected_filter)
@@ -4435,11 +4846,21 @@ class MainWindow(QMainWindow):
         if mirror is self._journal_mirror:
             self._last_mirror_message = f" • journal sync paused: {message}"
 
-    def _mirror_finished(self, mirror: object, result: MirrorResult) -> None:
+    def _mirror_finished(self, mirror: object, result: MirrorResult, settings: object) -> None:
         if mirror is not self._journal_mirror:
             return
+        if isinstance(settings, WebsiteSettings) and self._website.configured:
+            self._apply_website_settings(settings)
         self._last_mirror_message = "" if result.checked_only else f" • {result.describe()}"
         self._update_runelite_status()
+        if result.plugin_rows:
+            self._loadout_snapshot = self._journal.get_latest_loadout_snapshot()
+            self._render_loot_log()
+            self._render_death_log()
+            self._render_buy_limits()
+            self._render_pvm()
+            self._render_skilling()
+            self._render_alch()
         if result.changed:
             self._refresh_journal_views()
 
@@ -4865,6 +5286,31 @@ class MainWindow(QMainWindow):
             row_ids=[event.event_id for event in events],
         )
         self._loot_log_selection_changed()
+        since = datetime.now(UTC) - timedelta(days=LOOT_ROLLUP_DAYS)
+        recent: dict[str, list[NpcLootRecord]] = {}
+        for event in events:
+            moment = _instant_or_none(event.occurred_at)
+            if moment is not None and moment >= since:
+                recent.setdefault(event.npc_name, []).append(event)
+        rollup = sorted(
+            recent.items(),
+            key=lambda pair: sum(event.total_value for event in pair[1]),
+            reverse=True,
+        )
+        rates = {name: observed_gp_per_hour(npc_events) for name, npc_events in rollup}
+        self._fill_table(
+            self.loot_rollup_table,
+            [
+                [
+                    name,
+                    f"{len(npc_events):,}",
+                    _gp(sum(event.total_value for event in npc_events)),
+                    "—" if rates[name] is None else _gp(rates[name]),
+                ]
+                for name, npc_events in rollup
+            ],
+            green_columns=set(),
+        )
 
     def _selected_loot_log_event_id(self) -> str | None:
         row = self.loot_log_table.currentRow()
@@ -4885,9 +5331,20 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
-        if answer == QMessageBox.StandardButton.Yes:
+        if answer == QMessageBox.StandardButton.Yes and self._remove_on_website("loot", event_id):
             self._journal.delete_npc_loot_event(event_id)
             self._render_loot_log()
+
+    def _remove_on_website(self, kind: str, event_id: str) -> bool:
+        if not self._website.configured or self._website.remove_event(kind, event_id):
+            return True
+        QMessageBox.warning(
+            self,
+            "Not removed",
+            "The website keeps this history and didn't take the removal, so it would come "
+            f"back on the next sync: {self._website.last_error}",
+        )
+        return False
 
     def _render_death_log(self) -> None:
         events = self._journal.list_player_death_events()
@@ -4928,7 +5385,7 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
-        if answer == QMessageBox.StandardButton.Yes:
+        if answer == QMessageBox.StandardButton.Yes and self._remove_on_website("death", event_id):
             self._journal.delete_player_death_event(event_id)
             self._render_death_log()
 
@@ -5197,8 +5654,19 @@ class MainWindow(QMainWindow):
             return
         self._render_journal()
 
+    def _character_levels(self) -> tuple[dict[str, int], str | None]:
+        if self._profile is not None:
+            return self._profile.skills, f"{self._profile.name}'s public hiscores"
+        if self._loadout_snapshot is not None and self._loadout_snapshot.skills:
+            return (
+                self._loadout_snapshot.skills,
+                f"{self._loadout_snapshot.account_name}'s synced levels",
+            )
+        return {}, None
+
     def _render_skilling(self) -> None:
-        skills = self._profile.skills if self._profile else {}
+        skills, levels_source = self._character_levels()
+        self.skill_available.setEnabled(bool(skills))
         priced_rows = skill_results(self._mappings, self._points, skills)
         query = self.skill_search.text().strip().casefold()
         selected_skill = self.skill_filter.currentText()
@@ -5246,8 +5714,8 @@ class MainWindow(QMainWindow):
         if not already_sorted:
             self.skill_table.sortItems(7, Qt.SortOrder.DescendingOrder)
         profile_text = (
-            f" Requirements checked against {self._profile.name}'s public hiscores."
-            if self._profile
+            f" Requirements checked against {levels_source}."
+            if levels_source
             else " Connect a character to filter methods by public skill levels."
         )
         self.skill_note.setText(

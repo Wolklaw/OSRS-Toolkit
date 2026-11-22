@@ -6,6 +6,8 @@ from osrs_toolkit.journal import JournalRepository
 from osrs_toolkit.web_source import ToolkitWebClient
 
 VERSION_PROBE_TIMEOUT_SECONDS = 5.0
+PLUGIN_DATA_PATH = "/api/journal/plugin-data"
+PLUGIN_DATA_PAGES_PER_PASS = 25
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,21 +16,22 @@ class MirrorResult:
     pulled: int = 0
     pushed: int = 0
     checked_only: bool = False
+    plugin_rows: int = 0
 
     @property
     def changed(self) -> bool:
-        return bool(self.pulled or self.pushed)
+        return bool(self.pulled or self.pushed or self.plugin_rows)
 
     def describe(self) -> str:
         if not self.reached:
             return "Could not reach the website"
-        if self.checked_only:
-            return "Up to date"
         parts = []
         if self.pulled:
             parts.append(f"{self.pulled} in")
         if self.pushed:
             parts.append(f"{self.pushed} out")
+        if self.plugin_rows:
+            parts.append(f"{self.plugin_rows} from the plugin")
         return f"Synced {', '.join(parts)}" if parts else "Up to date"
 
 
@@ -42,6 +45,7 @@ class JournalMirror:
     def reset(self) -> None:
         self.remote_version = None
         self.local_version = None
+        self.repository.set_plugin_mirror_cursors({})
 
     def sync(self) -> MirrorResult:
         if not self.client.configured:
@@ -55,10 +59,12 @@ class JournalMirror:
         local = self.repository.sync_version()
         local_version = str(local.get("version") or "")
 
+        plugin_rows = self._pull_plugin_data()
+
         nothing_there = self.remote_version is not None and remote_version == self.remote_version
         nothing_here = self.local_version is not None and local_version == self.local_version
         if nothing_there and nothing_here:
-            return MirrorResult(reached=True, checked_only=True)
+            return MirrorResult(reached=True, checked_only=True, plugin_rows=plugin_rows)
 
         received, pulled = (True, 0) if nothing_there else self._pull()
         delivered, pushed = (True, 0) if nothing_here else self._push()
@@ -67,7 +73,30 @@ class JournalMirror:
             self.remote_version = self._remote_version()
         if delivered:
             self.local_version = str(self.repository.sync_version().get("version") or "")
-        return MirrorResult(reached=True, pulled=pulled, pushed=pushed)
+        return MirrorResult(reached=True, pulled=pulled, pushed=pushed, plugin_rows=plugin_rows)
+
+    def _pull_plugin_data(self) -> int:
+        cursors = self.repository.plugin_mirror_cursors()
+        applied = 0
+        for _page in range(PLUGIN_DATA_PAGES_PER_PASS):
+            payload = self.client.post(PLUGIN_DATA_PATH, {"cursors": cursors})
+            if not isinstance(payload, dict):
+                break
+            applied += self.repository.plugin_apply(payload)
+            reached = payload.get("cursors")
+            if isinstance(reached, dict):
+                cursors = {
+                    **cursors,
+                    **{
+                        str(table): value
+                        for table, value in reached.items()
+                        if isinstance(value, int) and not isinstance(value, bool)
+                    },
+                }
+                self.repository.set_plugin_mirror_cursors(cursors)
+            if not payload.get("more"):
+                break
+        return applied
 
     def _pull(self) -> tuple[bool, int]:
         params = {"since": self.remote_version} if self.remote_version else {}

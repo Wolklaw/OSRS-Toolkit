@@ -25,6 +25,12 @@ STATE_CACHE_SECONDS = 2.0
 
 def _describe_failure(error: Exception) -> str:
     if isinstance(error, urllib.error.HTTPError):
+        try:
+            detail = json.loads(error.read() or b"null")
+        except (ValueError, OSError):
+            detail = None
+        if isinstance(detail, dict) and isinstance(detail.get("detail"), str):
+            return detail["detail"]
         return f"HTTP {error.code}"
     if isinstance(error, TimeoutError):
         return "timed out"
@@ -57,6 +63,9 @@ class ToolkitWebClient:
 
     def post(self, path: str, body: object, **params: str) -> object | None:
         return self._call("POST", path, body=body, params=params)
+
+    def put(self, path: str, body: object, **params: str) -> object | None:
+        return self._call("PUT", path, body=body, params=params)
 
     def delete(self, path: str, **params: str) -> object | None:
         return self._call("DELETE", path, params=params)

@@ -8,7 +8,9 @@ from http import HTTPStatus
 from fastapi import HTTPException
 from osrs_toolkit.buy_limits import buy_limit_status
 from osrs_toolkit.journal import JournalRepository
+from osrs_toolkit.market_history import history_stats
 from osrs_toolkit.models import ItemMapping, MarketPoint, TimeseriesPoint
+from osrs_toolkit.net_worth_attribution import net_worth_composition
 from osrs_toolkit.ranking import ge_tax, is_tax_exempt, offer_targets
 
 _RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -94,34 +96,20 @@ def _desktop_activity(tokens: list) -> tuple[str, str | None]:
 
 
 def _net_worth_composition(snapshot: object, total_invested: int) -> list[dict]:
-    cash = equipment_value = inventory_value = bank_value = 0
-    if snapshot is not None:
-        cash = snapshot.quantity_owned(995)
-        equipment_value = sum(
-            item.total_value for item in snapshot.equipment if item.item_id != 995
-        )
-        inventory_value = sum(
-            item.total_value for item in snapshot.inventory if item.item_id != 995
-        )
-        bank_value = sum(item.total_value for item in snapshot.bank if item.item_id != 995)
-    buckets = [
-        ("Cash", cash, "--good"),
-        ("Carried gear", equipment_value + inventory_value, "--accent"),
-        ("Bank", bank_value, "--info"),
-        ("GE in-flight", total_invested, "--border-strong"),
-    ]
-    total = sum(value for _label, value, _color in buckets)
-    if total <= 0:
-        return []
+    colors = {
+        "Cash": "--good",
+        "Carried gear": "--accent",
+        "Bank": "--info",
+        "GE in-flight": "--border-strong",
+    }
     return [
         {
-            "label": label,
-            "value": value,
-            "percent": value / total * 100,
-            "color": color,
+            "label": part.label,
+            "value": part.value,
+            "percent": part.percent,
+            "color": colors[part.label],
         }
-        for label, value, color in buckets
-        if value > 0
+        for part in net_worth_composition(snapshot, total_invested)
     ]
 
 
@@ -167,32 +155,15 @@ def _market_breakdown(item: ItemMapping, point: MarketPoint, now: int) -> dict:
     }
 
 
-_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-
-
 def _history_stats(history: list[TimeseriesPoint]) -> tuple[dict | None, list[dict]]:
-    if not history:
+    stats, by_weekday = history_stats(history)
+    if stats is None:
         return None, []
-    spreads = [
-        point.average_high - point.average_low
-        for point in history
-        if point.average_high is not None and point.average_low is not None
-    ]
-    total_volume = sum(point.total_volume for point in history)
-    stats = {
-        "average_spread": round(sum(spreads) / len(spreads)) if spreads else None,
-        "total_volume": total_volume,
-        "average_volume": round(total_volume / len(history)),
-    }
-    volumes_by_weekday: dict[int, list[int]] = {}
-    for point in history:
-        weekday = datetime.fromtimestamp(point.timestamp, tz=UTC).weekday()
-        volumes_by_weekday.setdefault(weekday, []).append(point.total_volume)
-    by_weekday = [
+    return (
         {
-            "day": _WEEKDAY_NAMES[weekday],
-            "average_volume": round(sum(volumes) / len(volumes)),
-        }
-        for weekday, volumes in sorted(volumes_by_weekday.items())
-    ]
-    return stats, by_weekday
+            "average_spread": stats.average_spread,
+            "total_volume": stats.total_volume,
+            "average_volume": stats.average_volume,
+        },
+        [{"day": row.day, "average_volume": row.average_volume} for row in by_weekday],
+    )

@@ -96,12 +96,13 @@ def test_the_same_snapshot_delivered_twice_is_stored_once(tmp_path: Path) -> Non
 
 def test_bounds_are_compared_as_instants_rather_than_text(tmp_path: Path) -> None:
     repository = _repository(tmp_path)
-    repository.save_loadout_snapshot(_snapshot("2026-10-01T10:00:00Z", coins=1))
-    repository.save_loadout_snapshot(_snapshot("2026-10-01T12:00:00+00:00", coins=2))
-    repository.save_loadout_snapshot(_snapshot("2026-10-01T16:00:00Z", coins=3))
+    day = (datetime.now(UTC) - timedelta(days=2)).date().isoformat()
+    repository.save_loadout_snapshot(_snapshot(f"{day}T10:00:00Z", coins=1))
+    repository.save_loadout_snapshot(_snapshot(f"{day}T12:00:00+00:00", coins=2))
+    repository.save_loadout_snapshot(_snapshot(f"{day}T16:00:00Z", coins=3))
 
     window = repository.list_loadout_snapshots(
-        ACCOUNT_HASH, since="2026-10-01T11:00:00+00:00", until="2026-10-01T13:00:00Z"
+        ACCOUNT_HASH, since=f"{day}T11:00:00+00:00", until=f"{day}T13:00:00Z"
     )
 
     assert [point.total_value for point in window] == [2]

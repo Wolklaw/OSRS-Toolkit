@@ -129,3 +129,36 @@ def idle_stacks(
         stacks.append(IdleStack(name, quantity, quantity * price))
     stacks.sort(key=lambda stack: (-stack.value, stack.item_name))
     return stacks
+
+
+@dataclass(frozen=True, slots=True)
+class CompositionPart:
+    label: str
+    value: int
+    percent: float
+
+
+def net_worth_composition(
+    snapshot: LoadoutSnapshot | None, in_flight: int
+) -> list[CompositionPart]:
+    cash = carried = bank = 0
+    if snapshot is not None:
+        cash = snapshot.quantity_owned(COINS_ITEM_ID)
+        carried = sum(
+            item.total_value
+            for item in (*snapshot.equipment, *snapshot.inventory)
+            if item.item_id != COINS_ITEM_ID
+        )
+        bank = sum(item.total_value for item in snapshot.bank if item.item_id != COINS_ITEM_ID)
+    parts = [
+        ("Cash", cash),
+        ("Carried gear", carried),
+        ("Bank", bank),
+        ("GE in-flight", in_flight),
+    ]
+    total = sum(value for _label, value in parts)
+    if total <= 0:
+        return []
+    return [
+        CompositionPart(label, value, value / total * 100) for label, value in parts if value > 0
+    ]
