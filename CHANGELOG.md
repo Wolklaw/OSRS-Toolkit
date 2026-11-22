@@ -2,9 +2,9 @@
 
 All notable changes to OSRS Toolkit are documented here.
 
-## [Unreleased]
+## [1.7.0] - 2026-11-21
 
-### Fixed
+### Highlights
 
 - **The desktop app gets the plugin's data again.** Since 1.2.3 the desktop has read only from
   the website, but it only ever copied trades and positions from it. Loot, deaths, bank
@@ -14,18 +14,19 @@ All notable changes to OSRS Toolkit are documented here.
   or frozen. The desktop now pulls all of it from the website through
   `POST /api/journal/plugin-data`, in pages, from where it left off. Rows it already holds are
   never duplicated, and removals made on the website reach it too.
-
-### Added
-
-- **The desktop matches the website.** The watchlist and savings goal are now the website's,
-  with price alerts set and cleared from the watchlist's right-click menu; whatever the desktop
-  held on its own is merged up once. Quests can be ticked from the Quests page. Removing an
-  Activity, Loot Log or Death Log entry removes it on the website as well. Net Worth compares
-  with 7, 30 or 90 days ago; the Trip Ledger shows any trip's loot by monster, supplies and
-  experience; Overview adds net worth composition and a net worth chart; the Loot Log has a
-  per-NPC rollup with observed gp/hr; the Alch Finder shows whether you can cast it; and an
-  item's detail adds a volume chart, average spread and volume by weekday. Alch Finder and
-  Skilling Profit check against the levels the plugin synced when no character is looked up.
+- **Your watchlist, price alerts, savings goal and quests are the website's.** Set and clear
+  price alerts from the watchlist's right-click menu, and tick quests from the Quests page.
+  Whatever the desktop held on its own is merged up to the website once. Removing an Activity,
+  Loot Log or Death Log entry removes it on the website as well.
+- **The desktop pages match the website's.** Net Worth compares with 7, 30 or 90 days ago; the
+  Trip Ledger shows any trip's loot by monster, supplies and experience; Overview adds net
+  worth composition and a net worth chart; the Loot Log has a per-NPC rollup with observed
+  gp/hr; the Alch Finder shows whether you can cast it; and an item's detail adds a volume
+  chart, average spread and volume by weekday. Alch Finder and Skilling Profit check against
+  the levels the plugin synced when no character is looked up.
+- **The GE Flipper plans against what actually fills.** Offers are sized against the thinner
+  side of the market and every strategy needs a margin after tax of at least 1% of the buy
+  price. The full changelog has the replay figures.
 - Editing a savings goal keeps the date it started, on the website as on the desktop.
 
 ### Changed
